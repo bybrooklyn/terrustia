@@ -1505,12 +1505,44 @@ pub fn nearby_active_npcs(npcs: &NpcStore, at: (f32, f32)) -> f32 {
 /// So the scan is reused until it is either a second old or the player has walked far enough for it
 /// to be stale. Both bounds are conservative against the box being scanned: 16 tiles is a fifth of
 /// its half-width, so a cached answer is still one taken from well inside the same neighbourhood.
-#[derive(Debug, Default)]
+/// Caching alone was not enough, because it left nothing bounding how many scans land on one tick.
+/// Every client in a join burst becomes `is_playing()` on the same tick with an empty entry, so the
+/// first fill bought 255 scans at once, and those entries then carried the same `at` and expired
+/// together sixty ticks later. A real 255-player soak measured `phase=spawning phase_us=20763`,
+/// which is 266 scans: every player, in one tick, over the whole frame budget.
+///
+/// The average was never the problem, and reporting it is what hid this: 255 players over a
+/// 60-tick refresh is 4.25 scans a tick, and the example that measured 345 us drove *one* slot for
+/// 60,000 ticks. A per-tick mean over one player cannot see a per-tick maximum over 255.
+///
+/// So [`Self::BUDGET`] bounds the scans a single tick may buy, and stale answers are served past
+/// it. **That budget is also the stagger.** Serving 8 of 255 expiries spreads their next `at` over
+/// 32 ticks by construction, and re-spreads them after anything that re-synchronises the group (a
+/// mass rejoin, a restart, everyone teleporting to a boss). A phase-based stagger would bound the
+/// tick too, but it makes a drifted player wait up to 59 ticks for a fresh answer, which silently
+/// guts the `DRIFT` guarantee; and an age-based one does not bound anything, because drift resets
+/// the phase and the slots reconverge.
+#[derive(Debug)]
 pub struct BiomeCache {
     /// What tick it is, set by [`Self::advance`] before each spawn pass.
     now: u64,
+    /// Scans left to spend this tick, reset by [`Self::advance`].
+    left: u32,
     /// Indexed by player slot: the tick it was taken, where, and what it said.
     entries: Vec<Option<(u64, i32, i32, Biome)>>,
+}
+
+/// Hand-written rather than derived so a fresh cache starts with a full budget. A derived `Default`
+/// gives `left: 0`, which would make a cache that has not been advanced yet refuse every scan and
+/// answer `None` forever.
+impl Default for BiomeCache {
+    fn default() -> Self {
+        Self {
+            now: 0,
+            left: Self::BUDGET,
+            entries: Vec::new(),
+        }
+    }
 }
 
 impl BiomeCache {
@@ -1518,10 +1550,30 @@ impl BiomeCache {
     const REFRESH: u64 = 60;
     /// ...and how far they may move before it is taken again anyway, in tiles.
     const DRIFT: i32 = 16;
+    /// Scans a single tick may buy, however many players want one.
+    ///
+    /// Demand at the 255-player bar is `255 / REFRESH` = 4.25 a tick, so 8 is about 1.9x demand and
+    /// never builds a backlog, while `8 * 78 us` = 624 us is 3.7% of the frame. The bound does not
+    /// grow with the player count, because this is a constant and the scanned box is a fixed
+    /// 169x124 tiles.
+    ///
+    /// What it costs: when every slot expires at once, the oldest entry reaches
+    /// `REFRESH + ceil(255 / BUDGET)` = 92 ticks, or 1.53 s, before it is refreshed. For a biome
+    /// that moves at Clentaminator speed under a standing player, that is nothing.
+    ///
+    /// ponytail: the budget goes to the lowest slots that want it, since `try_spawn` walks players
+    /// in slot order. Under ordinary play it rotates on its own, because a slot that just scanned is
+    /// fresh next tick. Eight clients crossing `DRIFT` every single tick in slots 0-7 could hold it
+    /// and leave the rest on stale answers, but that needs 960 tiles a second, so it is a
+    /// hacked-client vector rather than a normal one, and the 624 us bound holds either way. If it
+    /// is ever seen, the fix is a rotating start cursor over `entries`.
+    const BUDGET: u32 = 8;
 
-    /// Tell the cache what tick it is. Called once, before the spawn pass.
+    /// Tell the cache what tick it is, and refill the scan budget. Called once, before the spawn
+    /// pass, so the budget is per pass and resets even on a tick where nothing reads.
     pub fn advance(&mut self, ticks: u64) {
         self.now = ticks;
+        self.left = Self::BUDGET;
     }
 
     /// The last answer taken for this player, however old, and never a fresh scan.
@@ -1540,8 +1592,15 @@ impl BiomeCache {
             .map(|(_, _, _, biome)| biome)
     }
 
-    /// This player's zone, scanning only when the last answer has gone stale.
-    pub fn read(&mut self, world: &World, slot: usize, x: i32, y: i32) -> Biome {
+    /// This player's zone, scanning only when the last answer has gone stale and this tick still
+    /// has budget for it.
+    ///
+    /// `None` means "no answer available this tick", not "forest": a slot with no entry at all has
+    /// no stale answer to fall back on, and handing back a default would put every joining player in
+    /// the wrong spawn pool for the half second before its turn comes round. The caller skips that
+    /// player for the tick instead, which costs nothing observable at roughly one attempt in 600
+    /// placing anything.
+    pub fn read(&mut self, world: &World, slot: usize, x: i32, y: i32) -> Option<Biome> {
         if self.entries.len() <= slot {
             self.entries.resize(slot + 1, None);
         }
@@ -1550,11 +1609,16 @@ impl BiomeCache {
             && (x - sx).abs() <= Self::DRIFT
             && (y - sy).abs() <= Self::DRIFT
         {
-            return biome;
+            return Some(biome);
         }
+        if self.left == 0 {
+            // Out of scans this tick. A stale answer is still an answer; nothing is not.
+            return self.entries[slot].map(|(_, _, _, biome)| biome);
+        }
+        self.left -= 1;
         let biome = biome_at(world, x, y);
         self.entries[slot] = Some((self.now, x, y, biome));
-        biome
+        Some(biome)
     }
 }
 
@@ -1713,7 +1777,14 @@ pub fn try_spawn(
         // That is why it now goes through [`BiomeCache`] rather than scanning outright: paying for
         // the scan on every attempt rather than only a successful one is 78 us per player per tick,
         // which does not fit in a tick at this server's player bar.
-        let player_biome = biomes.read(world, usize::from(player.slot), px, py);
+        // `None` means this tick had no scan budget left and this player has no earlier answer to
+        // fall back on, which happens only in the first ticks after a join burst. Skip them rather
+        // than guess a zone: every rate and cap modifier below keys on it, so a wrong guess puts
+        // them in the wrong spawn pool, and at roughly one attempt in 600 placing anything, a
+        // player missing a few attempts is not observable.
+        let Some(player_biome) = biomes.read(world, usize::from(player.slot), px, py) else {
+            continue;
+        };
         let near = nearby_active_npcs(npcs, player.position);
 
         // The rate and cap are the player's own, not one number for the world: two people in the
@@ -2762,22 +2833,30 @@ mod tests {
         let mut cache = BiomeCache::default();
 
         let fresh = biome_at(&world, x, y);
-        assert_eq!(cache.read(&world, 0, x, y), fresh, "a first read scans");
+        assert_eq!(
+            cache.read(&world, 0, x, y),
+            Some(fresh),
+            "a first read scans"
+        );
 
         // Walking beyond the drift bound takes a new scan: the outer columns read as ocean by
         // position, which is a different answer from the forest just cached.
         assert_ne!(fresh, Biome::Ocean);
         cache.advance(30);
-        assert_eq!(cache.read(&world, 0, x + 8, y), fresh, "still fresh");
-        assert_eq!(cache.read(&world, 0, 10, y), Biome::Ocean, "and drifted");
+        assert_eq!(cache.read(&world, 0, x + 8, y), Some(fresh), "still fresh");
+        assert_eq!(
+            cache.read(&world, 0, 10, y),
+            Some(Biome::Ocean),
+            "and drifted"
+        );
         // A slot of its own is not the same slot.
-        assert_eq!(cache.read(&world, 1, x, y), fresh);
+        assert_eq!(cache.read(&world, 1, x, y), Some(fresh));
 
         // Age alone is only observable when the world underneath changes, so paint enough
         // ebonstone into the scan box to cross `EVIL_THRESHOLD` and watch the answer follow.
         let mut aged = BiomeCache::default();
         aged.advance(100);
-        assert_eq!(aged.read(&world, 0, x, y), fresh);
+        assert_eq!(aged.read(&world, 0, x, y), Some(fresh));
         for dx in -20..20 {
             for dy in -20..20 {
                 world.set_tile(x + dx, y + dy, terrustia_proto::Tile::block(23));
@@ -2787,14 +2866,71 @@ mod tests {
         aged.advance(100 + BiomeCache::REFRESH - 1);
         assert_eq!(
             aged.read(&world, 0, x, y),
-            fresh,
+            Some(fresh),
             "a scan under a second old is still used",
         );
         aged.advance(100 + BiomeCache::REFRESH);
         assert_eq!(
             aged.read(&world, 0, x, y),
-            Biome::Corruption,
+            Some(Biome::Corruption),
             "and a second later it is taken again",
+        );
+    }
+
+    /// A join burst cannot buy a scan for every player on one tick.
+    ///
+    /// No vanilla line to cite: a real dedicated server never scans at all, because the client runs
+    /// `SceneMetrics` and sends its zones up in packet 36. The citation is the measurement. A scan
+    /// is 78 us (`examples/biome_scan_cost.rs`), so 255 of them is 19,890 us against a 16,667 us
+    /// tick, and a real 255-player soak measured `phase=spawning phase_us=20763` and failed the
+    /// release gate on it.
+    ///
+    /// Fails before the budget: every one of the 255 reads scanned, because nothing bounded them.
+    #[test]
+    fn a_join_burst_cannot_buy_a_scan_for_every_player_in_one_tick() {
+        let world = test_world();
+        let (x, y) = (world.width() / 2, i32::from(world.surface) + 10);
+        let mut cache = BiomeCache::default();
+
+        // Every slot arrives with no entry at all, which is the first fill: 255 clients becoming
+        // playable on the same tick.
+        cache.advance(1);
+        for slot in 0..255 {
+            let _ = cache.read(&world, slot, x, y);
+        }
+        let scanned = (0..255).filter(|s| cache.last(*s).is_some()).count();
+        assert!(
+            scanned <= BiomeCache::BUDGET as usize,
+            "{scanned} scans on one tick, budget is {}",
+            BiomeCache::BUDGET,
+        );
+
+        // Everyone is served inside the refresh window rather than starved.
+        for tick in 2..=64 {
+            cache.advance(tick);
+            for slot in 0..255 {
+                let _ = cache.read(&world, slot, x, y);
+            }
+        }
+        assert!(
+            (0..255).all(|s| cache.last(s).is_some()),
+            "every slot should have an answer within the refresh window",
+        );
+
+        // And the stale path is budgeted too, not only the empty one. Moving every player past
+        // DRIFT on the same tick is synchronised expiry in its instant form, and the outer columns
+        // read as ocean, so a rescan is visible as a changed answer.
+        cache.advance(65);
+        for slot in 0..255 {
+            let _ = cache.read(&world, slot, 10, y);
+        }
+        let moved = (0..255)
+            .filter(|s| cache.last(*s) == Some(Biome::Ocean))
+            .count();
+        assert!(
+            moved <= BiomeCache::BUDGET as usize,
+            "{moved} rescans on one tick, budget is {}",
+            BiomeCache::BUDGET,
         );
     }
 
