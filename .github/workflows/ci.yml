@@ -115,11 +115,23 @@ jobs:
 
       - run: cargo check --workspace --target ${{ matrix.target }}
 
-      # `--no-default-features` turns `embed-web` off, which is what lets this run without a `bun`
-      # toolchain and a built frontend on every runner: the embedded-panel path is covered by the
-      # ubuntu job above, and its disk-serving counterpart by that job's own `--no-default-features`
-      # lint pass. Everything else, which is all of the server, is exercised here for real.
-      #
+      # The host-native runs below test `--no-default-features`, which serves the panel from
+      # `web-panel/dist/` on disk instead of embedding it, so the frontend has to exist for real.
+      # That is the point rather than a chore: the disk-serving branch is the one carrying the
+      # `..`-traversal guard, and a path guard is exactly the code that behaves differently where
+      # `\` is a separator. Windows is where it most wants running, and until now it had never run
+      # there at all.
+      - uses: oven-sh/setup-bun@v2
+        if: matrix.host
+        with:
+          bun-version: latest
+      - name: Build the web panel frontend
+        if: matrix.host
+        working-directory: crates/terrustia/web-panel
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
       # `update.rs`'s signature tests skip themselves where `cosign` is absent rather than failing,
       # so they are simply not part of what this proves.
       - name: Tests (host-native targets only)
