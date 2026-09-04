@@ -45,17 +45,24 @@ use terrustia_proto::net_module::power;
 const MAX_PLAYERS: usize = 255;
 
 /// The shared on/off powers, `ModifyTimeRate`, and the three per-player powers whose gameplay
-/// effect this server applies. See the module doc for which one power this does *not* cover yet
-/// and why.
+/// effect this server applies. This used to point at the module doc "for which one power this does
+/// *not* cover yet"; there is no such power, and the module doc says so itself ("all five, all
+/// fifteen"). The pointer went stale when `stop_biome_spread` grew its real gate.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct JourneyPowers {
     pub freeze_time: bool,
     pub freeze_rain: bool,
     pub freeze_wind: bool,
-    /// A real vanilla power with nothing to gate yet: this project does not model corruption/
-    /// crimson/hallow tile spread at all. The toggle itself still works — a client can flip it and
-    /// see the state stick and sync to other players — it just has no effect to freeze, the same
-    /// honest gap as everywhere else this project has found a mechanism with no counterpart here.
+    /// Freezes the hardmode infections where they stand, and really does: `tick_world_update` reads
+    /// this flag into its own `spreading` gate beside `hard_mode`
+    /// (`game/server/systems.rs`, transcribing `AllowedToSpreadInfections`,
+    /// `WorldGen.cs:72047-72052`), and `with_the_power_on_nothing_spreads` holds fifty ticks of a
+    /// hardmode world to zero drift with it on.
+    ///
+    /// This comment used to say the opposite: that the power had "nothing to gate yet" because this
+    /// project "does not model corruption/crimson/hallow tile spread at all". Both halves were false
+    /// by the time anyone read them, and it is recorded here rather than quietly deleted because a
+    /// doc comment that libels working code is the same failure as one that oversells missing code.
     pub stop_biome_spread: bool,
     /// `ModifyTimeRate`'s raw 0.0–1.0 slider position, exactly as the wire carries it and exactly
     /// as `_sliderCurrentValueCache` holds it in source — not the derived 1×–24× rate itself.
