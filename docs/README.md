@@ -18,6 +18,7 @@ written to be read before touching the code it describes.
 | [worldgen.md](worldgen.md) | How a playable world is built, and four things that were got wrong first |
 | [worldgen-parity.md](worldgen-parity.md) | The separate, much longer job of making a seed match Terraria's |
 | [generated-tables.md](generated-tables.md) | Which source files are generated, from what, and how to regenerate them |
+| [release-blockers.md](release-blockers.md) | What is not done for v0.0.1: the release bar clause by clause, the known bugs left in on purpose, and the documents that were found lying |
 
 ## The rule the whole codebase follows
 

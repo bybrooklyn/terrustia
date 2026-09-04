@@ -166,4 +166,8 @@ Playwright. When you fix a bug, add a test that fails against the bug first, the
 - `TODO.md` - the single backlog and the v0.0.1 roadmap: lanes, gates, deferred work, and the
   dependency-pruning record. The former `plan.md` and `GAPS.md` are folded into it; their full
   text lives in git history.
+- `docs/release-blockers.md` - what is *not* done for v0.0.1: the release bar clause by clause with
+  the evidence for each, the known bugs left in on purpose, and the backlog entries that were found
+  claiming things the code contradicted. Read it before answering "is this ready", because that
+  question has been answered too generously from memory before.
 - `docs/` - protocol notes, world-file notes, performance method, and the generated-table provenance.
