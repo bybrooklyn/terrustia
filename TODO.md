@@ -792,12 +792,20 @@ matters most for a first release. Recorded as a decision rather than skipped qui
 lesson of this qualification work is that an unenforced stated bar is indistinguishable from a met
 one.
 
-**Three more silent gaps found 2026-09-01, in flight.** The 255-player soak was deprioritised in
-favour of parity: confirmation matters less than discovery. Found by reading `docs/spawn-gaps.tsv`'s
-41-entry over-reach list (all 41 checked and cleared: King Slime via boss-summon, NutcrackerSpinning
-and the Crawdad/Shelly/Salamander family already documented checker false-positives, the DD2 roster
-via its own real spawner) and then reading the unreachable list for anything gating real content
-rather than cosmetic variety.
+**Three more silent gaps found 2026-09-01. All three are closed as of 2026-09-04**, and each entry
+below now records what actually turned out to be true rather than what the first read assumed. Found
+by reading the over-reach list (41 entries then, 54 now that `check_spawn_reach.py` can read
+`NextFromList` and the critter lanes made more types reachable; all of the original 41 checked and
+cleared: King Slime via boss-summon, NutcrackerSpinning and the Crawdad/Shelly/Salamander family
+already documented checker false-positives, the DD2 roster via its own real spawner) and then reading
+the unreachable list for anything gating real content rather than cosmetic variety.
+
+The unreachable list itself went 88 -> 3 over 2026-09-03/04 (seven merged lanes: gem critters,
+ordinary critters, water/beach critters, the hornet families, the underground fairies, the
+Halloween/graveyard/night roster, and the Palworld encounter). What is left is three types that are
+*correctly* unreachable and will stay that way: 450 and 451 are dead in the game's own shipped source
+(`num56` drawn once, tested against zero three times, `NPC.cs:5120-5138`), and 691 sits behind
+`RollOnlyBadLuckExtreme`, which never fires at the luck this server does not model.
 
 - **NIGHTZOMBIE**: ~~the whole Halloween/Graveyard/full-moon night roster is unwired~~ **done.** Two
   lanes, and the note above was wrong about the second half of it in two ways worth recording. The
@@ -816,17 +824,24 @@ rather than cosmetic variety.
   on purpose: 450 and 451 are dead in the game's own source (`num56` is drawn once and tested
   against zero three times, `NPC.cs:5120-5138`), and 691 is behind `RollOnlyBadLuckExtreme`, which
   never fires for a player whose luck this server does not model.
-- **DESERT**: the entire hardmode Underground Desert roster is missing - DesertGhoul x4 (including the
-  corruption/crimson/hallow-tainted variants), DesertLamia x2, SandShark x4, SandElemental,
-  DesertDjinn, the giant antlions, TombCrawlerHead. Our desert pool only has Vulture/SandSlime/Antlion.
-- **TAXCOLLECTOR**: two town NPCs can never be recruited because the mob each comes from never
-  spawns. The Tax Collector needs a Tortured Soul (534, underworld, hardmode, `NPC.cs:4877`) hit with
-  Purification Powder; already disclosed in `rescues.rs:26-28` ("needs an item the server does not
-  track") and `party.rs:24-28`. The Skeleton Merchant (453, hardmode dungeon, `NPC.cs:5007-5010`) is a
-  timed wandering-shop encounter, not a bind-and-free rescue. Smallest of the three and the most
-  likely to reveal it needs real new infrastructure (a general item-vs-live-NPC interaction, which
-  nothing in this server currently has) rather than a narrow wire-up; the lane was told to disclose
-  that honestly rather than force a bad implementation.
+- **DESERT**: ~~the entire hardmode Underground Desert roster is missing~~ **done.** DesertGhoul x4
+  (including the corruption/crimson/hallow-tainted variants), DesertLamia x2, SandShark x4,
+  SandElemental, DesertDjinn, the giant antlions and TombCrawlerHead are all off
+  `docs/spawn-gaps.tsv`: the desert pool is no longer Vulture/SandSlime/Antlion alone. Verified
+  2026-09-04 by their absence from the gap file rather than by reading the pool, which is the check
+  that would have caught this note going stale in the first place.
+- **TAXCOLLECTOR**: ~~two town NPCs can never be recruited because the mob each comes from never
+  spawns~~ **done, and the premise was wrong by the time it was written.** Both mobs spawn: neither
+  534 nor 453 is in `docs/spawn-gaps.tsv`. The Tortured Soul has its own underworld-hardmode arm
+  (`TORTURED_SOUL_ODDS`, `spawn.rs`), and the item interaction this note predicted would need "a
+  general item-vs-live-NPC interaction, which nothing in this server currently has" already exists:
+  Purification Powder arrives as packet 140 and the *server* settles its effect
+  (`dispatch.rs:3869-3889`), turning a Tortured Soul and setting `saved_tax_collector` through
+  `Server::tick_powders`. `rescues.rs:26-33` explains why the Tax Collector is deliberately absent
+  from the `Rescue` table rather than missing from the game. The Skeleton Merchant is likewise fully
+  wired: its own cavern arm at `SKELETON_MERCHANT_ODDS`, an explicit exemption from the town-NPC
+  despawn rule (`npc_ai.rs:501`), and shop handling beside the Old Man and the Travelling Merchant
+  (`systems.rs:3072`).
 - **PALWORLDPAL**: *done*. The two distressed Palworld pets (695, 696) are off `docs/spawn-gaps.tsv`
   with the whole encounter behind them rather than the spawn alone. The ambient arm is the surface
   day's (`NPC.cs:4374-4389`, inside the daytime block at `:4202`): more than `maxTilesX / 8` from
