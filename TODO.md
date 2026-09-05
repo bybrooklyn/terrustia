@@ -682,6 +682,26 @@ over effort; the first three are roughly a day each.
    **`new_world_cli` remains open** and is a different fault: it kills its child before asserting,
    so it cannot leak, and the `ENOENT`-against-a-relink lead above still stands.
 
+7. **`just check-citations`: does a citation's own lines contain the numbers written beside it?**
+   `check-parity` proves a citation still points at the same text and says plainly that it never
+   judges whether the transcription is right. This asks the other half, and it found a real class:
+   `ARAPAIMA_REVERSE_DAMPING = 0.95` cited `NPC.cs:23886-23891` and the `velocity.X *= 0.95f` it
+   documents is at `:23896`, so the hash guarded six lines that do not contain the value.
+
+   **It produces a candidate list, not a defect list**, and the distinction matters. 70 items are
+   flagged, and the tool cannot tell three things apart: a citation that is genuinely a few lines
+   short; a derived value that legitimately appears nowhere in its own citation (`FISHRON_HALF_CYCLE`
+   is `num2 * 2` with `num2` five, and its citation is exactly right); and one of this project's own
+   ids passed as an argument (`moon_lord_weapons` carries 398 because that is the Moon Lord). Two
+   noise classes are filtered - match-arm keys and array lengths - and a third, test fixtures, cut
+   the count from 111 to 70 on its own.
+
+   Five were worked through by hand and all five were real: four citations two to five lines short,
+   and `PLANTERA_HOOKS = 3` citing the *tentacle* block, when Plantera's three hooks are three
+   literal `NewNPC(..., 263, ...)` calls eighty lines earlier. The remaining 65 are one judgement
+   each. Report-only, deliberately: gating would mean either a wall of exceptions or a checker
+   nobody trusts.
+
 **Explicitly not on this list: another audit pass by reading.** The C3 pass found 99 findings and
 still missed Bone and the absent upward wake in `Liquid.Update`, both of which turned up during
 fixing, and both of which were found by building an instrument rather than reading harder. Reading

@@ -226,7 +226,7 @@ pub fn swim_speed(npc_type: u16) -> SwimSpeed {
 
 /// How hard a swimmer already moving against its facing is slowed before it accelerates.
 ///
-/// Only the arapaima does this (`NPC.cs:23886-23891`); it is what stops the fastest fish in the
+/// Only the arapaima does this (`NPC.cs:23892-23901`); it is what stops the fastest fish in the
 /// game from overshooting every time its prey doubles back.
 pub const ARAPAIMA_REVERSE_DAMPING: f32 = 0.95;
 
@@ -1447,7 +1447,7 @@ pub const LACEWING_KEEP_RANGE: f32 = 300.0;
 pub const LACEWING_FADE_GONE: f32 = 60.0;
 pub const LACEWING_FADE_CAP: f32 = 50.0;
 /// It also looks around for danger half again as often as an ordinary butterfly
-/// (`NPC.cs:45549-45553`, `localAI[1] = 10f` rather than `15f`).
+/// (`NPC.cs:45549-45556`, `localAI[1] = 10f` rather than `15f`).
 pub const LACEWING_FEAR_INTERVAL: f32 = 10.0;
 
 /// How long a butterfly holds a heading before picking another, as an inclusive-exclusive range.
@@ -1655,9 +1655,9 @@ pub fn conjuring(npc_type: u16) -> Option<Conjuring> {
     }
 }
 
-/// The Desert Djinn's wind-up is 181 ticks rather than everyone else's 30 (`NPC.cs:21107`), and it
-/// drops a lantern on every thirtieth tick of it while the count is still under five, so five in
-/// all (`NPC.cs:21192`). Its `release_at` is therefore not a single tick and the routine handles it
+/// The Desert Djinn's wind-up is 181 ticks rather than everyone else's 30
+/// (`NPC.cs:21107-21109`), and it drops a lantern on every thirtieth tick of it while the count is
+/// still under five, so five in all (`NPC.cs:21192`). Its `release_at` is therefore not a single tick and the routine handles it
 /// by type.
 pub const DJINN_WINDUP: f32 = 181.0;
 pub const DJINN_LANTERNS: f32 = 5.0;
@@ -4105,8 +4105,9 @@ pub const GOLEM_FREE_ACCEL: f32 = 0.05;
 pub const PLANTERA: u16 = 262;
 pub const PLANTERA_HOOK: u16 = 263;
 pub const PLANTERA_TENTACLE: u16 = 264;
-/// It starts with three hooks and, in its second form, eight tentacles on the body
-/// (`NPC.cs:32226-32234`), six more of those in a for-the-worthy world.
+/// It starts with three hooks (`NPC.cs:31974-31976`, three literal `NewNPC` calls rather than a
+/// loop) and, in its second form, eight tentacles on the body (`NPC.cs:32226-32234`), six more of
+/// those in a for-the-worthy world.
 pub const PLANTERA_HOOKS: usize = 3;
 pub const PLANTERA_TENTACLES: usize = 8;
 pub const PLANTERA_TENTACLES_GET_GOOD: usize = 6;
@@ -4688,7 +4689,7 @@ pub const SANTA_PLANT_RANGE: f32 = 50.0;
 /// it is driving.
 pub const SANTA_HARDPOINT: (f32, f32) = (24.0, 64.0);
 /// The odds, as a one-in-N a tick, of each weapon starting. Shortened as it is worn down, at every
-/// quarter (`NPC.cs:34078-34095`): nine tenths, three quarters, then a half.
+/// quarter (`NPC.cs:34075-34095`): nine tenths, three quarters, then a half.
 pub const SANTA_PRESENT_ODDS: u32 = 600;
 pub const SANTA_ROCKET_ODDS: u32 = 1200;
 pub const SANTA_MISSILE_ODDS: u32 = 2700;

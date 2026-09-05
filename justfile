@@ -190,6 +190,16 @@ check-npc-data:
 check-placed-items:
     python3 tools/check_placed_items.py {{DECOMPILED}}
 
+# Do the vanilla lines a citation names actually contain the numbers written next to it?
+#
+# `check-parity` proves a citation still points at the same text; it says so itself that it never
+# judges whether the transcription is right. This asks the other half, and it found a class nothing
+# had looked at: citations that are a few lines short of the value they document, so the hash
+# guards lines that do not contain it. Report-only - a derived value (`num2 * 2`) legitimately
+# appears nowhere in its own citation, and no rule can tell that from a mistake.
+check-citations:
+    python3 tools/check_citations.py {{DECOMPILED}}
+
 # Re-read `TileObjectData.Initialize` and hold `tile_object.rs` to it.
 #
 # The table is generated now, so this is the same second opinion `check-drops` gives `npc_drops.rs`:
