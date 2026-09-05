@@ -15,6 +15,31 @@ use super::*;
 /// `ItemID.FallenStar`, the one item this file spawns from nothing but the passage of a night.
 const FALLEN_STAR: i32 = 75;
 
+/// `BuffID.Stinky` (`BuffID.cs:393`), the one buff `Player.RecalculateLuck` reads.
+pub(super) const STINKY: u16 = 120;
+
+/// Whether a player's last reported buff list holds `buff`.
+///
+/// Packet 50 is a slot byte and then `u16` buff ids until a zero or the end
+/// (`MessageBuffer.cs:2456-2477`, `while ((num230 = reader.ReadUInt16()) > 0)`). The server keeps
+/// the packet verbatim to replay to other clients, so this reads it where it lies rather than
+/// keeping a parsed copy beside it: it is asked once per luck refresh, not once per tick.
+///
+/// A body too short to hold the slot byte, or one whose id run is odd-length, simply has no
+/// matching buff - a truncated list is not a reason to guess.
+fn player_has_buff(player: &Player, buff: u16) -> bool {
+    let Some(body) = player.buffs.as_deref() else {
+        return false;
+    };
+    let Some(ids) = body.get(1..) else {
+        return false;
+    };
+    ids.chunks_exact(2)
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .take_while(|id| *id > 0)
+        .any(|id| id == buff)
+}
+
 /// A desert worm head raised this tick and the chain it wants: its slot, where it is, its body and
 /// tail types, and the inclusive segment range to roll in
 /// (`npc_params::self_growing_sand_worm`).
@@ -4699,9 +4724,13 @@ impl GameServer {
     /// yet. `Main.tenthAnniversaryWorld` is not modelled anywhere in this server, so the ordinary
     /// 25 is the whole roll, and `GetPlayerWithHighestLuck().RollLuck(25)` reduces to `rand(25)` at
     /// zero luck for the reason [`Self::spawn_falling_objects`] gives at greater length.
-    fn roll_coin_rain(&mut self) {
+    pub(super) fn roll_coin_rain(&mut self) {
         use rand::Rng;
-        if self.rng.random_range(0..25) != 0 {
+        // `Player.GetPlayerWithHighestLuck().RollLuck(25)` - the *luckiest* player on the server,
+        // not the nearest one, which is unusual enough to be worth naming: one lucky player makes
+        // money rain likelier for everybody.
+        let luck = self.highest_luck();
+        if self.roll_luck(luck, 25) != 0 {
             return;
         }
         let scale = f64::from(self.world.width()) / 4200.0;
@@ -4972,6 +5001,9 @@ impl GameServer {
         // survives past one dawn. No chat announcement in real vanilla either, just the world-flag
         // resync `broadcast_world_data` below already sends.
         if self.lantern_night.end_for_the_morning() {
+            // A lantern night is worth +0.3 luck to everybody (`Player.cs:29377-29380`), so it
+            // ending is a change to every connected player's luck.
+            self.refresh_all_luck();
             self.broadcast_world_data();
         }
     }
@@ -5310,7 +5342,7 @@ impl GameServer {
     /// Eater of Worlds' three segments specifically, `NPCID` 13/14/15, none of which carry the
     /// ordinary `.boss` stat (confirmed directly against `npc_data.rs`, the same reason real
     /// vanilla's own `BossIsActive()` needed the same special case).
-    fn roll_natural_lantern_night(&mut self) {
+    pub(super) fn roll_natural_lantern_night(&mut self) {
         let boss_active = self.npcs.iter().any(|(_, n)| {
             matches!(n.npc_type, 13..=15)
                 || terrustia_proto::npc_data::npc_stats(n.npc_type).is_some_and(|s| s.boss)
@@ -5333,6 +5365,7 @@ impl GameServer {
         // birthday party, each of which really does broadcast a line. Checked directly against
         // source rather than assumed from the pattern those other events set.
         if self.lantern_night.is_up() != was_up {
+            self.refresh_all_luck();
             self.broadcast_world_data();
         }
     }
@@ -5925,8 +5958,11 @@ impl GameServer {
 
         let closest = self.closest_player((x as f32, y as f32), (1, 1));
         if let Some(slot) = closest {
-            // `RollLuck(15)` at zero luck. See the note above.
-            let range = self.rng.random_range(0..15);
+            // `Main.player[num29].RollLuck(range)`, with that player's real luck: a lucky player
+            // genuinely does get more stars aimed at them, which is one of the two things Luck
+            // Potions visibly do.
+            let luck = self.luck_of(slot);
+            let range = self.roll_luck(luck, 15);
             let (px, py) = match self.player(slot) {
                 Some(p) => p.position,
                 None => return,
@@ -6075,6 +6111,92 @@ impl GameServer {
         if self.weather.coin_rain < 0 {
             self.weather.coin_rain = 0;
         }
+    }
+
+    /// `Luck.RollLuck(luck, range)` against this server's own rng.
+    ///
+    /// The routine itself lives in [`terrustia_proto::luck::roll_luck`], beside the factors it
+    /// scales, because it is a transcription and belongs with the rest of them; this is the two
+    /// lines that hand it a `rand` implementation, which `terrustia-proto` deliberately does not
+    /// depend on.
+    ///
+    /// Callers test `== 0`, so what they are asking is "did a 1-in-`range` chance land", and luck
+    /// is what narrows or widens the range first. Every one of them used to draw
+    /// `rng.random_range(0..range)` directly with a comment saying luck was unmodelled.
+    fn roll_luck(&mut self, luck: f32, range: i32) -> i32 {
+        struct Bridge<'a>(&'a mut rand::rngs::SmallRng);
+        impl terrustia_proto::luck::LuckRng for Bridge<'_> {
+            fn next_f32(&mut self) -> f32 {
+                rand::Rng::random::<f32>(self.0)
+            }
+            fn next_max(&mut self, max: i32) -> i32 {
+                if max <= 0 {
+                    return 0;
+                }
+                rand::Rng::random_range(self.0, 0..max)
+            }
+            fn next_range(&mut self, min: i32, max: i32) -> i32 {
+                if max <= min {
+                    return min;
+                }
+                rand::Rng::random_range(self.0, min..max)
+            }
+        }
+        terrustia_proto::luck::roll_luck(luck, range, &mut Bridge(&mut self.rng))
+    }
+
+    /// Recompute one player's `Player.luck` from what they last reported and what the server knows
+    /// on its own.
+    ///
+    /// Called from three places for three reasons, which is what makes this a function rather than
+    /// a line inside packet 134's handler: the factors changing (packet 134), the buff list
+    /// changing (packet 50, because `stinky` is one of `RecalculateLuck`'s own terms), and a
+    /// Lantern Night starting or ending, which is worth as much as three Luck Potions
+    /// (`Player.cs:29377-29380`) and is entirely the server's own state.
+    pub(super) fn refresh_luck(&mut self, slot: u8) {
+        let lanterns_up = self.lantern_night.is_up();
+        if let Some(player) = self.player(slot) {
+            let stinky = player_has_buff(player, STINKY);
+            let luck = player.luck_factors.luck(lanterns_up, stinky);
+            if let Some(player) = self.player_mut(slot) {
+                player.luck = luck;
+            }
+        }
+    }
+
+    /// [`Self::refresh_luck`] for everybody, for the events that change every player's luck at
+    /// once rather than one player's.
+    pub(super) fn refresh_all_luck(&mut self) {
+        let seated: Vec<u8> = self.players.iter().flatten().map(|p| p.slot).collect();
+        for slot in seated {
+            self.refresh_luck(slot);
+        }
+    }
+
+    /// The luck of whoever has the most of it — `Player.GetPlayerWithHighestLuck()`
+    /// (`Player.cs:18327-18343`), which is what the money-rain roll uses rather than the nearest
+    /// player's (`Main.cs:65647`).
+    ///
+    /// `max` over the players rather than `max` including zero: with one cursed player on the
+    /// server, the highest luck in the world *is* their bad luck, and money rains less often than
+    /// on an empty one. Vanilla is explicit about this - `player == null || player.luck <
+    /// player2.luck` seeds from the first active player, not from a zero - and the fallback is a
+    /// fresh `new Player()` at luck 0, which is exactly the empty-server answer here.
+    fn highest_luck(&self) -> f32 {
+        self.players
+            .iter()
+            .flatten()
+            .filter(|p| p.is_playing())
+            .map(|p| p.luck)
+            .reduce(f32::max)
+            .unwrap_or(0.0)
+    }
+
+    /// One player's luck by slot, or zero for a slot nobody is in. The shape every transcribed
+    /// `info.player.RollLuck(...)` needs: vanilla reads it off a specific `Player`, usually the
+    /// closest one.
+    fn luck_of(&self, slot: u8) -> f32 {
+        self.player(slot).map_or(0.0, |p| p.luck)
     }
 
     /// `Player.FindClosest(position, 1, 1)` (`Player.cs:4934-4958`): the nearest living player by
@@ -13280,6 +13402,72 @@ mod falling_stars {
                 .iter()
                 .any(|(_, item)| item.item.id == FALLEN_STAR),
             "only a natural star drops one"
+        );
+    }
+
+    /// `Main.player[num29].RollLuck(15)`: one star in fifteen is aimed near the closest player on
+    /// the surface, and luck is what narrows that fifteen. A lucky player really does get more
+    /// stars steered towards them, which is one of the two visible things a Luck Potion does.
+    ///
+    /// Measured over many nights rather than asserted on one, because `RollLuck` is a chance of a
+    /// better chance: even at luck 1 the ordinary odds are still sometimes drawn.
+    #[test]
+    fn a_lucky_player_has_more_stars_aimed_at_them() {
+        use terrustia_proto::projectile::ids::FALLING_STAR_SPAWNER;
+
+        let aimed_at_rate = |luck: f32| {
+            let mut server = night_server();
+            let (tx, _rx) = tokio::sync::mpsc::channel(4096);
+            let mut player =
+                crate::game::player::Player::new(0, "127.0.0.1:1".parse().expect("loopback"), tx);
+            player.state = crate::game::ConnState::Playing;
+            player.life = 100;
+            // On the surface, which the lucky branch requires (`position.Y < worldSurface * 16`).
+            player.position = (2000.0, 0.0);
+            player.luck = luck;
+            server.players[0] = Some(player);
+
+            let mut aimed = 0;
+            let mut total = 0;
+            for _ in 0..3000 {
+                server.spawn_falling_objects();
+                let stars: Vec<u16> = server
+                    .projectiles
+                    .iter()
+                    .filter(|(_, p)| p.projectile_type == FALLING_STAR_SPAWNER)
+                    .map(|(index, p)| {
+                        total += 1;
+                        if p.ai[1] > -1.0 {
+                            aimed += 1;
+                        }
+                        index
+                    })
+                    .collect();
+                // Cleared each pass so the counts are per star rather than cumulative.
+                for index in stars {
+                    server.projectiles.remove(index);
+                }
+            }
+            assert!(total > 1000, "the boost must actually be firing: {total}");
+            (aimed, total)
+        };
+
+        let (plain_aimed, plain_total) = aimed_at_rate(0.0);
+        let (lucky_aimed, lucky_total) = aimed_at_rate(1.0);
+        assert!(
+            plain_aimed > 0,
+            "one star in fifteen is aimed even with no luck at all"
+        );
+        let plain = plain_aimed as f64 / plain_total as f64;
+        let lucky = lucky_aimed as f64 / lucky_total as f64;
+        assert!(
+            lucky > plain,
+            "luck must narrow the range: {lucky:.3} against {plain:.3}"
+        );
+        // Zero luck is exactly 1-in-15.
+        assert!(
+            (plain - 1.0 / 15.0).abs() < 0.02,
+            "no luck is the flat 1-in-15: {plain:.3}"
         );
     }
 

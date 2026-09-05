@@ -166,10 +166,8 @@ impl GameServer {
             // Social chatter and cosmetic effects: nothing to keep, but everyone else has to see
             // it or the world looks different from each side. Only the ids a real dedicated server
             // actually relays are here; see the read-and-drop arm below for the ones it does not.
-            id::ITEM_USE_SOUND
-            | id::SYNC_PROJECTILE_TRACKERS
-            | id::UPDATE_PLAYER_LUCK_FACTORS
-            | id::LAND_GOLF_BALL_IN_CUP => {
+            id::UPDATE_PLAYER_LUCK_FACTORS => self.on_luck_factors(slot, &payload),
+            id::ITEM_USE_SOUND | id::SYNC_PROJECTILE_TRACKERS | id::LAND_GOLF_BALL_IN_CUP => {
                 if self.player(slot).is_some_and(Player::is_playing)
                     && let Ok(relayed) = packets::verbatim(frame.id, &payload)
                 {
@@ -1461,6 +1459,9 @@ impl GameServer {
         if let Some(player) = self.player_mut(slot) {
             player.buffs = Some(Bytes::copy_from_slice(payload));
         }
+        // One of the buffs in there is a term of `Player.RecalculateLuck` (`stinky`), so a buff
+        // list arriving can change this player's luck without any packet 134 following it.
+        self.refresh_luck(slot);
         self.relay_player_packet(slot, id::PLAYER_BUFFS, payload)
     }
 
@@ -4895,6 +4896,46 @@ impl GameServer {
         Ok(())
     }
 
+    /// Packet 134: a player's luck factors changed.
+    ///
+    /// `MessageBuffer.GetData`'s case 134 (`MessageBuffer.cs:4190-4220`) does three things, and
+    /// this server used to do only the last of them:
+    ///
+    /// ```csharp
+    /// int num106 = reader.ReadByte();
+    /// ... eight factors ...
+    /// if (Main.netMode == 2) { num106 = whoAmI; }
+    /// Player obj4 = Main.player[num106];
+    /// obj4.ladyBugLuckTimeLeft = ladyBugLuckTimeLeft;  // ...and the other seven
+    /// obj4.RecalculateLuck();
+    /// if (Main.netMode == 2) { NetMessage.SendData(134, -1, num106, null, num106); }
+    /// ```
+    ///
+    /// It was in the verbatim relay group, which got the relay right and dropped the state on the
+    /// floor. That is why every luck-sensitive roll in this workspace was written against zero
+    /// luck: not because luck is client-side (it is not - vanilla's server keeps a real figure per
+    /// player, and this is where it gets it), but because nothing here ever read the packet that
+    /// carries it.
+    ///
+    /// `num106 = whoAmI` is the security half and is kept: [`crate::game::luck::LuckFactors::
+    /// decode`] discards the slot byte outright, so a client cannot report luck for anybody else.
+    /// A malformed body is dropped rather than relayed, which is a change from the verbatim arm:
+    /// there is no reason to hand every other client bytes this server could not read.
+    fn on_luck_factors(&mut self, slot: u8, payload: &[u8]) -> terrustia_proto::Result<()> {
+        if !self.player(slot).is_some_and(Player::is_playing) {
+            return Ok(());
+        }
+        let factors = terrustia_proto::luck::LuckFactors::decode(payload)?;
+        if let Some(player) = self.player_mut(slot) {
+            player.luck_factors = factors;
+        }
+        self.refresh_luck(slot);
+        if let Ok(relayed) = packets::verbatim(id::UPDATE_PLAYER_LUCK_FACTORS, payload) {
+            self.broadcast(relayed, Some(slot));
+        }
+        Ok(())
+    }
+
     /// Packet 120: a player used an emote.
     ///
     /// Never relayed by a real server. Vanilla runs `EmoteBubble.NewBubble` (`MessageBuffer.cs:
@@ -7659,6 +7700,329 @@ mod join_stream_item_owners {
         assert_eq!(
             owner.keep_reservation_ticks, 0,
             "vanilla's join loop passes no `number2`, so this field goes out as zero"
+        );
+    }
+}
+
+/// Player luck, which this server had no model of at all until now. It is not client-side state:
+/// packet 134 exists to tell the server, and `MessageBuffer.cs:4190-4220` stores every factor and
+/// recomputes the total. This server relayed the packet and threw the contents away, which is why
+/// every luck-sensitive roll in the workspace was written against zero.
+#[cfg(test)]
+mod player_luck {
+    use super::*;
+    use crate::config::Config;
+
+    fn frame(id: u8, payload: &[u8]) -> Frame {
+        Frame {
+            id,
+            payload: Bytes::copy_from_slice(payload),
+        }
+    }
+
+    fn connect(server: &mut GameServer, slot: u8) -> mpsc::Receiver<Bytes> {
+        let (tx, rx) = mpsc::channel(64);
+        let mut player = Player::new(slot, "127.0.0.1:1".parse().expect("test address"), tx);
+        player.greeted = true;
+        player.password_ok = true;
+        player.state = ConnState::Playing;
+        server.players[usize::from(slot)] = Some(player);
+        rx
+    }
+
+    /// Packet 134 as a client writes it (`NetMessage.cs:1565-1578`). Named rather than positional,
+    /// because eight numbers in a row is exactly the shape a wrong-order bug hides in.
+    #[derive(Default)]
+    struct Factors {
+        ladybug: i32,
+        torch: f32,
+        potion: u8,
+        gnome: bool,
+        mirror: bool,
+        equipment: f32,
+        coins: f32,
+        kites: u8,
+    }
+
+    fn luck_packet(slot: u8, f: Factors) -> Vec<u8> {
+        let mut body = vec![slot];
+        body.extend_from_slice(&f.ladybug.to_le_bytes());
+        body.extend_from_slice(&f.torch.to_le_bytes());
+        body.push(f.potion);
+        body.push(u8::from(f.gnome));
+        body.push(u8::from(f.mirror));
+        body.extend_from_slice(&f.equipment.to_le_bytes());
+        body.extend_from_slice(&f.coins.to_le_bytes());
+        body.push(f.kites);
+        body
+    }
+
+    /// Packet 50: a slot byte and then `u16` buff ids, terminated by a zero
+    /// (`MessageBuffer.cs:2470`).
+    fn buff_packet(slot: u8, ids: &[u16]) -> Vec<u8> {
+        let mut body = vec![slot];
+        for id in ids {
+            body.extend_from_slice(&id.to_le_bytes());
+        }
+        body.extend_from_slice(&0u16.to_le_bytes());
+        body
+    }
+
+    #[test]
+    fn packet_134_gives_the_server_a_real_luck_figure() {
+        let mut server = GameServer::new(
+            Config::default(),
+            crate::world::World::empty(400, 300, "luck probe"),
+        );
+        let _rx = connect(&mut server, 0);
+        assert_eq!(
+            server.player(0).expect("seated").luck,
+            0.0,
+            "nobody has reported anything yet"
+        );
+
+        // Three Luck Potions and a Garden Gnome: 0.3 + 0.2.
+        server.handle_packet(
+            0,
+            frame(
+                id::UPDATE_PLAYER_LUCK_FACTORS,
+                &luck_packet(
+                    0,
+                    Factors {
+                        potion: 3,
+                        gnome: true,
+                        ..Factors::default()
+                    },
+                ),
+            ),
+        );
+        let luck = server.player(0).expect("seated").luck;
+        assert!(
+            (luck - 0.5).abs() < 1e-5,
+            "three potions and a gnome is 0.5: got {luck}"
+        );
+    }
+
+    /// The slot byte is not trusted: `MessageBuffer.cs:4201-4204` overwrites it with `whoAmI` on a
+    /// server specifically so a client cannot report luck for somebody else.
+    #[test]
+    fn a_client_cannot_report_luck_on_another_players_behalf() {
+        let mut server = GameServer::new(
+            Config::default(),
+            crate::world::World::empty(400, 300, "luck spoof probe"),
+        );
+        let _rx0 = connect(&mut server, 0);
+        let _rx1 = connect(&mut server, 1);
+
+        // Slot 0 claims slot 1 is drinking three Luck Potions.
+        server.handle_packet(
+            0,
+            frame(
+                id::UPDATE_PLAYER_LUCK_FACTORS,
+                &luck_packet(
+                    1,
+                    Factors {
+                        potion: 3,
+                        ..Factors::default()
+                    },
+                ),
+            ),
+        );
+        assert_eq!(
+            server.player(1).expect("seated").luck,
+            0.0,
+            "the victim's luck must be untouched"
+        );
+        assert!(
+            server.player(0).expect("seated").luck > 0.0,
+            "and the sender gets what they reported, which is the whole of the rewrite"
+        );
+    }
+
+    /// A body the server cannot read is dropped rather than relayed. The old verbatim arm forwarded
+    /// it: there is no reason to hand every other client bytes this server could not parse.
+    #[test]
+    fn a_malformed_body_is_not_relayed() {
+        let mut server = GameServer::new(
+            Config::default(),
+            crate::world::World::empty(400, 300, "luck malformed probe"),
+        );
+        let _rx0 = connect(&mut server, 0);
+        let mut rx1 = connect(&mut server, 1);
+
+        server.handle_packet(0, frame(id::UPDATE_PLAYER_LUCK_FACTORS, &[0, 1, 2]));
+        let mut seen = 0;
+        while let Ok(f) = rx1.try_recv() {
+            if f.get(2) == Some(&id::UPDATE_PLAYER_LUCK_FACTORS) {
+                seen += 1;
+            }
+        }
+        assert_eq!(seen, 0, "a truncated luck packet must not be forwarded");
+        assert_eq!(server.player(0).expect("seated").luck, 0.0);
+    }
+
+    /// A well-formed one *is* relayed, exactly as `NetMessage.SendData(134, -1, num106, ...)` does:
+    /// to everyone but the sender.
+    #[test]
+    fn a_well_formed_body_still_reaches_everybody_else() {
+        let mut server = GameServer::new(
+            Config::default(),
+            crate::world::World::empty(400, 300, "luck relay probe"),
+        );
+        let mut rx0 = connect(&mut server, 0);
+        let mut rx1 = connect(&mut server, 1);
+
+        let body = luck_packet(
+            0,
+            Factors {
+                potion: 1,
+                ..Factors::default()
+            },
+        );
+        server.handle_packet(0, frame(id::UPDATE_PLAYER_LUCK_FACTORS, &body));
+
+        let count = |rx: &mut mpsc::Receiver<Bytes>| {
+            let mut n = 0;
+            while let Ok(f) = rx.try_recv() {
+                if f.get(2) == Some(&id::UPDATE_PLAYER_LUCK_FACTORS) {
+                    n += 1;
+                }
+            }
+            n
+        };
+        assert_eq!(count(&mut rx1), 1, "everybody else hears about it");
+        assert_eq!(count(&mut rx0), 0, "the sender already knows");
+    }
+
+    /// `stinky` is a term of `RecalculateLuck` and arrives on packet 50, not 134, so a buff list
+    /// changing has to recompute the total on its own.
+    #[test]
+    fn a_stinky_player_is_less_lucky_and_the_buff_packet_says_so() {
+        let mut server = GameServer::new(
+            Config::default(),
+            crate::world::World::empty(400, 300, "stinky probe"),
+        );
+        let _rx = connect(&mut server, 0);
+        server.handle_packet(
+            0,
+            frame(
+                id::UPDATE_PLAYER_LUCK_FACTORS,
+                &luck_packet(
+                    0,
+                    Factors {
+                        potion: 3,
+                        ..Factors::default()
+                    },
+                ),
+            ),
+        );
+        let clean = server.player(0).expect("seated").luck;
+        assert!((clean - 0.3).abs() < 1e-5, "three potions: got {clean}");
+
+        // Some other buff first, to prove the reader is not just finding any id at all.
+        server.handle_packet(0, frame(id::PLAYER_BUFFS, &buff_packet(0, &[1, 2, 3])));
+        assert!(
+            (server.player(0).expect("seated").luck - clean).abs() < 1e-5,
+            "an unrelated buff changes nothing"
+        );
+
+        server.handle_packet(
+            0,
+            frame(
+                id::PLAYER_BUFFS,
+                &buff_packet(0, &[1, super::super::systems::STINKY, 3]),
+            ),
+        );
+        let stinky = server.player(0).expect("seated").luck;
+        assert!(
+            (stinky - (clean - 0.25)).abs() < 1e-5,
+            "Stinky costs a quarter: got {stinky}"
+        );
+
+        // ...and it comes back when the buff runs out.
+        server.handle_packet(0, frame(id::PLAYER_BUFFS, &buff_packet(0, &[])));
+        assert!((server.player(0).expect("seated").luck - clean).abs() < 1e-5);
+    }
+
+    /// A lantern night is worth +0.3 to everybody, and it is entirely the server's own state - no
+    /// packet reports it, so nothing but the server can fold it in.
+    #[test]
+    fn a_lantern_night_makes_everybody_luckier() {
+        let mut server = GameServer::new(
+            Config::default(),
+            crate::world::World::empty(400, 300, "lantern luck probe"),
+        );
+        let _rx = connect(&mut server, 0);
+        server.handle_packet(
+            0,
+            frame(
+                id::UPDATE_PLAYER_LUCK_FACTORS,
+                &luck_packet(0, Factors::default()),
+            ),
+        );
+        assert_eq!(server.player(0).expect("seated").luck, 0.0);
+
+        server.lantern_night.next_night_guaranteed = true;
+        server.roll_natural_lantern_night();
+        assert!(
+            server.lantern_night.is_up(),
+            "the guarantee is what makes this deterministic"
+        );
+        let up = server.player(0).expect("seated").luck;
+        assert!((up - 0.3).abs() < 1e-5, "lanterns are worth 0.3: got {up}");
+
+        // And the morning takes it away again.
+        server.lantern_night.end_for_the_morning();
+        server.refresh_all_luck();
+        assert_eq!(server.player(0).expect("seated").luck, 0.0);
+    }
+
+    /// The two rolls this change wires: a lucky player has more stars aimed at them, and the
+    /// luckiest player on the server makes money rain likelier for everybody.
+    ///
+    /// Measured over many rolls rather than asserted on one, because `RollLuck` is a chance of a
+    /// better chance: a lucky player still sometimes draws the ordinary odds.
+    #[test]
+    fn luck_moves_both_of_the_rolls_that_read_it() {
+        let money_rate = |luck: f32| {
+            let mut server = GameServer::new(
+                Config::default(),
+                crate::world::World::empty(4200, 1200, "money luck probe"),
+            );
+            let _rx = connect(&mut server, 0);
+            if let Some(p) = server.player_mut(0) {
+                p.luck = luck;
+            }
+            let mut started = 0;
+            for _ in 0..20_000 {
+                server.weather.coin_rain = 0;
+                server.roll_coin_rain();
+                if server.weather.coin_rain > 0 {
+                    started += 1;
+                }
+            }
+            started
+        };
+        let unlucky = money_rate(0.0);
+        let lucky = money_rate(1.0);
+        assert!(
+            lucky > unlucky,
+            "a lucky server rains money more often: {lucky} against {unlucky}"
+        );
+        // At luck 1 the range is always narrowed to somewhere in [12, 25), so roughly a 1-in-18
+        // average against 1-in-25: a real but not enormous shift, and the assertion is deliberately
+        // loose because this is a distribution, not a formula.
+        assert!(
+            lucky < unlucky * 3,
+            "and not absurdly more often: {lucky} against {unlucky}"
+        );
+
+        // Bad luck goes the other way, which is the branch that would be silently dead if
+        // `roll_luck` had only been given its good half.
+        let cursed = money_rate(-0.7);
+        assert!(
+            cursed < unlucky,
+            "a cursed server rains money less often: {cursed} against {unlucky}"
         );
     }
 }

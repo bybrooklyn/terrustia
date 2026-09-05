@@ -237,6 +237,17 @@ crates/terrustia-proto/src/items.rs	const PICKUP_REPLACEMENT_TIME	Item.cs	334	a3
 crates/terrustia-proto/src/items.rs	const SLOTS_RESERVED_BEFORE_RECYCLING	Item.cs	336	18985b5deb09	3c1b3b91239d
 crates/terrustia-proto/src/items.rs	const SLOTS_RESERVED_BEFORE_RECYCLING	Item.cs	49798-49802	6765b2509c3a	3c1b3b91239d
 crates/terrustia-proto/src/items.rs	fn is_a_pickup	ItemID.cs	254	07a85b0eb694	ae40ca2b8407
+crates/terrustia-proto/src/luck.rs	(file)	MessageBuffer.cs	4190-4220	f2bcb315ab23	417d3295d498
+crates/terrustia-proto/src/luck.rs	const LADYBUG_GOOD_TIME	NPC.cs	6643,6645	ba6cfa60f32f	f9c3d22430c9
+crates/terrustia-proto/src/luck.rs	fn roll_bad_luck	Luck.cs	18-29	a223ce0237d3	233e618e13f0
+crates/terrustia-proto/src/luck.rs	fn roll_luck	Luck.cs	5-16	b5c6475a946f	95d111e7b065
+crates/terrustia-proto/src/luck.rs	impl LuckFactors :: fn coin_luck	Player.cs	18229-18268	a5347c3fb329	efc3513b275c
+crates/terrustia-proto/src/luck.rs	impl LuckFactors :: fn decode	MessageBuffer.cs	4201-4204	ffaacd1f59ff	5ffa28f02910
+crates/terrustia-proto/src/luck.rs	impl LuckFactors :: fn ladybug_luck	Player.cs	18270-18281	5d46fb956d5e	7bcd520c7c5e
+crates/terrustia-proto/src/luck.rs	impl LuckFactors :: fn luck	Player.cs	29367-29394	808d6db51d67	2cb3496b0db9
+crates/terrustia-proto/src/luck.rs	impl LuckFactors :: fn luck	Player.cs	3071,3073	df728e0e1c60	2cb3496b0db9
+crates/terrustia-proto/src/luck.rs	impl LuckFactors :: fn luck	Player.cs	4098-4102	45650918bb50	2cb3496b0db9
+crates/terrustia-proto/src/luck.rs	mod tests :: fn the_factors_decode_in_the_order_the_packet_writes_them	NetMessage.cs	1565-1578	ffd86575dcf3	62a9de463dda
 crates/terrustia-proto/src/net_module.rs	const MAX_CRAFT_REQUEST_ITEMS	Recipe.cs	56	18882bffcd9b	4271556e4e1f
 crates/terrustia-proto/src/net_module.rs	const MODULE_CRAFTING_REQUESTS	NetworkInitializer.cs	23	074894eb3db7	1d1493e3d6c1
 crates/terrustia-proto/src/net_module.rs	const MODULE_PARTICLES	NetworkInitializer.cs	20	0b64f018a8c8	6ffd85298146
@@ -1400,11 +1411,11 @@ crates/terrustia/src/game/player.rs	impl Player :: fn in_graveyard	SceneMetrics.
 crates/terrustia/src/game/player.rs	impl Player :: fn in_graveyard :: const GRAVEYARD_BIT	Player.cs	3771	1faa87e9d326	f7c85366be48
 crates/terrustia/src/game/player.rs	mod tests :: fn a_graveyard_is_the_seventh_bit_of_the_fifth_zone_byte	NetMessage.cs	936-946	17a27499966e	0435a7f0c995
 crates/terrustia/src/game/player.rs	mod tests :: fn a_graveyard_is_the_seventh_bit_of_the_fifth_zone_byte	Player.cs	3771	1faa87e9d326	0435a7f0c995
-crates/terrustia/src/game/player.rs	struct Player	Main.cs	65601	8f010278c79f	41ff47604352
-crates/terrustia/src/game/player.rs	struct Player	MessageBuffer.cs	998-1002	af86154c89f2	41ff47604352
-crates/terrustia/src/game/player.rs	struct Player	Player.cs	4360-4375	c4860f2392d6	41ff47604352
-crates/terrustia/src/game/player.rs	struct Player	RemoteClient.cs	31	c8298a9a8e80	41ff47604352
-crates/terrustia/src/game/player.rs	struct Player	ShoppingSettings.cs	9-13	ba2871c00ace	41ff47604352
+crates/terrustia/src/game/player.rs	struct Player	Main.cs	65601	8f010278c79f	87f4112c8fe1
+crates/terrustia/src/game/player.rs	struct Player	MessageBuffer.cs	998-1002	af86154c89f2	87f4112c8fe1
+crates/terrustia/src/game/player.rs	struct Player	Player.cs	4360-4375	c4860f2392d6	87f4112c8fe1
+crates/terrustia/src/game/player.rs	struct Player	RemoteClient.cs	31	c8298a9a8e80	87f4112c8fe1
+crates/terrustia/src/game/player.rs	struct Player	ShoppingSettings.cs	9-13	ba2871c00ace	87f4112c8fe1
 crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	16781	651cda76400c	9e61a7912a75
 crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	17308	6bcc82a4f969	9e61a7912a75
 crates/terrustia/src/game/projectile.rs	impl Powder :: fn step	Projectile.cs	24366-24372	80818f04371c	ec35674f69cd
@@ -1436,10 +1447,10 @@ crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn finish_join_s
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn finish_join_stream	MessageBuffer.cs	869	6d4dbad4d2d9	f0ea968609f6
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn finish_join_stream	NetMessage.cs	678-687	9c290dc421d0	f0ea968609f6
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn fire_switch	WorldGen.cs	46930	3713bbfd76dc	c1111f45b630
-crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn handle_packet	MessageBuffer.cs	3585-3596	64a02ca09d80	09be82b81185
-crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn handle_packet	MessageBuffer.cs	3910-3916	33b79c9bd9fa	09be82b81185
-crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn handle_packet	MessageBuffer.cs	4445-4452	149c1ed27b22	09be82b81185
-crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn handle_packet	NetMessage.cs	2933-2936	220cb7497903	09be82b81185
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn handle_packet	MessageBuffer.cs	3585-3596	64a02ca09d80	0364591bf7d5
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn handle_packet	MessageBuffer.cs	3910-3916	33b79c9bd9fa	0364591bf7d5
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn handle_packet	MessageBuffer.cs	4445-4452	149c1ed27b22	0364591bf7d5
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn handle_packet	NetMessage.cs	2933-2936	220cb7497903	0364591bf7d5
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn handshake_allows	MessageBuffer.cs	158-172	ea3de8bfe65f	8c46a99daec1
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn handshake_allows	MessageBuffer.cs	925-928	5d0bfe77a605	8c46a99daec1
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn introduce	MessageBuffer.cs	934	3b4ca4680eaf	b610cf0f27e5
@@ -1496,6 +1507,7 @@ crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_liquid	Mes
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_lock	Player.cs	33064-33070	8c76f368221a	a2375b1b197c
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_lock	WorldGen.cs	37988-38017	f69ea54f8c5c	a2375b1b197c
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_lock	WorldGen.cs	69725-69732	64b752923854	a2375b1b197c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_luck_factors	MessageBuffer.cs	4190-4220	f2bcb315ab23	9f59c64b18a8
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_misc_event_value	Main.cs	43852-43869	78de0f2938bb	6dfa3edbf52b
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_misc_event_value	NPC.cs	19172-19193	dc6e44d802e4	6dfa3edbf52b
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_misc_event_value	NPC.cs	19178	dbb689db5790	6dfa3edbf52b
@@ -1556,6 +1568,10 @@ crates/terrustia/src/game/server/dispatch.rs	mod join_stream_item_owners	Message
 crates/terrustia/src/game/server/dispatch.rs	mod liquid_drain_relay	MessageBuffer.cs	2438-2442	151fa05763c5	bb8419bc936e
 crates/terrustia/src/game/server/dispatch.rs	mod net_module_relays	NetParticlesModule.cs	22-25	5d6941ef8eec	6b56cde4f3e8
 crates/terrustia/src/game/server/dispatch.rs	mod net_module_relays	NetPingModule.cs	19-22	b907bd0d4d27	6b56cde4f3e8
+crates/terrustia/src/game/server/dispatch.rs	mod player_luck	MessageBuffer.cs	4190-4220	f2bcb315ab23	6cc5d1b3a881
+crates/terrustia/src/game/server/dispatch.rs	mod player_luck :: fn a_client_cannot_report_luck_on_another_players_behalf	MessageBuffer.cs	4201-4204	ffaacd1f59ff	97f8ef467393
+crates/terrustia/src/game/server/dispatch.rs	mod player_luck :: fn buff_packet	MessageBuffer.cs	2470	db1d1fed76e9	87e685446d58
+crates/terrustia/src/game/server/dispatch.rs	mod player_luck :: struct Factors	NetMessage.cs	1565-1578	ffd86575dcf3	cee5cd0d43cb
 crates/terrustia/src/game/server/dispatch.rs	mod pvp_and_team_chat_lines	MessageBuffer.cs	1851-1866	772426a1521f	b124c1489984
 crates/terrustia/src/game/server/dispatch.rs	mod pvp_and_team_chat_lines	MessageBuffer.cs	2325-2364	84c963ea8208	b124c1489984
 crates/terrustia/src/game/server/dispatch.rs	mod pvp_and_team_chat_lines :: fn a_team_change_reaches_only_the_changer_and_old_and_new_teammates	MessageBuffer.cs	2348-2354	ff2ce8d6155d	c9af2a87a63c
@@ -1689,8 +1705,10 @@ crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	3272	43583
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	50299-50302	6583807eb5db	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72072-72079	2a6f4d26e0bc	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72406	6c77495a5649	c5414c9d223d
-crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	8b098fa910cf
-crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	8b098fa910cf
+crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	bf2844abc7a9
+crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	bf2844abc7a9
+crates/terrustia/src/game/server/systems.rs	const STINKY	BuffID.cs	393	0f6008fbeed1	cfaa20a1d46a
+crates/terrustia/src/game/server/systems.rs	fn player_has_buff	MessageBuffer.cs	2456-2477	87cb35363490	c08c9f289848
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	7363-7366	54960e839053	00e47302005c
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	92802	e2d0076d5fcd	00e47302005c
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn apply_army	DD2Event.cs	1041-1091	3c3d8d6ca2b3	d73480a22bee
@@ -1729,6 +1747,8 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn fire_wired_tra
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn free_the_purple_slime	NPC.cs	81919-81925	0ac6c4092787	337ecc27c79c
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn free_the_purple_slime	NPC.cs	82323	d1cea5dff087	337ecc27c79c
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn free_the_purple_slime	NPC.cs	82596-82627	25a5785eb62e	337ecc27c79c
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn highest_luck	Main.cs	65647	ca6b0703fc56	5afe9db3d537
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn highest_luck	Player.cs	18327-18343	a729a0c19f77	5afe9db3d537
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn hurt_player	Player.cs	31557	1c92e46c5477	a3b0fe936826
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn hurt_player	Player.cs	38672	cbdfa0855d1e	a3b0fe936826
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn kill_drowned_furniture	Liquid.cs	1196-1215	600c82827c6c	0b3786e6eef8
@@ -1746,9 +1766,11 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn rain_coins	Wor
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn record_lunar_pillars	NPCID.cs	4807	56059a8a6b6b	5c34d3d5e1fa
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn record_lunar_pillars	WorldFile.cs	1745-1755	47b7ed78e834	5c34d3d5e1fa
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn record_town_npcs	WorldFile.cs	1724	388194be7fb6	1fbc0e1d9af2
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn refresh_luck	Player.cs	29377-29380	77304fe19b91	1eb4655e5398
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn restore_lunar_pillars	WorldFile.cs	1745-1755	47b7ed78e834	50ce57ddf86b
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn roll_coin_rain	Lang.cs	480	73c4adfa6fb5	6fac89396e54
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn roll_coin_rain	Main.cs	65638-65652	14fc37ebcdd9	6fac89396e54
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn roll_coin_rain	Lang.cs	480	73c4adfa6fb5	34c64f86e807
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn roll_coin_rain	Main.cs	65638-65652	14fc37ebcdd9	34c64f86e807
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn roll_dawn_events	Player.cs	29377-29380	77304fe19b91	320cd08e6a1b
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn roll_dusk_events	Main.cs	66211-66212	8a14ad0f16a5	ba91c6e501f4
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn roll_starfall_boost	Main.cs	66208	9417251acf80	67195893e210
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn roll_starfall_boost	NPC.cs	2409	de50bc340fb6	67195893e210
@@ -1758,9 +1780,9 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn scan_for_falle
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn scan_for_fallen_logs	MysticLogFairiesEvent.cs	142-146	03e12142da5a	627bbe7bb085
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn scan_for_fallen_logs	WorldGen.cs	3272	435835402446	627bbe7bb085
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn send_npcs	MessageBuffer.cs	851-857	a3a91f5af346	98f08e4d6cb3
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn spawn_falling_objects	WorldGen.cs	6180	83141ee21c23	2a1ed5eeff7b
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn spawn_falling_objects	WorldGen.cs	72227	647cbf6df6be	2a1ed5eeff7b
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn spawn_falling_objects	WorldGen.cs	72398-72434	79d57bc10774	2a1ed5eeff7b
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn spawn_falling_objects	WorldGen.cs	6180	83141ee21c23	a626fde8f53c
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn spawn_falling_objects	WorldGen.cs	72227	647cbf6df6be	a626fde8f53c
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn spawn_falling_objects	WorldGen.cs	72398-72434	79d57bc10774	a626fde8f53c
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn spawn_invaders	NPC.cs	291-306	f8bd87f17068	fd1c006ec6fa
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn spawn_invaders	NPC.cs	293-303	cde2c69a223d	fd1c006ec6fa
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn spawn_invaders	NPC.cs	312-317	51c260b5e63b	fd1c006ec6fa

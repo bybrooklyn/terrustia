@@ -177,8 +177,22 @@ worst first by what a player or operator would actually notice.
 
 Not defects; deliberate narrowings that a player would nonetheless notice.
 
-- Player **luck** is modeled nowhere (`crates/terrustia/src/game/spawn.rs:400`), so no luck item ever
-  changes a spawn rate or a drop rarity.
+- **Player luck is modeled now** (2026-09-05), and it was never client-side state: packet 134
+  (`UpdatePlayerLuckFactors`) exists to tell the server, and `MessageBuffer.cs:4190-4220` stores all
+  eight factors and calls `RecalculateLuck`. This server relayed the packet verbatim and threw the
+  contents away, which is why ~15 comments across the workspace each said luck was unmodelled.
+  `terrustia-proto::luck` is the transcription (`Player.RecalculateLuck`, `GetLadyBugLuck`,
+  `CalculateCoinLuck`, and both `Luck.RollLuck` branches); `Player::luck` is the figure, refreshed on
+  packet 134, on packet 50 (`stinky` is one of the terms) and on a Lantern Night starting or ending
+  (+0.3, and the server's own state).
+  **Two consumers are wired: the falling-star aim and the money-rain roll.** Two are not yet, and
+  each is named where it stands: `CommonDrop.TryDroppingItem` (`CommonDrop.cs:36`) rolls
+  `info.player.RollLuck(chanceDenominator)`, so *every* ordinary drop scales with luck unless its
+  rule is a `NotScalingWithLuck` variant - that needs a per-rule flag on `Conditional` and is the
+  next piece of this work. Ambient spawn rates are the other.
+  Two of the ten terms are absent on a server in vanilla too: `usedGalaxyPearl` is a player-file
+  field no packet carries, and `stinky` is read off the server's own buff state, so a server's
+  figure differs from the client's tooltip by up to those. Disclosed at the module.
 - ~~**Fallen Stars** and the surface fairy mechanic are unmodeled.~~ **Fallen Stars fixed
   2026-09-05**: `systems::spawn_falling_objects` is `WorldGen.cs:72398-72434`, and the two-projectile
   handover and the item drop are `Projectile.cs:54028-54061` and `:79348`. This one was worse than

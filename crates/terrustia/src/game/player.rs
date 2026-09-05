@@ -147,6 +147,18 @@ pub struct Player {
     pub spam_liquid: f32,
     /// The client's own buff packet, replayed so others see the same buff icons.
     pub buffs: Option<Bytes>,
+    /// The eight luck factors this client last reported (packet 134), and what they add up to.
+    ///
+    /// Two fields rather than one because vanilla keeps two: the factors are what the packet
+    /// carries and `RecalculateLuck` reads, and `luck` is what every roll reads. Recomputing the
+    /// total on every roll would be wrong as well as wasteful - the total also depends on server
+    /// state (a Lantern Night, a Stinkbug debuff) that can change without a packet arriving, and
+    /// `GameServer::refresh_luck` is what folds that in.
+    pub luck_factors: terrustia_proto::luck::LuckFactors,
+    /// `Player.luck`: the number `Luck.RollLuck` scales a range by. Zero for a client that has
+    /// never sent packet 134, which is what every roll in this server assumed of everybody before
+    /// the packet was read at all.
+    pub luck: f32,
     /// The client's last biome-zone packet.
     pub zone: Option<Bytes>,
     /// Which chest this player currently has open, or -1 for none.
@@ -249,6 +261,8 @@ impl Player {
             spam_break: 0.0,
             spam_liquid: 0.0,
             buffs: None,
+            luck_factors: terrustia_proto::luck::LuckFactors::default(),
+            luck: 0.0,
             zone: None,
             open_chest: -1,
             sent_sections: HashSet::new(),

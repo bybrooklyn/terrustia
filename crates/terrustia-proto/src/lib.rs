@@ -25,6 +25,7 @@ pub mod inventory;
 pub mod item;
 pub mod items;
 pub mod locks;
+pub mod luck;
 pub mod net_module;
 pub mod net_text;
 pub mod npc;
