@@ -15,26 +15,23 @@
 //! keep this a faithful port rather than a reinterpretation of a pass with real random-number
 //! consumption per tile.
 //!
-//! **Site-acceptance deviates from vanilla's own range check, for two related reasons.** Vanilla
-//! rejects a candidate whose pocket both undershoots 50 tiles *and* overshoots 300
-//! (`cave_flood`'s search cap), has any lava or ice, or never touches a stone tile at all
-//! (`rockCount == 0`) — the upper bound exists to avoid siting in vast open spaces (an ocean, the
-//! underworld), and `rockCount` exists to confirm the pocket actually borders real rock rather
-//! than floating entirely inside some other biome's material.
+//! **Site-acceptance is vanilla's whole rule again**, after a spell running on only half of it.
+//! Vanilla rejects a candidate whose pocket overshoots 300 tiles ([`super::cave_flood::count`]'s
+//! own search cap), undershoots 50, holds any lava or ice, or never touches a stone tile at all
+//! (`rockCount == 0`). The upper bound is what keeps a gem cave out of a vast open space, and
+//! `rockCount` is what confirms the pocket really borders rock rather than floating inside some
+//! other biome's material.
 //!
-//! `structures::caves()` produces one large interconnected tunnel network rather than vanilla's
-//! mix of small isolated pockets. That breaks both checks the same way: *every* candidate
-//! saturates the 300-tile search (rejecting on that basis would reject everywhere, which is
-//! exactly the bug this module shipped with before this fix), and the search's stack-based fill
-//! spends its whole 300-tile budget wandering the open interior of a much larger network,
-//! essentially never reaching an actual stone boundary tile within that budget — measured at 98%
-//! of real candidates failing `rockCount == 0` even after the size cap was already fixed. Neither
-//! check is measuring what it's meant to measure once the topology it assumes no longer holds, so
-//! neither gates acceptance here. What still does: the 50-tile lower bound, lava/ice, and — in
-//! `rockCount`'s place — the `y` sample range itself (`layout.rock + 30 ..`), which is the actual
-//! guarantee a candidate sits in the rock layer that `rockCount` was a proxy for.
-//! [`spread_gem`]'s own doc comment covers the other half of this fix, capping the *decoration*
-//! instead of the *site*.
+//! Both were switched off here for a while, because every candidate in a real generated world came
+//! back saturated with `rock == 0`, and keeping them would have rejected everywhere. That was true;
+//! the reason recorded for it was not. It blamed `structures::caves()` for producing one large
+//! interconnected network, and `structures::cave_topology_measurement` says the fills were not
+//! saturating on size at all: 400 of 400 sampled fills stopped on the first *walled* tile they
+//! touched, because `terrain::fill` painted a wall behind the cavern layer's solid rock and
+//! `nextCount` reads a tile's wall before it asks whether the tile is solid (`WorldGen.cs:9539`).
+//! `rock == 0` followed from the same thing: the fill broke out before it could count the stone it
+//! had just touched. With that fixed and `caves()` on vanilla's own runners, both checks measure
+//! what they are for, so both are back and [`spread_gem`] no longer needs a cap of its own.
 
 use std::collections::HashSet;
 
@@ -89,18 +86,12 @@ fn rand_gem(gems: [bool; 6], rand: &mut UnifiedRandom) -> usize {
 /// (and its four neighbours') gemmable type recolored; an open tile gets a gem wall instead and
 /// joins the next wave.
 ///
-/// **One deliberate deviation from the literal port, added alongside the siting fix below.**
-/// Vanilla's wave has no size cap of its own — it relies on its own cave topology (small, mostly
-/// enclosed pockets) to bound itself naturally, stopping wherever it meets solid or already-walled
-/// rock. `structures::caves()` doesn't produce that topology: it carves one large interconnected
-/// tunnel network, open and unwalled throughout its interior (correctly, since real caves in
-/// vanilla are unwalled at this point in the pipeline too — see `caves()`'s own fix). A literal
-/// port of this wave, run against that network, would not stop at a pocket's edge because there
-/// often isn't one nearby; it would paint gem wall an unbounded distance down whatever tunnel it
-/// started in. Capped at the same 300 tiles the siting check below used to reject candidates
-/// larger than — repurposed from "how big is too big to be a valid site" to "how big a footprint
-/// this decoration paints," since in this topology the first no longer means anything but the
-/// second still does.
+/// Nothing bounds this but the pocket, exactly as in vanilla: the wave stops at solid or walled
+/// rock, and it writes a wall on every open tile it crosses, so it cannot re-enter what it has
+/// already painted. That is safe only because the site check above rejects any pocket of 300 tiles
+/// or more, which is the guarantee this wave leans on. It carried a 300-tile cap of its own for a
+/// while, when that site check was switched off; see the module doc for why it was, and why the
+/// cap could go with it.
 fn spread_gem(
     world: &mut super::super::World,
     x: i32,
@@ -108,19 +99,12 @@ fn spread_gem(
     gems: [bool; 6],
     rand: &mut UnifiedRandom,
 ) {
-    const SPREAD_CAP: usize = 300;
     let mut seen: HashSet<(i32, i32)> = HashSet::new();
     let mut wave = vec![(x, y)];
 
     while !wave.is_empty() {
-        if seen.len() >= SPREAD_CAP {
-            break;
-        }
         let this_wave = std::mem::take(&mut wave);
         for (cx, cy) in this_wave {
-            if seen.len() >= SPREAD_CAP {
-                break;
-            }
             if cx < 1 || cx >= world.width() - 1 || cy < 1 || cy >= world.height() - 1 {
                 continue;
             }
@@ -204,7 +188,13 @@ pub fn scatter(
         let mut x = rand.next_range(200, layout.width - 200);
         let mut y = rand.next_range(layout.rock + 30, world.height() - 230);
         let mut found = cave_flood::count(world, x, y, 300, false, false);
-        while (found.tiles < 50 || found.lava > 0 || found.ice > 0) && tries < 1000 {
+        while (found.tiles >= 300
+            || found.tiles < 50
+            || found.lava > 0
+            || found.ice > 0
+            || found.rock == 0)
+            && tries < 1000
+        {
             tries += 1;
             x = rand.next_range(200, layout.width - 200);
             y = rand.next_range(layout.rock + 30, world.height() - 230);
@@ -334,67 +324,14 @@ mod tests {
         assert_eq!(scatter(&mut world, &layout, &mut rand), 0);
     }
 
-    /// The actual defect this module shipped with: `structures::caves()` produces one large,
-    /// genuinely-connected tunnel network rather than vanilla's small isolated pockets — so a
-    /// pocket this large is exactly what a real generated world's candidate sites look like, and
-    /// the old `found.tiles >= 300` rejection turned that into "reject everywhere." Fails on the
-    /// pre-fix code (restoring the `>= 300` check makes `placed` come back `0`).
-    #[test]
-    fn a_pocket_far_larger_than_the_old_upper_bound_is_still_accepted() {
-        let (mut world, layout) = stone_block(1200, 900, 300);
-        // A long, wide corridor — thousands of open tiles, the shape a real carved tunnel network
-        // actually produces, not a small enclosed room.
-        for x in 100..1100 {
-            for y in 595..605 {
-                world.set_tile(x, y, Tile::AIR);
-            }
-        }
-        let mut rand = UnifiedRandom::new(42);
-        let placed = scatter(&mut world, &layout, &mut rand);
-        assert!(
-            placed > 0,
-            "a large, well-connected, otherwise-valid pocket must not be rejected for its size \
-             alone — that rejection is what made every real generated world place zero"
-        );
-    }
-
-    /// The *second* defect the pocket-size fix alone didn't cover: `rockCount == 0` also rejects a
-    /// candidate whenever the 300-tile search budget is spent entirely inside open space without
-    /// ever touching a stone tile — which is exactly what happens deep inside a large open network,
-    /// since `cave_flood::count`'s stack order keeps preferring an unvisited "one step further"
-    /// neighbour and so drives the fill straight onward rather than spreading out toward a wall.
+    /// Vanilla's upper bound, restored: a pocket of 300 tiles or more is not a gem cave site.
     ///
-    /// `scatter` itself picks the candidate `(x, y)`, sampled anywhere in
-    /// `[layout.rock + 30, height - 230)`, so this test doesn't get to choose the seed point
-    /// directly — instead it carves every row from the rock layer down to the bottom of the world,
-    /// across the whole width. That way *every* possible sampled `y` sits at least 300 rows above
-    /// either a wall or the world's own edge (both routes to the search cap), so the flood's whole
-    /// budget is spent in open space and `rockCount` stays `0` on a real, well-formed candidate
-    /// regardless of which one gets picked. Fails on the pre-fix code (restoring
-    /// `|| found.rock == 0` makes `placed` come back `0`).
+    /// The two worlds here are the two shapes that used to be *accepted* while the bound was
+    /// switched off, and the doc comments then recorded both as what a real candidate looks like.
+    /// They are not: a 34,000-tile corridor and a wholly open lower half are exactly the vast open
+    /// spaces the bound exists to keep gem caves out of. Nothing is placed in either now.
     #[test]
-    fn a_pocket_whose_search_budget_never_reaches_a_wall_is_still_accepted() {
-        let (mut world, layout) = stone_block(1200, 900, 300);
-        for x in 0..1200 {
-            for y in 300..900 {
-                world.set_tile(x, y, Tile::AIR);
-            }
-        }
-        let mut rand = UnifiedRandom::new(3);
-        let placed = scatter(&mut world, &layout, &mut rand);
-        assert!(
-            placed > 0,
-            "a real, well-formed pocket must not be rejected just because its own search budget \
-             ran out before reaching a wall — that rejection is what left rockCount==0 on almost \
-             every candidate in a real generated world"
-        );
-    }
-
-    /// [`spread_gem`]'s own cap: painting an unbounded distance down a long open corridor would be
-    /// the same bug relocated from siting to decoration. Confirms the footprint actually stays
-    /// bounded rather than consuming the whole corridor this test deliberately makes very long.
-    #[test]
-    fn spread_gem_does_not_paint_an_unbounded_distance_down_a_long_corridor() {
+    fn a_pocket_bigger_than_vanillas_own_window_is_not_a_site() {
         let (mut world, layout) = stone_block(3600, 900, 300);
         for x in 100..3500 {
             for y in 595..605 {
@@ -402,20 +339,54 @@ mod tests {
             }
         }
         let mut rand = UnifiedRandom::new(11);
-        let placed = scatter(&mut world, &layout, &mut rand);
-        assert!(
-            placed > 0,
-            "expected at least one gem cave in a 3400-tile-long corridor"
+        assert_eq!(
+            scatter(&mut world, &layout, &mut rand),
+            0,
+            "a 3400-tile-long open corridor is not a gem cave pocket"
         );
 
-        let walled = (0..world.width())
-            .flat_map(|x| (0..world.height()).map(move |y| (x, y)))
-            .filter(|&(x, y)| tiles::walls::GEM_WALLS.contains(&world.tile(x, y).wall))
-            .count();
-        assert!(
-            walled > 0 && walled <= 300 * placed,
-            "{walled} gem-walled tiles across {placed} pocket(s) — spread_gem's cap should keep \
-             each pocket's footprint at or under 300 tiles, not paint the whole corridor"
+        let (mut world, layout) = stone_block(1200, 900, 300);
+        for x in 0..1200 {
+            for y in 300..900 {
+                world.set_tile(x, y, Tile::AIR);
+            }
+        }
+        let mut rand = UnifiedRandom::new(3);
+        assert_eq!(
+            scatter(&mut world, &layout, &mut rand),
+            0,
+            "a wholly open cavern layer is not a gem cave pocket either"
         );
+    }
+
+    /// Kept from when the upper bound was switched off, inverted: what used to prove "a huge
+    /// pocket is still accepted" now proves the wave paints only the pocket it was given, and
+    /// stops at its edge without a cap of its own. A 15-by-10 room, the same shape
+    /// `a_hollow_pocket_in_the_rock_layer_gets_gem_walls` uses, with a second identical room far
+    /// away that must come back untouched.
+    #[test]
+    fn spread_gem_stops_at_the_pocket_it_was_given() {
+        let (mut world, _layout) = stone_block(1200, 900, 300);
+        for x in 595..610 {
+            for y in 595..605 {
+                world.set_tile(x, y, Tile::AIR);
+            }
+        }
+        for x in 200..215 {
+            for y in 595..605 {
+                world.set_tile(x, y, Tile::AIR);
+            }
+        }
+        let mut rand = UnifiedRandom::new(42);
+        spread_gem(&mut world, 600, 600, [true; 6], &mut rand);
+
+        let walled = |from: i32, to: i32| {
+            (from..to)
+                .flat_map(|x| (590..610).map(move |y| (x, y)))
+                .filter(|&(x, y)| tiles::walls::GEM_WALLS.contains(&world.tile(x, y).wall))
+                .count()
+        };
+        assert!(walled(590, 615) > 0, "the seeded room took no gem wall");
+        assert_eq!(walled(195, 220), 0, "the far room should be untouched");
     }
 }

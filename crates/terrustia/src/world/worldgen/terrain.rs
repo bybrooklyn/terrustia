@@ -231,55 +231,42 @@ fn material(
 }
 
 /// Which wall sits behind a tile.
+///
+/// **The cavern layer's plain stone carries no wall, because vanilla's does not.** The only
+/// terrain-time wall vanilla paints is `DirtWallBackgrounds` (`WorldGen.cs:11895-11933`), and that
+/// pass walks each column only from the first fully-buried row down to `worldSurface + num` with
+/// `num` a 0..10 random walk. Everything below that boundary - the whole underground and cavern
+/// layers - is left at wall 0 by terrain generation, and stays that way until `CaveWallVariety`
+/// (`WorldGen.cs:16801`) and `CaveWallsInEnclosedSpaces` (`WorldGen.cs:17834`) paint wall back into
+/// selected *open* pockets near the end of the pipeline. No biome pass adds one either: `IceBiome`
+/// (`WorldGen.cs:12400-12441`) and `CorruptionAndCrimson` (`WorldGen.cs:14127-14547`) only
+/// *convert* a wall that some other pass already placed (2 to 40, 216 to 218, 187 to 221), never
+/// create one where there was none.
+///
+/// This is not cosmetic. `nextCount` (`WorldGen.cs:9539-9543`, transcribed as
+/// [`super::cave_flood::count`]) saturates its whole search the instant the fill touches *any*
+/// walled tile, and the fill reads the tile before it checks whether it is solid, so a walled tile
+/// on a pocket's own stone boundary is enough. Painting the cavern layer's stone with a wall here
+/// meant every `GemCaves`/`SpiderCaves`/`CaveWallsInEnclosedSpaces` measurement stopped on the
+/// first boundary tile it reached and reported "too big" for every candidate in the world.
+///
+/// The jungle is the one real exception, and it is kept: `GenVars.mudWall` makes every `TileRunner`
+/// step place a Mud or JungleUnsafe wall as it carves (`WorldGen.cs:77778-77792`), so jungle caves
+/// genuinely do have a wall behind them in vanilla and genuinely are invisible to the same
+/// measurement. The surface crust above `surface + DIRT_DEPTH` also keeps its wall: vanilla's own
+/// crust is thinner (`worldSurface + 0..10` rather than 42 rows) and that difference is a separate,
+/// purely cosmetic parity gap, deliberately not widened into this change.
 fn wall_for(layout: &Layout, biome: Option<Surface>, y: i32) -> u16 {
     if y >= layout.underworld {
         return 0; // the underworld shows the sky behind it, which is what makes it look open
     }
     match biome {
-        Some(Surface::Ocean) => {
-            if y < layout.rock {
-                walls::SANDSTONE
-            } else {
-                walls::STONE
-            }
-        }
-        Some(Surface::Desert) => {
-            if y < layout.rock {
-                walls::HARDENED_SAND
-            } else {
-                walls::STONE
-            }
-        }
-        Some(Surface::Snow) => {
-            if y < layout.rock {
-                walls::SNOW
-            } else {
-                walls::ICE
-            }
-        }
-        Some(Surface::Jungle) => {
-            if y < layout.rock + 120 {
-                walls::JUNGLE
-            } else {
-                walls::STONE
-            }
-        }
-        Some(Surface::Evil) => {
-            if y < layout.surface + DIRT_DEPTH {
-                walls::DIRT
-            } else if layout.evil == Evil::Corruption {
-                walls::EBONSTONE
-            } else {
-                walls::CRIMSTONE
-            }
-        }
-        None => {
-            if y < layout.surface + DIRT_DEPTH {
-                walls::DIRT
-            } else {
-                walls::STONE
-            }
-        }
+        Some(Surface::Ocean) if y < layout.rock => walls::SANDSTONE,
+        Some(Surface::Desert) if y < layout.rock => walls::HARDENED_SAND,
+        Some(Surface::Snow) if y < layout.rock => walls::SNOW,
+        Some(Surface::Jungle) if y < layout.rock + 120 => walls::JUNGLE,
+        Some(Surface::Evil) | None if y < layout.surface + DIRT_DEPTH => walls::DIRT,
+        _ => 0,
     }
 }
 

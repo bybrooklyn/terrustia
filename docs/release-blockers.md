@@ -129,12 +129,34 @@ game-derived data, and rule 2 in `AGENTS.md` keeps that out of the tree. They li
 Each of these is disclosed in a comment at its own site, which is how they were found. They are listed
 worst first by what a player or operator would actually notice.
 
-1. **Cave topology is not vanilla's** (`crates/terrustia/src/world/worldgen/structures.rs:1239-1247`).
-   The carver is this project's own wandering-tunnel algorithm, and it produces one large interconnected
-   network where vanilla produces a mix of isolated pockets and large caverns. Gem cave and spider cave
-   siting depend on that distinction and are wrong because of it. The comment records that fixing it
-   means reworking `caves()`'s topology, "a materially bigger and riskier change", and that it was
-   flagged rather than attempted. This is the most serious entry in this file.
+1. ~~Cave topology is not vanilla's.~~ **Fixed 2026-09-05, and the recorded diagnosis was half
+   wrong.** The entry read: the carver is this project's own wandering-tunnel algorithm producing one
+   large interconnected network, and gem/spider cave siting is wrong because of it. Two separate
+   defects were tangled together there, and the one that actually caused the symptom was not in the
+   carver at all.
+
+   The symptom was that `cave_flood::count` saturated for every candidate site in the world. That was
+   `terrain::fill`: it painted a background wall behind every underground tile, solid rock included,
+   and `nextCount` (`WorldGen.cs:9539`) reads a tile's wall *before* it asks whether the tile is
+   solid, so one wall on a pocket's own stone boundary rejects the site. Vanilla's terrain never puts
+   one there (`DirtWallBackgrounds`, `WorldGen.cs:11895`, stops at `worldSurface + 0..10`, and no
+   biome pass creates a wall where none was). Measured with the new instrument
+   (`structures::cave_topology_measurement`) on three real worlds: **400 of 400 sampled fills stopped
+   on a walled tile and not one ever reached the 3500-tile cap** the entry blamed.
+
+   The topology was separately wrong, just not in the shape recorded. It was never one network:
+   **74 to 80 connected components** in the deep band, largest holding 9 to 16 per cent of open space.
+   What it lacked was small pockets, only **4 to 11** anywhere in the 50-to-300-tile window `GemCaves`
+   sites into, against vanilla's thousands. `caves()` is now vanilla's own four passes driven by
+   `TileRunner` (`SmallHoles`, `DirtLayerCaves`, `RockLayerCaves`, and the `Caverer` tail of
+   `SurfaceCaves`); the same measurement now reads **4717 to 4837 components, 632 to 698** in that
+   window.
+
+   Both halves were needed and both are proven so: `GemCaves`/`SpiderCaves` run vanilla's whole size
+   rule again, and `a_real_world_still_sites_gem_and_spider_caves_under_vanillas_own_size_rule` pins
+   the full quota. Neutralising the terrain fix alone drops gem caves from 12 to 0; neutralising the
+   carver alone drops them from 12 to 2. Carving costs about 200 ms more per small world
+   (`terrain::fill` plus `caves()` went from a 50 ms floor to a 227 ms one, minimum of nine runs each).
 2. ~~An actuator toggle is lost inside one wire flood.~~ **Fixed 2026-09-05.** Both stone-block arms
    rewrite from a fresh read now, so a tile that is both an Active Stone Block and actuated keeps
    both changes; `an_actuated_active_stone_block_keeps_both_changes` pins it, and neutralising the

@@ -10588,12 +10588,21 @@ mod tests {
     /// the underworld, and wide enough to cover the whole `SPAWN_RANGE_X` box. `floor` is the block
     /// the ledges are made of, which is also what the zone scan around the player reads: sand makes
     /// it a desert, ebonsand makes it a corrupt one, and the walls stay sandstone either way.
+    /// A synthetic underground desert cut into a real generated world.
+    ///
+    /// The box has to cover the whole biome scan window around `(400, 350)` (`BIOME_SCAN_X` 84,
+    /// `BIOME_SCAN_Y_UP` 62, `BIOME_SCAN_Y_DOWN` 61, so rows 288 to 411), or the rows just outside
+    /// it are whatever the generator happened to put there and the fixture's biome is not its own
+    /// to control. It used to stop at rows 295..400, leaving 19 rows of real terrain inside the
+    /// window: enough ebonstone to cross `EVIL_THRESHOLD` and make a "clean" desert read as
+    /// corruption, which is exactly what happened the first time the carver changed how much of
+    /// that terrain is solid.
     fn desert_cavern(wall: u16, floor: u16) -> World {
         use terrustia_proto::tile::Tile;
         let mut world = test_world();
         world.surface = 200;
         world.rock_layer = 300;
-        for y in 295i32..400 {
+        for y in 280i32..420 {
             for x in 250..550 {
                 let mut tile = if y % 8 == 0 {
                     Tile::block(floor)
@@ -11136,6 +11145,7 @@ mod tests {
         player.state = crate::game::ConnState::Playing;
         // A town cannot quiet an evil (`NPC.cs:800`'s `!flag` clause), and this world's own spawn
         // point happens to sit in one, so find a plain forest column to build the town in instead.
+        //
         let py = i32::from(world.spawn_y);
         let px = (260..540)
             .step_by(4)
@@ -11146,6 +11156,26 @@ mod tests {
                 )
             })
             .expect("the test world has somewhere that is not an evil");
+        // The underground desert has to be cleared out of the spawn box for a second, independent
+        // reason: vanilla's desert arm sits *ahead* of `spawnFriendly` in the chain
+        // (`NPC.cs:1682` against `NPC.cs:2099`), so a populated base within reach of a
+        // sandstone-walled spot really does draw ghouls and antlions in the game too - the branch
+        // comment at this server's own `desert_spot` arm says so. There is no column of an 800-wide
+        // world that both avoids the evil and keeps every desert wall out of an 84-by-47 box (the
+        // ocean's own wall is Sandstone, and it is in the set), so the fixture removes the walls
+        // rather than hunting for a column without them. Nothing else here reads a wall except the
+        // house-wall check, which only ever rejects candidates.
+        let mut world = world;
+        for cx in px - SPAWN_RANGE_X..=px + SPAWN_RANGE_X {
+            for cy in py - SPAWN_RANGE_Y..=py + SPAWN_RANGE_Y + 1 {
+                let mut tile = world.tile(cx, cy);
+                if DESERT_SPAWN_WALLS.contains(&tile.wall) {
+                    tile.wall = 0;
+                    world.set_tile(cx, cy, tile);
+                }
+            }
+        }
+        let world = world;
         player.position = (px as f32 * 16.0, py as f32 * 16.0);
         // Three townsfolk standing right where the player is, well inside town_npcs_near's reach.
         for _ in 0..3 {

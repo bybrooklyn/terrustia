@@ -81,9 +81,18 @@ caves would have nowhere to stand.
    spawn, because landing in corruption on the first morning is a dead character rather than a
    difficulty curve.
 2. **[`terrain`]** walks a surface line and fills the layers under it, with each biome's own
-   material over both.
-3. Caves are **walked**, not drawn — a tunnel that turns a little each step reads as a cave, where
-   anything from a formula reads as a corridor.
+   material over both. Only the surface crust gets a background wall; the underground and cavern
+   layers come out of this pass at wall 0, as vanilla's do (`DirtWallBackgrounds`,
+   `WorldGen.cs:11895`, stops at `worldSurface + 0..10`), and stay that way until the two Tier 3
+   passes paint wall back into selected open pockets.
+3. Caves are **thousands of independent tapering runners**, which is vanilla's own mechanism:
+   `SmallHoles`, `DirtLayerCaves`, `RockLayerCaves` and the `Caverer` tail of `SurfaceCaves`, all
+   driven by `TileRunner` (`WorldGen.cs:77596`). Each runner digs a blob whose radius tapers from
+   full to nothing over its own step count, walked along a velocity that is itself a bounded random
+   walk, so it is self-terminating and nothing steers it towards anything else. That is what makes
+   an underground of isolated pockets and occasional large caverns rather than one network, and
+   several later passes (`GemCaves`, `SpiderCaves`, `CaveWallsInEnclosedSpaces`) can only site
+   themselves at all because pockets come in measurable sizes.
 4. Ore is seeded in depth bands: copper and iron near the surface so a new character can find a
    pickaxe's worth, gold and silver deeper so they are worth going down for.
 5. Structures: evil chasms, dungeon, temple, hive, underworld.
