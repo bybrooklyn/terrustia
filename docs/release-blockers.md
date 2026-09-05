@@ -30,10 +30,39 @@ followed throughout is: a status word in a document is not evidence. Only code a
 | p99 tick under the 16.67 ms budget at 255 players | MET | `TODO.md`'s soak table, four runs, with a neutralised control run proving the `BiomeCache` cap is what holds it |
 | **Peak RSS under 1 GiB at 255 players** | **UNMET** | Same table: run 2 reached 1536 MiB. One run of four passed cleanly. See "The memory ceiling" below |
 | **Differential against a real `TerrariaServer`** | **NOT RUN** | No `.trcap` capture exists anywhere in the tree. See "The differential" below |
-| **Test suite on every release platform** | **UNMET** | `cargo test --workspace` runs on `ubuntu-latest` alone (`.github/workflows/ci.yml:19-20,68-69`). The cross-platform matrix is `cargo check` only (`:105`), while `release.yml` ships real Windows and macOS binaries |
+| Test suite on every release platform | MET, 2026-09-05 | The three host-native matrix entries now run the suite for real. Closing it cost four bug fixes; see "What running the tests on Windows found" below |
 | Human fresh-world Moon Lord playthrough | NOT RUN | Waivable by `TODO.md`'s own wording, but only "if the automated and differential evidence is otherwise complete", and the two rows above say it is not |
 | README comparison table against the real server | NOT RUN | `tools/compare_vanilla.sh` had a real measurement bug fixed 2026-09-04 (it read the macOS launcher's pid, not the server's); it now needs a quiet machine, and its own contention gate refuses to publish otherwise |
 | Extended multi-hour boss soak | WAIVED | Explicitly carried to the next release (`TODO.md` Phase 2), recorded rather than skipped quietly |
+
+## What running the tests on Windows found
+
+Recorded because it is the strongest argument in this file for keeping a gate rather than waiving
+one. The suite had never run anywhere but Linux. Turning it on found four real defects on a platform
+this project publishes binaries for, three of them user-facing, and none of them detectable from
+Linux:
+
+1. **`copy_atomic` had never once succeeded on Windows**, so no Windows server had ever made a world
+   backup. `sync_all` is `FlushFileBuffers` there, which the API documents as needing
+   `GENERIC_WRITE`, and the code reopened its temporary file read-only on purpose, with a comment
+   explaining that `fsync` needs no write access. True on unix; false here. `rotate_backups` logs and
+   carries on by design, and the world itself saved perfectly, so nothing ever looked wrong: the one
+   safety net for a bad save simply was not there.
+2. **Windows ARM64 could not self-update.** `release.yml` publishes that binary and `target_triple`
+   had no arm for it, so those users were told there was no build for their platform.
+3. **Ctrl+Break terminated the server without saving.** `stop_signal` caught the close and shutdown
+   events on the stated reasoning that a managed stop is not Ctrl-C; Break is the same class and was
+   missing.
+4. **The CPU clock reads zero for sub-quantum work**, because `GetThreadTimes` is updated on the
+   scheduler's ~15.6 ms tick. Not a bug in the clock, but it means a per-tick CPU figure on Windows
+   is quantised against a 16.67 ms budget and cannot be compared with a unix host's. Disclosed at
+   `Cpu::now`; `QueryThreadCycleTime` is the fix and needs a calibrated cycles-per-second, so it is
+   named here rather than guessed at.
+
+Two tests also could never have passed there: both killed the child with `TerminateProcess` and then
+asserted on a save that only a graceful stop performs, which is the exact mistake one of them warns
+about in its own comment for the unix side. Both now spawn into their own process group and send a
+real `CTRL_BREAK_EVENT`.
 
 ## The memory ceiling
 
