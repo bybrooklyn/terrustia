@@ -718,16 +718,19 @@ async fn stop_signal() -> &'static str {
             _ = term.recv() => "SIGTERM",
         }
     }
-    // Windows has no signals. It has three separate console control events, and a service or a
-    // container stop sends one of the two that are *not* Ctrl-C — so listening for Ctrl-C alone
+    // Windows has no signals. It has four separate console control events, and a service or a
+    // container stop sends one of the ones that are *not* Ctrl-C — so listening for Ctrl-C alone
     // meant a managed shutdown skipped the save entirely and lost everything since the last
     // autosave. `ctrl_close` is the console window closing; `ctrl_shutdown` is the machine going
-    // down. Both are worth catching, and both give only a short grace period, which is why the
-    // shutdown save has to already be quick.
+    // down; `ctrl_break` is Ctrl+Break, and is also what reaches a child spawned into its own
+    // process group, which is the only way one process can ask another to stop gracefully here at
+    // all (there is no `kill -TERM` to send). All are worth catching, and all give only a short
+    // grace period, which is why the shutdown save has to already be quick.
     #[cfg(windows)]
     {
         use tokio::signal::windows;
 
+        let mut brk = windows::ctrl_break().ok();
         let mut close = match windows::ctrl_close() {
             Ok(s) => s,
             Err(e) => {
@@ -746,10 +749,22 @@ async fn stop_signal() -> &'static str {
                 }
             }
         };
+        // Registering Ctrl+Break is allowed to fail without taking the other three down with it,
+        // so an unavailable one parks on a future that never completes rather than resolving at
+        // once and reporting a stop nobody asked for.
+        let ctrl_break = async {
+            match brk.as_mut() {
+                Some(b) => {
+                    b.recv().await;
+                }
+                None => std::future::pending::<()>().await,
+            }
+        };
         tokio::select! {
             _ = signal::ctrl_c() => "ctrl-c",
             _ = close.recv() => "console closing",
             _ = shutdown.recv() => "system shutting down",
+            () = ctrl_break => "ctrl-break",
         }
     }
     #[cfg(not(any(unix, windows)))]

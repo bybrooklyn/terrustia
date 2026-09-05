@@ -100,7 +100,19 @@ fn wait_for_file(dir: &Path, name: &str, timeout: Duration) -> Vec<PathBuf> {
 }
 
 fn spawn_setup(home: &Path, listen: &str) -> std::process::Child {
-    Command::new(env!("CARGO_BIN_EXE_terrustia"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_terrustia"));
+    // Windows has no `kill -TERM`. The only way one process can ask another to stop *gracefully*
+    // is a console control event, and `GenerateConsoleCtrlEvent` can only address a process group,
+    // so the child has to be put in one of its own at spawn time. `CREATE_NEW_PROCESS_GROUP` is
+    // 0x0000_0200. Without this the test's only option is `Child::kill`, which is
+    // `TerminateProcess`: the moral equivalent of `SIGKILL`, no handler runs, and the world this
+    // test then waits for is never written, because only a graceful stop writes it.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        command.creation_flags(0x0000_0200);
+    }
+    command
         .args(["--setup", "--listen", listen])
         .current_dir(home)
         .env("HOME", home)
@@ -187,7 +199,25 @@ fn the_wizard_writes_a_config_and_generates_the_world_it_named() {
             .args(["-TERM", &child.id().to_string()])
             .status();
     }
-    #[cfg(not(unix))]
+    // ...and Windows' own equivalent: a real Ctrl+Break to the child's process group, which
+    // `stop_signal` listens for alongside the close and shutdown events. `Child::kill` here would
+    // be `TerminateProcess`, which runs no handler at all, so the graceful save this test is
+    // waiting on could never happen and the test could never pass on Windows. It never had to:
+    // until 2026-09-05 the suite had only ever run on Linux.
+    #[cfg(windows)]
+    {
+        // SAFETY: `GenerateConsoleCtrlEvent` takes an event id and a process group id and touches
+        // nothing else. The group id is the child's own pid, which is what
+        // `CREATE_NEW_PROCESS_GROUP` at spawn made it. `CTRL_BREAK_EVENT` is 1.
+        #[allow(unsafe_code)]
+        unsafe {
+            unsafe extern "system" {
+                fn GenerateConsoleCtrlEvent(event: u32, group: u32) -> i32;
+            }
+            GenerateConsoleCtrlEvent(1, child.id());
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = child.kill();
     }
