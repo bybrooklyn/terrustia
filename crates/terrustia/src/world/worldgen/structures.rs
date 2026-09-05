@@ -118,45 +118,6 @@ fn hollow_blob(world: &mut World, cx: i32, cy: i32, radius: i32, rand: &mut Unif
     }
 }
 
-/// Hollow out a tile the way [`hollow`] does, but clear its wall too.
-///
-/// `caves()` is the one carver that needs this. Every other structure here keeps `hollow`'s wall
-/// as-is on purpose — a dungeon room or a chasm reads as a built space, not a hole into the void,
-/// precisely because something is still behind it. Vanilla's own wandering cave tunnels are
-/// different: `WorldGen.cs` registers `CaveWallsInEnclosedSpaces`/`CaveWallVariety` (the passes
-/// that put wall behind a cave) as **Tier 3** work, run only after `GemCaves`/`SpiderCaves`/
-/// `LivingTrees` (Tier 2) have already sited into the unwalled space those earlier passes carved —
-/// so at the point in vanilla's own pipeline that matters here, a freshly-dug cave tunnel has no
-/// wall at all. `caves()` carrying wall forward from the terrain pass that ran before it skipped
-/// straight past that intermediate state, and it is exactly the state `cave_flood::count`'s own
-/// wall check (transcribed from vanilla's `nextCount`) is built to search for: measured on a real
-/// generated world, every sampled pocket saturated to the search cap before this fix, because
-/// there was no unwalled pocket anywhere to find.
-fn hollow_no_wall(world: &mut World, x: i32, y: i32) {
-    if !world.in_bounds(x, y) {
-        return;
-    }
-    let was = world.tile(x, y);
-    let mut tile = Tile::AIR;
-    tile.liquid = was.liquid;
-    tile.liquid_kind = was.liquid_kind;
-    world.set_tile(x, y, tile);
-}
-
-/// [`hollow_blob`], but through [`hollow_no_wall`] — see its doc comment for why `caves()` alone
-/// needs this and nothing else here does.
-fn hollow_blob_no_wall(world: &mut World, cx: i32, cy: i32, radius: i32, rand: &mut UnifiedRandom) {
-    let wobble = rand.next_range(-1, 2);
-    for x in cx - radius - 1..=cx + radius + 1 {
-        for y in cy - radius - 1..=cy + radius + 1 {
-            let (dx, dy) = (x - cx, y - cy);
-            if dx * dx + dy * dy <= (radius + wobble) * (radius + wobble) {
-                hollow_no_wall(world, x, y);
-            }
-        }
-    }
-}
-
 /// ...and the same in a material.
 fn fill_blob(world: &mut World, cx: i32, cy: i32, radius: i32, block: u16) {
     for x in cx - radius..=cx + radius {
@@ -169,36 +130,309 @@ fn fill_blob(world: &mut World, cx: i32, cy: i32, radius: i32, block: u16) {
     }
 }
 
-/// Wandering tunnels through the stone.
+/// `TileRunner` (`WorldGen.cs:77596-78046`), narrowed to the tile-*removing* form the cave passes
+/// use (`type < 0`).
 ///
-/// Walked rather than drawn: a tunnel that turns a little each step and widens and narrows as it
-/// goes reads as a cave, where anything drawn from a formula reads as a corridor.
-pub fn caves(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
-    let count = (layout.width / 22).max(20);
-    for _ in 0..count {
-        let mut x = f64::from(rand.next_range(20, layout.width - 20));
-        let mut y = f64::from(rand.next_range(layout.rock - 30, layout.underworld - 40));
-        let mut angle = f64::from(rand.next_range(0, 628)) / 100.0;
-        let length = rand.next_range(60, 420);
-        let mut radius = rand.next_range(2, 5);
+/// This is the whole mechanism behind vanilla's underground: a blob whose radius tapers linearly
+/// from `strength` to nothing over `steps`, walked along a velocity that is itself a bounded random
+/// walk. A runner therefore digs a self-terminating tube that narrows to a point, which is what
+/// makes vanilla's caves a scatter of individually-bounded pockets rather than one network.
+///
+/// Deliberately narrowed, each an unreachable branch on the path this project's own `caves()`
+/// takes rather than a behaviour dropped:
+///
+/// * The `drunkWorldGen`/`remixWorldGen`/`getGoodWorldGen`/`notTheBees` strength and step
+///   perturbations (`WorldGen.cs:77678-77694`, `77720-77742`, `77906`, `77990`). Only
+///   [`SecretSeeds::no_traps`][nt] is wired to a generation difference in this project, and none of
+///   those seeds reaches here.
+/// * `addTile`/`overRide`/`ignoreTileType`/the whole `type >= 0` half. Every caller below carves.
+/// * The `GenVars.mudWall` wall-placing branch (`WorldGen.cs:77778-77792`): that flag is set only
+///   for the duration of vanilla's `JunglePass`, which this project does not run through a runner.
+/// * The `type == -2` liquid fill (`WorldGen.cs:77797-77816`). It sets `liquid`/`lava` on tiles it
+///   is about to deactivate anyway, so it changes *what is in* a cave and never its shape; it needs
+///   `GenVars.waterLine`/`lavaLine` (`TerrainPass.cs:213-214`), which this project's `Layout` has
+///   no equivalent of. Named here rather than silently dropped: the callers below still roll their
+///   `type = -2` draws so the random stream matches, they just carve dry.
+/// * The `num > 50.0` extra-step ladder (`WorldGen.cs:77907-77988`). No caller here passes a
+///   strength above 25, so `num` never reaches 50 and the whole ladder is dead.
+/// * `Main.tileCut` in the frame-important skip. Nothing frame-important or cuttable exists yet
+///   when `caves()` runs, since `terrain::fill` places only plain blocks; the check is transcribed
+///   anyway because it is one term.
+///
+/// [nt]: super::secret_seed::SecretSeeds::no_traps
+fn tile_runner(
+    world: &mut World,
+    x: i32,
+    y: i32,
+    strength: f64,
+    steps: i32,
+    speed: Option<(f64, f64)>,
+    no_y_change: bool,
+    rand: &mut UnifiedRandom,
+) {
+    let mut num = strength;
+    let mut num2 = f64::from(steps);
+    let (mut px, mut py) = (f64::from(x), f64::from(y));
+    // `val2.X`/`val2.Y` (`WorldGen.cs:77701-77709`): a random unit-ish drift unless the caller
+    // names one.
+    let (mut vx, mut vy) = speed.unwrap_or((
+        f64::from(rand.next_range(-10, 11)) * 0.1,
+        f64::from(rand.next_range(-10, 11)) * 0.1,
+    ));
 
-        for _ in 0..length {
-            angle += f64::from(rand.next_range(-30, 31)) / 100.0;
-            // Caves trend sideways rather than straight down, which is what makes them
-            // walkable rather than a set of shafts.
-            let step = angle.sin() * 0.55;
-            x += angle.cos() * 1.4;
-            y += step;
-            if rand.next_max(40) == 0 {
-                radius = (radius + rand.next_range(-1, 2)).clamp(2, 7);
+    while num > 0.0 && num2 > 0.0 {
+        // `num = strength * (num2 / steps)` — the taper. Everything about the shape follows.
+        num = strength * (num2 / f64::from(steps));
+        num2 -= 1.0;
+        let x0 = ((px - num * 0.5) as i32).max(1);
+        let x1 = ((px + num * 0.5) as i32).min(world.width() - 1);
+        let y0 = ((py - num * 0.5) as i32).max(1);
+        let y1 = ((py + num * 0.5) as i32).min(world.height() - 1);
+
+        for k in x0..x1 {
+            for l in y0..y1 {
+                let tile = world.tile(k, l);
+                if tile.is_active() && terrustia_proto::tile_sets::frame_important(tile.block) {
+                    continue;
+                }
+                // The diamond, jittered per tile so the edge is ragged rather than drawn. The
+                // draw is inside the test in vanilla too, so it is consumed for every tile in the
+                // box, not only the ones that pass.
+                let jitter = 1.0 + f64::from(rand.next_range(-10, 11)) * 0.015;
+                if (f64::from(k) - px).abs() + (f64::from(l) - py).abs() >= strength * 0.5 * jitter
+                {
+                    continue;
+                }
+                // `if (Main.tile[k, l].active() && Main.tile[k, l].type == 53) continue;`
+                // (`WorldGen.cs:77794-77796`): a runner never digs through sand.
+                if tile.is_active() && tile.block == tiles::SAND {
+                    continue;
+                }
+                hollow(world, k, l);
             }
-            if x < 8.0 || y < 8.0 || x > f64::from(layout.width - 8) {
-                break;
+        }
+
+        px += vx;
+        py += vy;
+        vx = (vx + f64::from(rand.next_range(-10, 11)) * 0.05).clamp(-1.0, 1.0);
+        if !no_y_change {
+            vy = (vy + f64::from(rand.next_range(-10, 11)) * 0.05).clamp(-1.0, 1.0);
+        }
+    }
+}
+
+/// `digTunnel` (`WorldGen.cs:80292-80355`): a fat, steered bore that [`caverer`] chains into a
+/// cavern. Unlike [`tile_runner`] its radius does not taper to nothing, so it opens real rooms.
+///
+/// Returns where it ended, which is where the next link starts.
+fn dig_tunnel(
+    world: &mut World,
+    x: f64,
+    y: f64,
+    x_dir: f64,
+    y_dir: f64,
+    steps: i32,
+    size: i32,
+    wet: bool,
+    rand: &mut UnifiedRandom,
+) -> (f64, f64) {
+    let mut num5 = f64::from(size);
+    let mut num = x.clamp(num5 + 1.0, f64::from(world.width()) - num5 - 1.0);
+    let mut num2 = y.clamp(num5 + 1.0, f64::from(world.height()) - num5 - 1.0);
+    let (mut num3, mut num4) = (0.0f64, 0.0f64);
+
+    for _ in 0..steps {
+        let mut j = (num - num5) as i32;
+        while f64::from(j) <= num + num5 {
+            let mut k = (num2 - num5) as i32;
+            while f64::from(k) <= num2 + num5 {
+                let edge = num5 * (1.0 + f64::from(rand.next_range(-10, 11)) * 0.005);
+                if (f64::from(j) - num).abs() + (f64::from(k) - num2).abs() < edge
+                    && world.in_bounds(j, k)
+                {
+                    hollow(world, j, k);
+                    if wet {
+                        let mut tile = world.tile(j, k);
+                        tile.liquid = 255;
+                        tile.liquid_kind = terrustia_proto::Liquid::Water;
+                        world.set_tile(j, k, tile);
+                    }
+                }
+                k += 1;
             }
-            if y > f64::from(layout.underworld - 10) {
-                break;
+            j += 1;
+        }
+        num5 += f64::from(rand.next_range(-50, 51)) * 0.03;
+        num5 = num5.clamp(f64::from(size) * 0.6, f64::from(size * 2));
+        num3 = (num3 + f64::from(rand.next_range(-20, 21)) * 0.01).clamp(-1.0, 1.0);
+        num4 = (num4 + f64::from(rand.next_range(-20, 21)) * 0.01).clamp(-1.0, 1.0);
+        num += (x_dir + num3) * 0.6;
+        num2 += (y_dir + num4) * 0.6;
+    }
+    (num, num2)
+}
+
+/// `Caverer` (`WorldGen.cs:80188-80290`): the large-cavern half of vanilla's underground, rolled
+/// 50/50 between a dry branching cavern and a flooded one.
+fn caverer(world: &mut World, x: i32, y: i32, rand: &mut UnifiedRandom) {
+    let dir = |rand: &mut UnifiedRandom| {
+        let mut a = f64::from(rand.next_max(100)) * 0.01;
+        let mut b = 1.0 - a;
+        if rand.next_max(2) == 0 {
+            a = -a;
+        }
+        if rand.next_max(2) == 0 {
+            b = -b;
+        }
+        (a, b)
+    };
+
+    if rand.next_max(2) == 0 {
+        // Branch 0: a chain of wide bores, each with a side spur ended by a runner-dug chamber.
+        let links = rand.next_range(7, 9);
+        let (mut dx, mut dy) = dir(rand);
+        let (mut px, mut py) = (f64::from(x), f64::from(y));
+        for _ in 0..links {
+            let steps = rand.next_range(6, 20);
+            let size = rand.next_range(4, 9);
+            (px, py) = dig_tunnel(world, px, py, dx, dy, steps, size, false, rand);
+            dx = (dx + f64::from(rand.next_range(-20, 21)) * 0.1).clamp(-1.5, 1.5);
+            dy = (dy + f64::from(rand.next_range(-20, 21)) * 0.1).clamp(-1.5, 1.5);
+            let (sx, sy) = dir(rand);
+            let steps = rand.next_range(30, 50);
+            let size = rand.next_range(3, 6);
+            let (ex, ey) = dig_tunnel(world, px, py, sx, sy, steps, size, false, rand);
+            let strength = f64::from(rand.next_range(10, 20));
+            let runner_steps = rand.next_range(5, 10);
+            tile_runner(
+                world,
+                ex as i32,
+                ey as i32,
+                strength,
+                runner_steps,
+                None,
+                false,
+                rand,
+            );
+        }
+    } else {
+        // Branch 1: one long flooded bore, which is where an underground lake comes from.
+        let links = rand.next_range(15, 30);
+        let (mut dx, mut dy) = dir(rand);
+        let (mut px, mut py) = (f64::from(x), f64::from(y));
+        for _ in 0..links {
+            let steps = rand.next_range(5, 15);
+            let size = rand.next_range(2, 6);
+            (px, py) = dig_tunnel(world, px, py, dx, dy, steps, size, true, rand);
+            dx = (dx + f64::from(rand.next_range(-20, 21)) * 0.1).clamp(-1.5, 1.5);
+            dy = (dy + f64::from(rand.next_range(-20, 21)) * 0.1).clamp(-1.5, 1.5);
+        }
+    }
+}
+
+/// The caves, as vanilla actually digs them.
+///
+/// Four of vanilla's own passes, in its own order, all driven by [`tile_runner`]:
+/// `SmallHoles` (`WorldGen.cs:12046-12105`), `DirtLayerCaves` (`12106-12146`), `RockLayerCaves`
+/// (`12147-12202`) and the [`caverer`] tail of `SurfaceCaves` (`12295-12312`). Between them they
+/// seed roughly sixteen thousand independent runners into a small world, which is the entire reason
+/// vanilla's underground reads as a mix of isolated pockets and occasional large caverns: nothing
+/// steers them towards each other, so most of what they dig never meets anything else.
+///
+/// This replaced a single wandering-tunnel carver of this project's own (190 tunnels on a small
+/// world, each up to 588 tiles long, walked with a turning angle). Measured on three real worlds,
+/// that carver left the deep band in 74 to 80 connected components with the largest holding 9 to 16
+/// per cent of all open space, and only 4 to 11 components anywhere in the 50-to-300-tile window
+/// `GemCaves` sites into. See `structures::cave_topology_measurement` for the instrument and the
+/// numbers on both sides.
+///
+/// **Depth range narrowed at the bottom.** Vanilla seeds `SmallHoles` and `RockLayerCaves` down to
+/// `Main.maxTilesY`, because its own `Underworld` pass (`WorldGen.cs:13709-13763`) later rewrites
+/// every column from the ash ceiling down. This project's `underworld` only hollows blobs into ash
+/// it never rebuilds, so a runner seeded down there would leave a hole vanilla does not keep;
+/// `layout.underworld` stands in for `maxTilesY` in the seed ranges for that reason.
+///
+/// **`GenVars`' layer pairs collapse.** Vanilla tracks `worldSurfaceLow`/`worldSurfaceHigh` and
+/// `rockLayerLow`/`rockLayerHigh` (`TerrainPass.cs:230-236`) because its layer boundaries follow
+/// the terrain; this project's `Layout` has one flat line for each. `layout.rock` stands in for
+/// `rockLayerHigh`, and `layout.surface - 25` for `worldSurfaceLow`/`worldSurfaceHigh` - the 25 is
+/// vanilla's own offset between them (`Main.worldSurface = worldSurfaceHigh + 25`,
+/// `TerrainPass.cs:206`), kept because the mid-world reroll below is a no-op if the two are equal.
+pub fn caves(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
+    let area = i64::from(layout.width) * i64::from(layout.height);
+    let surface_high = layout.surface - 25;
+    // `GenVars.smallHolesBeachAvoidance = beachSandRandomCenter + 20` (`WorldGen.cs:11231`).
+    let beach_avoid = layout.ocean_left.to + 20;
+    // Every seed range below is `Next(a, b)` with `a < b`; a world too small for that is not one
+    // this generator carves at all.
+    if layout.rock >= layout.underworld || surface_high >= layout.underworld {
+        return;
+    }
+
+    // A seed the spawn area and the beaches must not get: vanilla rerolls until the point is
+    // outside them (`WorldGen.cs:12074-12078`).
+    let reroll = |x: i32, y: i32| {
+        ((x < beach_avoid || x > layout.width - beach_avoid) && y < surface_high)
+            || (f64::from(x) > f64::from(layout.width) * 0.45
+                && f64::from(x) < f64::from(layout.width) * 0.55
+                && y < layout.surface)
+    };
+
+    // `SmallHoles`: two runners per iteration, a tiny one and a fat short one. This is the pass
+    // that makes most of vanilla's isolated pockets.
+    let small_holes = (area as f64 * 0.0015) as i32;
+    for _ in 0..small_holes {
+        // `type = -2` one time in five: vanilla would flood this hole. See `tile_runner`'s own
+        // note; the draw is kept so the stream matches.
+        let _wet = rand.next_max(5) == 0;
+        for (min_strength, max_strength, min_steps, max_steps) in [(2, 5, 2, 20), (8, 15, 7, 30)] {
+            let mut x = rand.next_range(0, layout.width);
+            let mut y = rand.next_range(surface_high, layout.underworld);
+            while reroll(x, y) {
+                x = rand.next_range(0, layout.width);
+                y = rand.next_range(surface_high, layout.underworld);
             }
-            hollow_blob_no_wall(world, x as i32, y as i32, radius, rand);
+            let strength = f64::from(rand.next_range(min_strength, max_strength));
+            let steps = rand.next_range(min_steps, max_steps);
+            tile_runner(world, x, y, strength, steps, None, false, rand);
+        }
+    }
+
+    // `DirtLayerCaves`: longer runners through the dirt layer.
+    let dirt_layer = (area as f64 * 3E-05) as i32;
+    for _ in 0..dirt_layer {
+        let _wet = rand.next_max(6) == 0;
+        let mut x = rand.next_range(0, layout.width);
+        let mut y = rand.next_range(surface_high, layout.rock + 1);
+        while reroll(x, y) {
+            x = rand.next_range(0, layout.width);
+            y = rand.next_range(surface_high, layout.rock + 1);
+        }
+        let strength = f64::from(rand.next_range(5, 15));
+        let steps = rand.next_range(30, 200);
+        tile_runner(world, x, y, strength, steps, None, false, rand);
+    }
+
+    // `RockLayerCaves`: the cavern layer's own, fatter and much longer. No reroll in vanilla.
+    let rock_layer = (area as f64 * 0.00013) as i32;
+    for _ in 0..rock_layer {
+        let _wet = rand.next_max(10) == 0;
+        let strength = f64::from(rand.next_range(6, 20));
+        let steps = rand.next_range(50, 300);
+        let x = rand.next_range(0, layout.width);
+        let y = rand.next_range(layout.rock, layout.underworld);
+        tile_runner(world, x, y, strength, steps, None, false, rand);
+    }
+
+    // The `Caverer` tail of `SurfaceCaves`: five large caverns on a small world.
+    let caverns = (5.0 * f64::from(layout.width) / 4200.0) as i32;
+    let top = layout.rock;
+    let bottom = layout.underworld - 400;
+    if bottom > top && layout.width > beach_avoid * 2 {
+        for _ in 0..caverns {
+            let x = rand.next_range(beach_avoid, layout.width - beach_avoid);
+            let y = rand.next_range(top, bottom);
+            caverer(world, x, y, rand);
         }
     }
 }
@@ -1173,50 +1407,53 @@ mod temple_altar_tests {
 mod cave_wall_tests {
     use super::*;
 
-    /// `caves()` carves through solid, walled terrain. If it leaves the wall in place behind what
-    /// it hollows out, every cave in a generated world ends up walled — so `cave_flood::count`
-    /// (used to site `GemCaves`/`SpiderCaves`/`LivingTrees`, all of which reject any walled tile,
-    /// matching vanilla's own `nextCount`) can never find a pocket to build in at all. Measured
-    /// directly on a real generated world before this fix: every sampled deep-rock point saturated
-    /// to the search cap.
+    /// The cavern layer has to come out of `terrain::fill` with no wall on it at all, solid rock
+    /// included.
+    ///
+    /// `nextCount` (`WorldGen.cs:9539-9543`, transcribed as `cave_flood::count`) reads a tile's
+    /// wall *before* it asks whether the tile is solid, and saturates its whole search the moment
+    /// it finds one. A pocket's own stone boundary is the first thing any fill touches, so one wall
+    /// there is enough to make every `GemCaves`/`SpiderCaves`/`CaveWallsInEnclosedSpaces`
+    /// measurement in the world answer "too big" and reject the site.
+    ///
+    /// **This is where the guard moved to, and why.** It used to assert that `caves()` itself
+    /// stripped the wall off what it carved, because `terrain::fill` painted a stone wall over the
+    /// whole underground and the carver was the only thing that could take it back off. That was
+    /// the wrong half of the pipeline: vanilla's own `TileRunner` never touches a wall
+    /// (`WorldGen.cs:77817`, a bare `active(false)`), and it does not have to, because vanilla's
+    /// terrain never puts one there - `DirtWallBackgrounds` (`WorldGen.cs:11895-11933`) stops at
+    /// `worldSurface + 0..10`. Stripping it in the carver also erased the dirt-crust wall that
+    /// vanilla deliberately leaves behind a shallow cave, which is the whole reason
+    /// `DirtWallCleanup` exists. So the rule is asserted here, on the source of the wall, and
+    /// `caves()` is free to keep vanilla's own no-op.
     #[test]
-    fn a_carved_cave_tile_has_no_wall() {
+    fn the_cavern_layer_comes_out_of_terrain_unwalled() {
+        let (width, height) = (1200, 900);
         let mut rand = UnifiedRandom::new(7);
-        let mut layout_rand = UnifiedRandom::new(7);
-        let mut world = World::empty(400, 300, "cave-wall");
-        let layout = Layout::plan(400, 300, &mut layout_rand);
+        let layout = Layout::plan(width, height, &mut rand);
+        let mut world = World::empty(width, height, "cave-wall");
+        world.crimson = layout.evil == Evil::Crimson;
+        let heights = crate::world::worldgen::terrain::heightmap(&layout, &mut rand);
+        crate::world::worldgen::terrain::fill(&mut world, &layout, &heights, &mut rand);
 
-        // Solid, fully-walled ground everywhere first — the same state `terrain::fill` leaves
-        // underground tiles in, which is exactly what `caves()` carves into during real
-        // generation.
-        for x in 0..400 {
-            for y in 0..300 {
-                let mut tile = Tile::block(tiles::STONE);
-                tile.wall = walls::STONE;
-                world.set_tile(x, y, tile);
+        let mut checked = 0usize;
+        let mut walled = 0usize;
+        for x in 0..width {
+            // The jungle keeps its wall on purpose (vanilla's `GenVars.mudWall` really does wall
+            // the jungle underground), so it is not part of this rule and is skipped.
+            if layout.surface_biome(x) == Some(Surface::Jungle) {
+                continue;
+            }
+            for y in layout.rock + 130..layout.underworld {
+                checked += 1;
+                walled += usize::from(world.tile(x, y).wall != 0);
             }
         }
-
-        caves(&mut world, &layout, &mut rand);
-
-        let mut carved = 0usize;
-        let mut still_walled = 0usize;
-        for x in 0..400 {
-            for y in 0..300 {
-                let tile = world.tile(x, y);
-                if !tile.is_active() {
-                    carved += 1;
-                    if tile.wall != 0 {
-                        still_walled += 1;
-                    }
-                }
-            }
-        }
-        assert!(carved > 0, "caves() carved nothing on a fully solid world");
+        assert!(checked > 0, "nothing in the cavern layer to check");
         assert_eq!(
-            still_walled, 0,
-            "{still_walled} of {carved} carved cave tiles still have a wall — a pass that sites \
-             into unwalled pockets (gem caves, spider caves, living trees) can never find one"
+            walled, 0,
+            "{walled} of {checked} cavern-layer tiles carry a wall straight out of terrain::fill - \
+             every cave_flood measurement in the world saturates on the first one it touches"
         );
     }
 
@@ -1228,23 +1465,17 @@ mod cave_wall_tests {
     /// no longer the right thing to sample once `CaveWallVariety`/`CaveWallsInEnclosedSpaces`/
     /// `MossAndMossCaves` exist.
     ///
-    /// **This fix alone does not unblock `GemCaves`/`SpiderCaves`'s siting, and this test does not
-    /// claim it does — see the module-level note above `hollow_no_wall` and the caller's own
-    /// report for the second, separate issue.** What this fix delivers, and what this test
-    /// actually pins: real, open cave interiors are genuinely unwalled now, matching vanilla's own
-    /// pre-`CaveWallsInEnclosedSpaces` pipeline state. Measured before this fix: nearly every open
-    /// tile sampled from a real generated world still carried the wall painted by `terrain::fill`
-    /// before caves were ever carved through it. That specific defect is what this asserts against.
-    ///
-    /// A *second*, independent defect was found while building this test and is not fixed here:
-    /// even with walls correctly cleared, `cave_flood`-style pocket measurement from real sampled
-    /// points still saturates to the 3500-tile search cap almost universally — terrustia's own
-    /// cave carver (`caves()`, a wandering-tunnel algorithm, not vanilla's) produces caves that
-    /// read as one large interconnected network rather than vanilla's mix of small isolated
-    /// pockets and large caverns, the same shape of siting mismatch `lakes.rs`'s own doc comment
-    /// already discloses for lake placement. Fixing *that* means reworking `caves()`'s own
-    /// topology, a materially bigger and riskier change to already-shipped Tier 1 generation than
-    /// this task's scope — flagged, not attempted.
+    /// **The second defect this used to flag is now fixed too, and the numbers are in
+    /// `cave_topology_measurement`.** It read: pocket measurement from real sampled points
+    /// saturates almost universally, because `caves()` was this project's own wandering-tunnel
+    /// carver rather than vanilla's. Both halves of that turned out to be true but wrongly joined.
+    /// The saturation was `terrain::fill`'s wall, not the topology: measured on three real worlds,
+    /// 400 of 400 sampled fills stopped on a *walled tile* and not one of them ever reached the
+    /// 3500-tile cap. The topology was separately wrong, just not in the way the note said - 74 to
+    /// 80 connected components in the deep band with the largest holding 9 to 16 per cent of open
+    /// space, so a mix of large networks rather than one, and only 4 to 11 pockets anywhere in the
+    /// window `GemCaves` sites into. `caves()` is now vanilla's own four passes (see its doc
+    /// comment); the same measurement reads 4717 to 4837 components with 632 to 698 in that window.
     #[test]
     fn a_real_generated_world_has_real_unwalled_open_cave_tiles() {
         // Sampled right after `terrain::fill` + `caves()` — the same two steps `build()` itself
@@ -1305,5 +1536,216 @@ mod cave_wall_tests {
              caves() looks like it is leaving wall behind again",
             walled_fraction * 100.0
         );
+    }
+}
+
+/// The instrument behind the "cave topology is not vanilla's" release blocker.
+///
+/// Nothing here asserts: it prints two independent measurements of the same world, so a claim
+/// about pocket size can be a number rather than a paragraph.
+///
+/// * **Connectivity** is the topology question on its own terms: label every connected component
+///   of open space in the deep band and report the size histogram. Vanilla's own `SmallHoles`/
+///   `RockLayerCaves`/`DirtLayerCaves` passes (`WorldGen.cs:12046`/`12147`/`12106`) scatter many
+///   thousands of independently-seeded `TileRunner` blobs, so its histogram is dominated by small
+///   components; a single wandering-tunnel carver's is dominated by one giant one.
+/// * **Reachability** is what the siting passes actually see: run the real
+///   [`super::cave_flood::count`] predicate from random points in `GemCaves`'/`SpiderCaves`' own
+///   search band and record *why* each fill ended. That distinguishes "the pocket is too big"
+///   (a topology problem) from "the fill hit a walled tile" (a terrain problem), which the two
+///   numbers together are the only way to tell apart.
+///
+/// Run with
+/// `cargo test -p terrustia --lib structures::cave_topology_measurement -- --ignored --nocapture`.
+#[cfg(test)]
+mod cave_topology_measurement {
+    use super::*;
+    use crate::world::worldgen::layout::Layout;
+    use terrustia_proto::tile_solid;
+
+    /// Why one `cave_flood`-shaped fill stopped.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Stop {
+        /// Ran into a tile carrying a wall. Vanilla's `nextCount` saturates on this
+        /// (`WorldGen.cs:9539-9543`), and so does ours.
+        Wall,
+        /// Ran off the edge of the world (`WorldGen.cs:9518-9521`).
+        Edge,
+        /// Filled `max_tiles` without closing: the pocket is genuinely at least that big.
+        Cap,
+        /// Closed naturally against solid tiles. The only outcome a siting pass can use.
+        Closed(usize),
+    }
+
+    /// `cave_flood::count`'s traversal with the stopping reason kept, which the real one throws
+    /// away because no production caller needs it. Same order, same predicates.
+    fn why(world: &World, x: i32, y: i32, max_tiles: usize) -> Stop {
+        let mut seen: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
+        let mut stack = vec![(x, y)];
+        let mut tiles = 0usize;
+        while let Some((cx, cy)) = stack.pop() {
+            if tiles >= max_tiles {
+                return Stop::Cap;
+            }
+            if cx <= 1 || cx >= world.width() - 1 || cy <= 1 || cy >= world.height() - 1 {
+                return Stop::Edge;
+            }
+            if !seen.insert((cx, cy)) {
+                continue;
+            }
+            let tile = world.tile(cx, cy);
+            if tile.wall != 0 {
+                return Stop::Wall;
+            }
+            if !tile_solid::solid(tile.block) || !tile.is_active() {
+                tiles += 1;
+                stack.push((cx - 1, cy));
+                stack.push((cx + 1, cy));
+                stack.push((cx, cy - 1));
+                stack.push((cx, cy + 1));
+            }
+        }
+        Stop::Closed(tiles)
+    }
+
+    /// Every connected component of open space between `from` and `to`, as a list of sizes.
+    ///
+    /// Ignores walls entirely: this is the shape of the carve, not what a siting pass can reach.
+    fn component_sizes(world: &World, from: i32, to: i32) -> Vec<usize> {
+        let (w, h) = (world.width(), world.height());
+        let open = |x: i32, y: i32| {
+            let t = world.tile(x, y);
+            !tile_solid::solid(t.block) || !t.is_active()
+        };
+        let mut seen = vec![false; (w as usize) * ((to - from) as usize)];
+        let idx = |x: i32, y: i32| (y - from) as usize * (w as usize) + x as usize;
+        let mut sizes = Vec::new();
+        let mut stack: Vec<(i32, i32)> = Vec::new();
+        for y in from..to {
+            for x in 0..w {
+                if seen[idx(x, y)] || !open(x, y) {
+                    continue;
+                }
+                seen[idx(x, y)] = true;
+                stack.push((x, y));
+                let mut size = 0usize;
+                while let Some((cx, cy)) = stack.pop() {
+                    size += 1;
+                    for (nx, ny) in [(cx - 1, cy), (cx + 1, cy), (cx, cy - 1), (cx, cy + 1)] {
+                        if nx < 0 || ny < from || nx >= w || ny >= to || ny >= h {
+                            continue;
+                        }
+                        if seen[idx(nx, ny)] || !open(nx, ny) {
+                            continue;
+                        }
+                        seen[idx(nx, ny)] = true;
+                        stack.push((nx, ny));
+                    }
+                }
+                sizes.push(size);
+            }
+        }
+        sizes
+    }
+
+    fn report(label: &str, world: &World, plan: &Layout) {
+        let from = plan.rock + 30;
+        let to = world.height() - 230;
+
+        let mut sizes = component_sizes(world, from, to);
+        sizes.sort_unstable();
+        let total: usize = sizes.iter().sum();
+        let largest = sizes.last().copied().unwrap_or(0);
+        let gem_window = sizes.iter().filter(|&&s| (50..300).contains(&s)).count();
+        let spider_window = sizes.iter().filter(|&&s| (500..3500).contains(&s)).count();
+        let tiny = sizes.iter().filter(|&&s| s < 50).count();
+        eprintln!(
+            "{label}: open={total} components={} largest={largest} ({:.1}% of open) \
+             <50={tiny} 50..300={gem_window} 500..3500={spider_window}",
+            sizes.len(),
+            100.0 * largest as f64 / total.max(1) as f64,
+        );
+
+        // The reachability half: what a siting pass actually gets back.
+        let mut rng = 987_654_321u64;
+        let (mut wall, mut edge, mut cap, mut closed) = (0u32, 0u32, 0u32, 0u32);
+        let mut closed_sizes: Vec<usize> = Vec::new();
+        let mut sampled = 0u32;
+        while sampled < 400 {
+            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let x = 200 + (((rng >> 16) as u32) % (world.width() as u32 - 400)) as i32;
+            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let y = from + (((rng >> 16) as u32) % (to - from).max(1) as u32) as i32;
+            let tile = world.tile(x, y);
+            if tile.is_active() && tile_solid::solid(tile.block) {
+                continue;
+            }
+            sampled += 1;
+            match why(world, x, y, 3500) {
+                Stop::Wall => wall += 1,
+                Stop::Edge => edge += 1,
+                Stop::Cap => cap += 1,
+                Stop::Closed(n) => {
+                    closed += 1;
+                    closed_sizes.push(n);
+                }
+            }
+        }
+        closed_sizes.sort_unstable();
+        eprintln!(
+            "{label}: of {sampled} open samples — wall={wall} edge={edge} cap={cap} \
+             closed={closed} (median closed size {})",
+            closed_sizes
+                .get(closed_sizes.len() / 2)
+                .map_or(0, |n| *n as i64),
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn measure_cave_topology() {
+        for seed in [4242i32, 999, 12345] {
+            let (width, height) = (super::super::SMALL_WIDTH, super::super::SMALL_HEIGHT);
+            let mut rand = UnifiedRandom::new(seed);
+            let plan = Layout::plan(width, height, &mut rand);
+            let mut world = World::empty(width, height, "cave-topology");
+            world.crimson = plan.evil == Evil::Crimson;
+            let heights = crate::world::worldgen::terrain::heightmap(&plan, &mut rand);
+            let started = std::time::Instant::now();
+            crate::world::worldgen::terrain::fill(&mut world, &plan, &heights, &mut rand);
+            caves(&mut world, &plan, &mut rand);
+            let carved = started.elapsed();
+            report(
+                &format!("seed {seed} (fill+caves, {carved:?})"),
+                &world,
+                &plan,
+            );
+        }
+    }
+
+    /// The same question one level up: how many gem and spider caves a *whole* generated world
+    /// actually ends up with, which is the player-visible consequence of everything above.
+    #[test]
+    #[ignore]
+    fn measure_sited_caves_on_real_worlds() {
+        for seed in [4242u64, 999, 12345] {
+            let started = std::time::Instant::now();
+            let (_world, built) = crate::world::worldgen::build(
+                super::super::SMALL_WIDTH,
+                super::super::SMALL_HEIGHT,
+                "measure-sited",
+                seed,
+            );
+            eprintln!(
+                "seed {seed}: gem_caves={} spider_caves={} cave_wall_variety={} \
+                 cave_walls_enclosed={} underground_cabins={} ({:?})",
+                built.gem_caves,
+                built.spider_caves,
+                built.cave_wall_variety,
+                built.cave_walls_enclosed,
+                built.underground_cabins,
+                started.elapsed()
+            );
+        }
     }
 }
