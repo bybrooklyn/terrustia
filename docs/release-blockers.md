@@ -290,8 +290,8 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
 
 ## Structural
 
-- **Three proto tables have no generator**, and the largest of them is now held to source another
-  way. `npc_data.rs` gained `just check-npc-data` on 2026-09-05: it re-reads `NPC.SetDefaults`' own
+- ~~**Three proto tables have no generator.**~~ **Closed 2026-09-05.** All three are now held to
+  source: two by a checker, and the third by a real generator. `npc_data.rs` gained `just check-npc-data` on 2026-09-05: it re-reads `NPC.SetDefaults`' own
   691-arm chain and compares every entry on all 16 fields, from `just check-data` beside the drop
   and recipe checkers. It found the table **already correct**, with seven deliberate differences on
   its own record (the four Lunar Towers' `boss`, the Skeleton Merchant's `town_npc`, and the Torch
@@ -302,8 +302,18 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   already right: `just check-placed-items` re-does the inversion `Item.SetDefaults` supports and
   found **69 (tile, style) pairs missing outright and one wrong** - seventy framed objects that
   gave nothing back when mined, and a Boreal Wood sofa that gave the wrong bench. All seventy are
-  fixed and all 1,027 pairs the game defines now match. `tile_object.rs` is the one left with
-  neither a generator nor a checker.
+  fixed and all 1,027 pairs the game defines now match.
+  **`tile_object.rs` got a generator instead**, because its source is not a table to check against
+  but a program to run: `TileObjectData.Initialize` mutates one shared object 389 times over 2,900
+  lines. `terrustia-codegen tile_object` interprets it, `just regen` rebuilds the file, and
+  `just check-tile-object` is a second independent interpreter that agrees with it entry for entry.
+  It was the worst of the three: eight of thirteen fields were right and the other five had been
+  filled in with a uniform guess, so **every object's style layout past style 0 framed wrong** -
+  a torch's styles stepped 40 down the sheet instead of 22, a table's second style landed at
+  (0, 72) instead of (54, 0), and a door's at 27 styles away from where it belongs. 2,266 styles
+  across 72 tile types were reachable through ordinary placement. The one site that had noticed
+  (`dispatch.rs`'s container placement) had written its own arithmetic around it and said in a
+  comment that the table was wrong and not its to fix.
 - **Lane B (error handling and data safety) is the only lane in `TODO.md` with no "(done)" marker**, and
   485 `.unwrap()` calls remain in production files (`net/listener.rs`, `net/codec.rs`, `world/wld.rs`,
   `world/wld_save.rs`, `admin/audit.rs` and others). The lane's claim is scoped to paths the outside

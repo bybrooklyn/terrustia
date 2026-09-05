@@ -48,6 +48,12 @@ crates/terrustia-codegen/src/recipes.rs	fn resolve_recipe_locals	Recipe.cs	15721
 crates/terrustia-codegen/src/recipes.rs	fn resolve_recipe_locals	Recipe.cs	608-609	73dfdde5cc0b	55256ec5f22d
 crates/terrustia-codegen/src/recipes.rs	fn resolve_recipe_locals	Recipe.cs	6280	8839e31a1902	55256ec5f22d
 crates/terrustia-codegen/src/recipes.rs	fn resolve_recipe_locals	Recipe.cs	6374	d06e6d06c324	55256ec5f22d
+crates/terrustia-codegen/src/tile_object.rs	(file)	TileObjectData.cs	1186-1201	264868188ba7	4e21f1e47e4d
+crates/terrustia-codegen/src/tile_object.rs	(file)	TileObjectData.cs	1698-1715	d0f6ed09ce23	4e21f1e47e4d
+crates/terrustia-codegen/src/tile_object.rs	(file)	TileObjectData.cs	1805-1811	261d9bfc6d15	4e21f1e47e4d
+crates/terrustia-codegen/src/tile_object.rs	(file)	TileObjectData.cs	2009-2014	c3b99efa7ae8	4e21f1e47e4d
+crates/terrustia-codegen/src/tile_object.rs	(file)	TileObjectData.cs	2111-5015	6ed63ec7fe60	4e21f1e47e4d
+crates/terrustia-codegen/src/tile_object.rs	impl Obj :: fn clone_base	TileObjectData.cs	1194-1200	81bef0a63f73	9d1f6afd09ba
 crates/terrustia-codegen/src/travel_shop.rs	fn flags_of	Chest.cs	1168	e015f6ad9230	4e9106f7b1cf
 crates/terrustia-codegen/src/travel_shop.rs	fn generate	Chest.cs	1168-1175	0fffc6068c49	e1ffd25c2251
 crates/terrustia-codegen/src/travel_shop.rs	mod tests :: fn the_travelling_merchant_can_offer_both_counterweights	Chest.cs	980-987	8b4e8a266221	9a516acd9a90
@@ -630,6 +636,8 @@ crates/terrustia-proto/src/square.rs	mod tests :: fn an_absent_wall_bit_clears_a
 crates/terrustia-proto/src/square.rs	mod tests :: fn an_absent_wall_bit_clears_an_existing_wall	MessageBuffer.cs	1427-1430	4219f969a994	dd9a410c4569
 crates/terrustia-proto/src/square.rs	mod tests :: fn an_inactive_square_tile_leaves_the_existing_block_and_frame_untouched	MessageBuffer.cs	1393-1421	ce0d5871daed	60cedbac041a
 crates/terrustia-proto/src/square.rs	mod tests :: fn changing_a_non_frame_important_type_resets_the_frame	MessageBuffer.cs	1402-1406	44410b73f51e	e29b12eb1101
+crates/terrustia-proto/src/tile_object.rs	impl TileObject :: fn frame_of	TileObject.cs	57-76	66a341b58664	85442beab755
+crates/terrustia-proto/src/tile_object.rs	impl TileObject :: fn frame_of	TileObjectData.cs	1990-1997	5535ab7ba000	85442beab755
 crates/terrustia-proto/src/tile_sets.rs	fn is_platform	TileID.cs	243	6390cf0e7c4b	76911e7028e2
 crates/terrustia-proto/src/touch_debuffs.rs	const RULES	NPCID.cs	11059	bd3088d2cfd6	b43d7f60534d
 crates/terrustia-proto/src/touch_debuffs.rs	const RULES	Player.cs	22704	d907405a9d8c	b43d7f60534d
@@ -3444,7 +3452,7 @@ crates/terrustia/src/world/worldgen/piles.rs	fn place_small_pile	WorldGen.cs	472
 crates/terrustia/src/world/worldgen/piles.rs	fn place_small_pile	WorldGen.cs	70673	4b935c7d5752	7f9b534e39ee
 crates/terrustia/src/world/worldgen/piles.rs	mod tests :: fn large_pile_style_matches_vanillas_biome_ranges	WorldGen.cs	18986-19024	4c4bbe8ece23	1f12af9a2d84
 crates/terrustia/src/world/worldgen/pots.rs	(file)	WorldGen.cs	18123	056fc1dc0b6b	c56bd833fbeb
-crates/terrustia/src/world/worldgen/pots.rs	(file)	WorldGen.cs	54529	fe175f50b850	c56bd833fbeb
+crates/terrustia/src/world/worldgen/pots.rs	(file)	WorldGen.cs	54566-54584	cb98ffccba39	c56bd833fbeb
 crates/terrustia/src/world/worldgen/pots.rs	fn is_dungeon_wall	Main.cs	10737-10745	daa9a43af5ce	73c336f1ff5b
 crates/terrustia/src/world/worldgen/pots.rs	fn place_pot	WorldGen.cs	3681	dafea61cdb16	ee0cd3fca1cc
 crates/terrustia/src/world/worldgen/pots.rs	fn scatter	WorldGen.cs	18123	056fc1dc0b6b	7578bf8f21e9

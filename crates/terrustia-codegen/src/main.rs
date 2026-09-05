@@ -21,6 +21,7 @@ mod projectiles;
 mod recipes;
 mod shimmer;
 mod tile_death;
+mod tile_object;
 mod town_names;
 mod travel_shop;
 
@@ -94,6 +95,11 @@ const TABLES: &[Table] = &[
         name: "tile_death",
         out: "crates/terrustia-proto/src/tile_death.rs",
         generate: tile_death::generate,
+    },
+    Table {
+        name: "tile_object",
+        out: "crates/terrustia-proto/src/tile_object.rs",
+        generate: tile_object::generate,
     },
 ];
 

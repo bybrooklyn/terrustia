@@ -190,6 +190,15 @@ check-npc-data:
 check-placed-items:
     python3 tools/check_placed_items.py {{DECOMPILED}}
 
+# Re-read `TileObjectData.Initialize` and hold `tile_object.rs` to it.
+#
+# The table is generated now, so this is the same second opinion `check-drops` gives `npc_drops.rs`:
+# an independent interpreter, written before the generator and agreeing with it on all 389 entries,
+# that catches a hand-edit or a regen nobody ran. Its subject is a program rather than a
+# declaration, which is exactly why one reading of it is not enough.
+check-tile-object:
+    python3 tools/check_tile_object.py {{DECOMPILED}}
+
 # Cross-check the checked-in shimmer-decraft recipes against the decompiled game
 check-recipes:
     python3 tools/check_recipes.py {{DECOMPILED}} crates/terrustia-proto/src/recipes.rs
@@ -258,7 +267,7 @@ check-mutants *ARGS:
 # reintroduces one.
 #
 # Every data cross-check in one go: the tables, the citations, the dead writes, and the checkers
-check-data: check-drops check-npc-data check-placed-items check-recipes check-parity check-spawn-reach check-mutants check-dead-writes
+check-data: check-drops check-npc-data check-placed-items check-tile-object check-recipes check-parity check-spawn-reach check-mutants check-dead-writes
 
 # Regenerate every transcribed data table from a decompiled tree, then format
 regen:
@@ -273,6 +282,7 @@ regen:
     cargo run -q -p terrustia-codegen -- town_names {{DECOMPILED}} crates/terrustia-proto/src/town_names.rs
     cargo run -q -p terrustia-codegen -- travel_shop {{DECOMPILED}} crates/terrustia-proto/src/travel_shop.rs
     cargo run -q -p terrustia-codegen -- tile_death  {{DECOMPILED}} crates/terrustia-proto/src/tile_death.rs
+    cargo run -q -p terrustia-codegen -- tile_object {{DECOMPILED}} crates/terrustia-proto/src/tile_object.rs
     cargo fmt --all
     @echo "Regenerated the data tables. Review the diff before committing."
 

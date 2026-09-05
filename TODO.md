@@ -400,16 +400,22 @@ both generators to emit exactly what is committed rather than touching either ta
   2. **Stale prose.** About 190 references to `game/server.rs` survive the Lane A split, across code
      comments, `docs/*.md` (one of them a link that 404s) and AGENTS.md. Many sit in files under
      active edit, so this is a single sweep to run once the parity lanes land, not piecemeal.
-  3. **`docs/generated-tables.md` documents a workflow that no longer exists**: a runnable command
-     block invoking ten `tools/gen_*.py` scripts that Lane H deleted.
-  4. **Table provenance, fixed in part.** `npc_data.rs`, `tile_object.rs` and `placed_items.rs`
-     (21,768 lines together) described themselves as generated while having **no generator**, and
-     none is on rule 7's list. So `just regen` never touched them, yet a reader seeing "GENERATED"
-     would either refuse to correct a wrong number or expect a regeneration to preserve their fix.
-     `npc_data.rs` was in fact hand-edited on 2026-08-31, correctly, in a file whose header forbade
-     it. That is the same trap Lane H hit with `shimmer.rs` and `travel_shop.rs`. The three headers
-     now say plainly that no generator exists and corrections are made in place with a citation.
-     **Writing real generators for them remains open** and is the proper fix.
+  3. ~~**`docs/generated-tables.md` documents a workflow that no longer exists**: a runnable command
+     block invoking ten `tools/gen_*.py` scripts that Lane H deleted.~~ Fixed 2026-09-05: the block
+     now names `just regen` and the `terrustia-codegen` binary that replaced them, and lists the
+     five checkers.
+  4. ~~**Table provenance.**~~ **Closed 2026-09-05.** `npc_data.rs`, `tile_object.rs` and
+     `placed_items.rs` (21,768 lines together) described themselves as generated while having **no
+     generator**, and none was on rule 7's list. So `just regen` never touched them, yet a reader
+     seeing "GENERATED" would either refuse to correct a wrong number or expect a regeneration to
+     preserve their fix. `npc_data.rs` was in fact hand-edited on 2026-08-31, correctly, in a file
+     whose header forbade it. That is the same trap Lane H hit with `shimmer.rs` and
+     `travel_shop.rs`.
+     `tile_object.rs` now has a real generator (`terrustia-codegen tile_object`, on `just regen`)
+     plus a second independent interpreter in `just check-tile-object`. The other two are held by
+     `just check-npc-data` and `just check-placed-items`, which is rule 7's protection by the other
+     road: neither can drift from source unseen. Between them they found 70 wrong entries in
+     `placed_items.rs` and a wrong style layout on 374 of 389 entries in `tile_object.rs`.
 
   **The owner's own example, Martian Madness in its own folder, is declined with reasons.**
   `game/ai/mod.rs::run` is a `match npc.stats.ai_style` mirroring vanilla's `NPC.AI()` switch arm for

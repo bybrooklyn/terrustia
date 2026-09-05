@@ -2,15 +2,21 @@
 //!
 //! **Not routed through `place_object`.** `PotsGraveyardsAndBoulderPiles`
 //! (`WorldGen.cs:18123`) calls `PlacePot` directly rather than the generic `PlaceTile`, and
-//! `PlacePot` (`WorldGen.cs:54529`) writes its own frame arithmetic — `frameX = k*18 + Next(3)*36`,
-//! `frameY = (l+1)*18 + style*36` — which does not agree with what `tile_object.rs`'s entry for
-//! block 28 would produce (that entry's `full_height` is 34, not the 36-pixel row spacing
-//! `PlacePot` actually uses). Checked this by computing both and comparing before writing a line
-//! of this file: routing pots through `place_object` would have placed real pots with subtly
-//! wrong frames, still 2×2 and still active, so nothing would have failed a test — it would just
-//! have rendered wrong in a real client, which is exactly the kind of bug this project keeps
-//! finding by measuring rather than assuming. So `PlacePot` is transcribed directly, the way
-//! `trees.rs` transcribes `GrowTree`'s own hand-rolled frames.
+//! `PlacePot` (`WorldGen.cs:54566-54584`) writes its own frame arithmetic: `frameX = k*18 +
+//! Next(3)*36`, `frameY = (l+1)*18 + style*36`. It puts the random variant across the sheet and
+//! the biome style down it, unconditionally. Block 28's `TileObjectData` entry is style-horizontal
+//! with a wrap of 3, so `frame_of(style, random)` folds both into one index and lands the pair
+//! somewhere else entirely. Checked this by computing both and comparing before writing a line of
+//! this file: routing pots through `place_object` would have placed real pots with subtly wrong
+//! frames, still 2x2 and still active, so nothing would have failed a test - it would just have
+//! rendered wrong in a real client, which is exactly the kind of bug this project keeps finding by
+//! measuring rather than assuming. So `PlacePot` is transcribed directly, the way `trees.rs`
+//! transcribes `GrowTree`'s own hand-rolled frames.
+//!
+//! The original note here reached the same conclusion from a wrong fact: it said block 28's
+//! `full_height` was 34 against `PlacePot`'s 36. It was 34, and it should not have been. The table
+//! is generated now and reads 36, which is the row spacing `PlacePot` uses; the disagreement that
+//! keeps pots on their own path is the axis the style rides on, not the row height.
 
 use rand::{Rng, rngs::SmallRng};
 use terrustia_proto::{Tile, tile_solid};

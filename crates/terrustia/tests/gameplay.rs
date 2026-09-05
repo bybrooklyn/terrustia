@@ -3140,6 +3140,62 @@ async fn a_placed_object_lands_in_the_world() {
     );
 }
 
+/// A styled object is framed where the game frames it, not merely somewhere consistent.
+///
+/// Every other placement test here uses style 0, which is the one style every wrong style layout
+/// still gets right: `style * multiplier + base` is 0 whatever the multiplier is. `tile_object.rs`
+/// had a uniform guess in place of the real layout for 374 of its 389 entries, and this is the
+/// shape of test that would have caught it: a real client places a Boreal Wood table over the wire
+/// and the frames that land are compared against the sheet the game actually draws from, where a
+/// table's styles run straight across 54 pixels apart.
+#[tokio::test]
+async fn a_styled_object_is_framed_where_the_game_frames_it() {
+    let addr = start_with(Config::default(), |world| {
+        for x in 380..420 {
+            for y in 310..322 {
+                world.set_tile(x, y, terrustia_proto::tile::Tile::AIR);
+            }
+            world.set_tile(x, 322, terrustia_proto::tile::Tile::block(1));
+        }
+    })
+    .await;
+    let mut alice = join(addr, "alice").await;
+
+    // A table: three wide, two tall, origin at its bottom-middle, style 1 (Boreal Wood).
+    alice.place_object(400, 321, 14, 1).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let mut bob = join(addr, "bob").await;
+    bob.set_timeout(Duration::from_millis(50));
+    for _ in 0..200 {
+        if bob.next_event().await.is_err() {
+            break;
+        }
+    }
+
+    // `TileObjectData` leaves tile 14 on the base object's `StyleWrapLimit = 0, StyleMultiplier =
+    // 1`, so style 1 sits one full width along: `CoordinateFullWidth` is (16 + 2) * 3 = 54. Then
+    // 18 per column across and 18 down to the second row.
+    for (dx, dy, want_x, want_y) in [
+        (0, 0, 54, 0),
+        (1, 0, 72, 0),
+        (2, 0, 90, 0),
+        (0, 1, 54, 18),
+        (2, 1, 90, 18),
+    ] {
+        let tile = bob
+            .world()
+            .tile(399 + dx, 320 + dy)
+            .expect("the table should have arrived");
+        assert_eq!(tile.block, 14, "cell ({dx}, {dy}) should be a table");
+        assert_eq!(
+            (tile.frame_x, tile.frame_y),
+            (want_x, want_y),
+            "cell ({dx}, {dy}) of a style-1 table"
+        );
+    }
+}
+
 /// Placing an object over something already there is refused outright rather than filling gaps.
 #[tokio::test]
 async fn an_object_will_not_be_placed_over_something() {

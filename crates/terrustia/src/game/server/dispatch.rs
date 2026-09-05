@@ -4702,14 +4702,18 @@ impl GameServer {
             // (`WorldGen.cs:58337-58405`): `36 * style` for a chest or a Containers2 and `54 *
             // style` for a dresser, plus 18 per cell across, with `frameY` 0 then 18.
             //
-            // Deliberately not routed through `tile_object::frame_of`, which `on_place_object`
-            // uses. That table gives 21/88/467 a style multiplier of 2 and a wrap of 2, and the
-            // real `TileObjectData` for all three inherits `StyleWrapLimit = 0, StyleMultiplier =
-            // 1` from `_baseObject` (`TileObjectData.cs:1799-1801`) - so `frame_of` agrees with
-            // vanilla only at style 0 and disagrees at every other. `36 * style` is also what this
-            // project's own worldgen writes (`worldgen/structures.rs`'s `add_chest_styled`) and
-            // what `on_lock` reads back with `frame_x / 36`. The table entry is wrong and is not
-            // this change's to fix: it is shared with `drop_of` and `on_place_object`.
+            // Written out rather than routed through `tile_object::frame_of`, because these two
+            // methods are what vanilla itself runs for a placed container and they write the
+            // literals. The two now agree: `tile_object.rs` is generated from `TileObjectData
+            // .Initialize`, which leaves 21/88/467 on `_baseObject`'s `StyleWrapLimit = 0,
+            // StyleMultiplier = 1` (`TileObjectData.cs:1799-1801`), so `frame_of` gives exactly
+            // `36 * style` and `54 * style` here.
+            //
+            // They did not always. The table used to give all three a multiplier of 2 and a wrap
+            // of 2, which agreed with vanilla at style 0 and at no other, and this site was
+            // written the long way around it. Kept the long way, now for the ordinary reason:
+            // it is what `worldgen/structures.rs`'s `add_chest_styled` writes and what `on_lock`
+            // reads back with `frame_x / 36`.
             debug!(slot, x, y, block, id, "container placed");
             for dx in 0..object.width {
                 for dy in 0..object.height {

@@ -16,7 +16,7 @@ that reads it.
 | File | Lines | From | Generator |
 |---|---:|---|---|
 | `npc_data.rs` | 13,323 | `NPC.SetDefaults` | — (`just check-npc-data`) |
-| `tile_object.rs` | 6,099 | `TileObjectData.Initialize` | — |
+| `tile_object.rs` | 6,138 | `TileObjectData.Initialize` | `terrustia-codegen tile_object` (`just check-tile-object`) |
 | `npc_params.rs` | 4,721 | `NPCID.Sets`, `NPC.SetDefaults` | — |
 | `npc_drops.rs` | ~6,800 | `ItemDropDatabase` | `gen_drops.py` |
 | `projectile_data.rs` | ~10,000 | `Projectile.SetDefaults` | `gen_projectiles.py` |
@@ -35,27 +35,22 @@ that reads it.
 | `tile_death.rs` | 179 | `Main.tileLavaDeath`, `Main.tileWaterDeath` | `terrustia-codegen tile_death` |
 | `net_variants.rs` | ~660 | `NPC.SetDefaultsFromNetId` | `terrustia-codegen net_variants` |
 
-The ones with a generator in [`tools/`](../tools) can be rebuilt:
+The `gen_*.py` scripts this table used to name are gone: every one of them is now a module of the
+`terrustia-codegen` binary, which `just regen` runs over the whole set at once.
 
 ```sh
-D=<path-to-decompiled-1.4.5.7-tree>
-python3 tools/gen_buffs.py      "$D" crates/terrustia-proto/src/buffs.rs
-python3 tools/gen_town_names.py "$D" crates/terrustia-proto/src/town_names.rs
-python3 tools/gen_hurt_tiles.py "$D" crates/terrustia-proto/src/hurt_tiles.rs
-python3 tools/gen_angler.py     "$D" crates/terrustia-proto/src/angler.rs
-python3 tools/gen_shimmer.py    "$D" crates/terrustia-proto/src/shimmer.rs
-python3 tools/gen_recipes.py    "$D" crates/terrustia-proto/src/recipes.rs
-python3 tools/gen_travel_shop.py "$D" crates/terrustia-proto/src/travel_shop.rs
-python3 tools/gen_drops.py      "$D" crates/terrustia-proto/src/npc_drops.rs
-python3 tools/gen_projectiles.py "$D" crates/terrustia-proto/src/projectile_data.rs
-python3 tools/gen_banners.py    "$D" crates/terrustia-proto/src/banners.rs
+just regen            # every generated table, then `cargo fmt --all`
+cargo run -p terrustia-codegen --bin codegen -- <table> "$D" <out.rs>   # just one
 ```
 
-And two checkers, which report rather than emit:
+And the checkers, which report rather than emit:
 
 ```sh
-python3 tools/check_recipes.py "$D"   # a sample of recipes, re-parsed independently
-python3 tools/check_drops.py   "$D"   # loot the game gives that we do not
+just check-recipes      # a sample of recipes, re-parsed independently
+just check-drops        # loot the game gives that we do not
+just check-npc-data     # every `NPC.SetDefaults` entry, all 16 fields
+just check-placed-items # every `createTile`/`placeStyle` pair the game defines
+just check-tile-object  # `TileObjectData.Initialize`, read by a second interpreter
 ```
 
 Each script fails loudly if the source's shape has changed — a parse that finds too few entries
@@ -110,6 +105,19 @@ both would have to be made twice.
 
 **Use `static`, not `const`, for the large ones.** A `const` array is copied at every use site.
 Clippy catches this; it is worth knowing why rather than just applying the fix.
+
+**Some sources are programs, and the generator has to be an interpreter.** `TileObjectData
+.Initialize` declares nothing: it mutates one shared object field by field, stamps it into a slot,
+resets it from a base, and does that 389 times over 2,900 lines. A regex sweep cannot read it, and
+the hand transcription that stood in for one had eight fields right out of thirteen and the other
+five filled in with a uniform guess (`style_multiplier` 2, `style_wrap` 2, `style_line_skip` 2)
+that matched the game on 15 entries of 389. So `tile_object` is a small interpreter for the fifteen
+statement forms that method uses, and getting it right meant modelling three things a value-semantic
+reading skips: `addTile` resets the current object, `CopyFrom` shares modules by reference through a
+copy-on-write, and a setter given the value already in place returns *before* invalidating the
+memoised `Calculate`. Where a table's source is a program, write the second reading too
+(`tools/check_tile_object.py` here) - a single interpreter of 2,900 lines of mutation is not a thing
+to trust once.
 
 **Say what is deliberately absent.** `hurt_tiles.rs` omits two tiles the game can make dangerous,
 because it gates them behind world seeds this server does not offer. That is recorded in the
