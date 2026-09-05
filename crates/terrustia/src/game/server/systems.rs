@@ -1516,6 +1516,138 @@ impl GameServer {
         (*free[at]).to_string()
     }
 
+    /// `NPC.SlimeRainSpawns` (`NPC.cs:5905-5967`): the slimes that actually fall out of the sky.
+    ///
+    /// ```csharp
+    /// int y = Main.MaxWorldViewSize.Y;   // 1200
+    /// int x = Main.MaxWorldViewSize.X;   // 1920
+    /// float num = 15f;
+    /// if (player.position.Y > Main.worldSurface * 16.0 + y / 2 || player.nearbyActiveNPCs > num) return;
+    /// float num2 = player.nearbyActiveNPCs / num;
+    /// int num3 = 45 + (int)(450f * num2);
+    /// if (Main.expertMode) { num3 = (int)(num3 * 0.85); }
+    /// ... journey slider ...
+    /// if (Main.rand.Next(num3) != 0) return;
+    /// int num5 = Main.rand.Next(num4, num4 + x * 2) / 16;          // num4 = Center.X - x
+    /// int num6 = Main.rand.Next(Center.Y - y * 1.5, Center.Y - y * 0.75) / 16;
+    /// if (num5 < 10 || num5 > Main.maxTilesX + 10 || num6 < worldSurface * 0.3 || num6 > worldSurface
+    ///     || Collision.SolidTiles(num5 - 3, num5 + 3, num6 - 5, num6 + 2)
+    ///     || Main.wallHouse[Main.tile[num5, num6].wall]) return;
+    /// int type = 1;
+    /// if (Main.rand.Next(200) == 0) { type = -4; }
+    /// else if (Main.expertMode) {
+    ///     if (Main.rand.Next(7) == 0) { type = -7; } else if (Main.rand.Next(3) == 0) { type = -3; }
+    /// } else if (Main.rand.Next(10) == 0) { type = -7; }
+    /// else if (Main.rand.Next(5) < 2) { type = -3; }
+    /// NewNPC(..., num5 * 16 + 8, num6 * 16, type);
+    /// ```
+    ///
+    /// Called once per player per tick while a Slime Rain is on, from inside `SpawnNPC`'s own
+    /// per-player loop and *before* the ordinary spawn attempt (`NPC.cs:296-301`), so it is an
+    /// extra spawn on top of the ordinary roster rather than a replacement for it. That is the
+    /// whole event: without it a Slime Rain is a world flag, an announcement and nothing falling.
+    ///
+    /// Three of the four types it can pick are negative net ids - the Pinky at one in two hundred,
+    /// and the two coloured slimes - which is what this server could not send at all until
+    /// `Npc::net_id` existed.
+    ///
+    /// Narrowed: the Journey per-player spawn-rate slider divides `num3` in vanilla. This server's
+    /// own `spawn::rates` applies that power at a different point, so folding it in here as well
+    /// would apply it twice; it is left to the one place that already owns it.
+    pub(super) fn tick_slime_rain_spawns(&mut self) {
+        use rand::Rng;
+
+        if !self.slime_rain.is_active() {
+            return;
+        }
+        const VIEW_X: f32 = 1920.0;
+        const VIEW_Y: f32 = 1200.0;
+        /// `num`, the near-NPC weight a player has to be under.
+        const CROWDED: f32 = 15.0;
+
+        let surface = f32::from(self.world.surface) * 16.0;
+        let expert = self.is_expert();
+        let (width, height) = (self.world.width(), self.world.height());
+        let players: Vec<(f32, f32)> = self
+            .players
+            .iter()
+            .flatten()
+            .filter(|p| p.is_playing() && p.life > 0)
+            .map(|p| {
+                (
+                    p.position.0 + PLAYER_HALF_WIDTH,
+                    p.position.1 + PLAYER_HEIGHT / 2.0,
+                )
+            })
+            .collect();
+
+        for centre in players {
+            let near = crate::game::spawn::nearby_active_npcs(&self.npcs, centre);
+            if centre.1 > surface + VIEW_Y / 2.0 || near > CROWDED {
+                continue;
+            }
+            let mut one_in = 45 + (450.0 * (near / CROWDED)) as i32;
+            if expert {
+                one_in = (f64::from(one_in) * 0.85) as i32;
+            }
+            if self.rng.random_range(0..one_in.max(1)) != 0 {
+                continue;
+            }
+            let x = self
+                .rng
+                .random_range((centre.0 - VIEW_X) as i32..(centre.0 + VIEW_X) as i32)
+                / 16;
+            let y = self
+                .rng
+                .random_range((centre.1 - VIEW_Y * 1.5) as i32..(centre.1 - VIEW_Y * 0.75) as i32)
+                / 16;
+            if x < 10
+                || x > width + 10
+                || (y as f32) < f32::from(self.world.surface) * 0.3
+                || y > i32::from(self.world.surface)
+                || y < 5
+                || y + 2 >= height
+            {
+                continue;
+            }
+            // `Collision.SolidTiles(num5 - 3, num5 + 3, num6 - 5, num6 + 2)`: a clear box, so a
+            // slime never lands inside a roof.
+            if (x - 3..=x + 3).any(|tx| {
+                (y - 5..=y + 2).any(|ty| {
+                    let tile = self.world.tile(tx, ty);
+                    tile.is_active() && terrustia_proto::tile_solid::solid(tile.block)
+                })
+            }) {
+                continue;
+            }
+            // `Main.wallHouse[...]`: nothing falls into somebody's house.
+            if terrustia_proto::housing::wall_encloses(self.world.tile(x, y).wall) {
+                continue;
+            }
+
+            // The four picks, in vanilla's own order and with its own stacked rolls: the rare one
+            // first, then the mode-dependent pair.
+            let mut net_id: i16 = 1;
+            if self.rng.random_range(0..200) == 0 {
+                net_id = -4; // Pinky
+            } else if expert {
+                if self.rng.random_range(0..7) == 0 {
+                    net_id = -7;
+                } else if self.rng.random_range(0..3) == 0 {
+                    net_id = -3;
+                }
+            } else if self.rng.random_range(0..10) == 0 {
+                net_id = -7;
+            } else if self.rng.random_range(0..5) < 2 {
+                net_id = -3;
+            }
+            let at = ((x * 16 + 8) as f32, (y * 16) as f32);
+            if let Some(index) = self.npcs.spawn_net_id(net_id, at) {
+                self.broadcast_npc(index);
+            }
+        }
+    }
+
     /// `BuffID.MoonLeech` (145), the debuff a Moon Lord brand leaves on whoever it reaches.
     ///
     /// The boss reads it back off the branded player three times a step to decide how many leeches
@@ -2474,7 +2606,10 @@ impl GameServer {
             direction_y: npc.direction_y,
             sprite_direction: npc.sprite_direction,
             ai: npc.ai,
-            net_id: npc.npc_type as i16,
+            // The *net* id, not the type: a variant rides on a positive base type and is only
+            // itself on the wire (`NPC.cs:7681-7684`). This was `npc_type` outright, so no client
+            // ever saw a Pinky, a Big Zombie or a Little Hornet - each arrived as its plain base.
+            net_id: npc.net_id,
             life: npc.life,
             life_max: npc.life_max,
             release_owner: 255,
@@ -14269,5 +14404,190 @@ mod moon_lord_leech_brands {
             1,
             "no more once it is gone, however many marks are left in the step"
         );
+    }
+}
+
+/// Slime Rain's own spawns, and the negative net ids they are the first caller for.
+///
+/// `NPC.SlimeRainSpawns` (`NPC.cs:5905-5967`) is the whole event: without it a Slime Rain is a
+/// world flag, an announcement, and nothing falling out of the sky. Three of the four types it
+/// picks are negative net ids - the Pinky at one in two hundred and the two coloured slimes -
+/// which this server could not put on the wire at all until `Npc::net_id` existed.
+#[cfg(test)]
+mod slime_rain_spawns {
+    use super::*;
+    use crate::config::Config;
+
+    const BLUE_SLIME: u16 = 1;
+
+    fn raining_slime() -> GameServer {
+        // Tall enough that `surface` leaves real sky above it, and empty, so the clear-box check
+        // never rejects a candidate.
+        let mut server = GameServer::new(
+            Config::default(),
+            crate::world::World::empty(2000, 900, "slime rain probe"),
+        );
+        server.slime_rain.timer = 60 * 60 * 30;
+        server
+    }
+
+    fn seat(server: &mut GameServer, at: (f32, f32)) {
+        let (tx, rx) = tokio::sync::mpsc::channel(8192);
+        std::mem::forget(rx);
+        let mut player = Player::new(0, "127.0.0.1:1".parse().expect("loopback"), tx);
+        player.state = ConnState::Playing;
+        player.life = 400;
+        player.position = at;
+        server.players[0] = Some(player);
+    }
+
+    fn drain_slimes(server: &mut GameServer) -> Vec<(u16, i16)> {
+        let seen: Vec<(u8, u16, i16)> = server
+            .npcs
+            .iter()
+            .map(|(index, n)| (index, n.npc_type, n.net_id))
+            .collect();
+        for (index, ..) in &seen {
+            server.npcs.remove(*index);
+        }
+        seen.into_iter().map(|(_, ty, id)| (ty, id)).collect()
+    }
+
+    /// A Slime Rain rains slimes, and they arrive above the player rather than on them.
+    #[test]
+    fn a_slime_rain_actually_drops_slimes() {
+        let mut server = raining_slime();
+        let ground = f32::from(server.world.surface) * 16.0;
+        seat(&mut server, (16_000.0, ground - 64.0));
+
+        let mut fell = 0;
+        for _ in 0..20_000 {
+            server.tick_slime_rain_spawns();
+            for (ty, _) in drain_slimes(&mut server) {
+                assert_eq!(ty, BLUE_SLIME, "every one of them is a slime");
+                fell += 1;
+            }
+        }
+        assert!(fell > 100, "a whole slime rain dropped only {fell} slimes");
+    }
+
+    /// ...and only while one is on.
+    #[test]
+    fn nothing_falls_without_a_slime_rain() {
+        let mut server = raining_slime();
+        server.slime_rain.timer = 0;
+        let ground = f32::from(server.world.surface) * 16.0;
+        seat(&mut server, (16_000.0, ground - 64.0));
+        for _ in 0..20_000 {
+            server.tick_slime_rain_spawns();
+        }
+        assert!(drain_slimes(&mut server).is_empty());
+    }
+
+    /// The four picks, and the point of the whole change: three of them are *variants*, which ride
+    /// on the Blue Slime's own type and are only themselves in the net id.
+    #[test]
+    fn the_rare_and_coloured_slimes_ride_on_negative_net_ids() {
+        let mut server = raining_slime();
+        let ground = f32::from(server.world.surface) * 16.0;
+        seat(&mut server, (16_000.0, ground - 64.0));
+
+        let mut seen = std::collections::BTreeMap::new();
+        for _ in 0..200_000 {
+            server.tick_slime_rain_spawns();
+            for (ty, net_id) in drain_slimes(&mut server) {
+                assert_eq!(ty, BLUE_SLIME, "the base type is a Blue Slime every time");
+                *seen.entry(net_id).or_insert(0usize) += 1;
+            }
+        }
+        assert!(seen.contains_key(&1), "the plain slime");
+        assert!(seen.contains_key(&-3), "the green one");
+        assert!(seen.contains_key(&-7), "the purple one");
+        assert!(
+            seen.contains_key(&-4),
+            "and the Pinky, at one in two hundred: {seen:?}"
+        );
+        let total: usize = seen.values().sum();
+        let pinkies = seen[&-4];
+        // One in two hundred, loosely: this is a distribution over tens of thousands of draws.
+        assert!(
+            (total / 400..total / 100).contains(&pinkies),
+            "a Pinky is one draw in two hundred: {pinkies} of {total}"
+        );
+    }
+
+    /// A Pinky is not a Blue Slime with a different name: `SetDefaultsFromNetId` gives it 150
+    /// life against the base type's own, and a Blue Slime does not have 150.
+    #[test]
+    fn a_variant_carries_its_own_stats() {
+        let mut server = raining_slime();
+        let plain = server
+            .npcs
+            .spawn_net_id(1, (1000.0, 1000.0))
+            .expect("a slot");
+        let plain_life = server.npcs.get(plain).expect("seated").life_max;
+
+        let pinky = server
+            .npcs
+            .spawn_net_id(-4, (1000.0, 1000.0))
+            .expect("a slot");
+        let pinky = server.npcs.get(pinky).expect("seated");
+        assert_eq!(pinky.npc_type, BLUE_SLIME, "the base type is unchanged");
+        assert_eq!(pinky.net_id, -4, "and the net id is what says otherwise");
+        assert_eq!(pinky.life_max, 150, "`case -4:` sets `life = 150`");
+        assert_ne!(
+            pinky.life_max, plain_life,
+            "which is not what a plain Blue Slime has, or this proves nothing"
+        );
+        assert!(
+            (pinky.scale - 0.6).abs() < 1e-5,
+            "and 0.6x the size: got {}",
+            pinky.scale
+        );
+    }
+
+    /// A positive net id is a type, not a variant, and must be spawned unchanged.
+    #[test]
+    fn a_positive_net_id_is_just_that_type() {
+        let mut server = raining_slime();
+        let index = server
+            .npcs
+            .spawn_net_id(1, (1000.0, 1000.0))
+            .expect("a slot");
+        let npc = server.npcs.get(index).expect("seated");
+        assert_eq!(npc.npc_type, BLUE_SLIME);
+        assert_eq!(npc.net_id, 1, "unchanged, and not turned negative");
+    }
+
+    /// Nothing falls into a house: `Main.wallHouse[Main.tile[num5, num6].wall]`.
+    #[test]
+    fn nothing_falls_through_a_roof() {
+        let mut server = raining_slime();
+        let ground = f32::from(server.world.surface) * 16.0;
+        seat(&mut server, (16_000.0, ground - 64.0));
+        // Wall the whole band the drop point is chosen from.
+        for x in 900..1100 {
+            for y in 0..i32::from(server.world.surface) + 1 {
+                let mut tile = server.world.tile(x, y);
+                // Wall 1 is the crafted Stone Wall, which `Main.wallHouse` counts as a house.
+                // Wall 2 is the *natural* one worldgen paints and does not count, which is what
+                // this test first used and why it saw eight hundred slimes land inside.
+                tile.wall = 1;
+                server.world.set_tile(x, y, tile);
+            }
+        }
+        let mut inside = 0;
+        for _ in 0..40_000 {
+            server.tick_slime_rain_spawns();
+            for (index, npc) in server.npcs.iter() {
+                let tile_x = (npc.position.0 / 16.0) as i32;
+                if (900..1100).contains(&tile_x) {
+                    inside += 1;
+                }
+                let _ = index;
+            }
+            drain_slimes(&mut server);
+        }
+        assert_eq!(inside, 0, "a slime landed inside a walled-off band");
     }
 }

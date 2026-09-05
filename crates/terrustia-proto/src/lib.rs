@@ -28,6 +28,7 @@ pub mod locks;
 pub mod luck;
 pub mod net_module;
 pub mod net_text;
+pub mod net_variants;
 pub mod npc;
 pub mod npc_data;
 pub mod npc_drops;

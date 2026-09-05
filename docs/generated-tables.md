@@ -33,6 +33,7 @@ that reads it.
 | `angler.rs` | ~120 | `Main.AnglerQuestSwap` | `gen_angler.py` |
 | `travel_shop.rs` | ~90 | `Chest.SetupTravelShop_GetItem` | `gen_travel_shop.py` |
 | `tile_death.rs` | 179 | `Main.tileLavaDeath`, `Main.tileWaterDeath` | `terrustia-codegen tile_death` |
+| `net_variants.rs` | ~660 | `NPC.SetDefaultsFromNetId` | `terrustia-codegen net_variants` |
 
 The ones with a generator in [`tools/`](../tools) can be rebuilt:
 

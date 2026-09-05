@@ -582,6 +582,9 @@ impl GameServer {
         lap(&mut cost, Phase::Projectiles);
         self.tick_contact_damage();
         lap(&mut cost, Phase::Damage);
+        // `SpawnNPC`'s own per-player loop runs the slime rain's spawns *before* the ordinary
+        // attempt (`NPC.cs:296-301`), so it is extra rather than instead.
+        self.tick_slime_rain_spawns();
         self.tick_spawning();
         lap(&mut cost, Phase::Spawning);
         self.tick_town_npcs();

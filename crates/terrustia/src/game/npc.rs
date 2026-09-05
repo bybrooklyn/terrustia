@@ -72,6 +72,19 @@ pub trait TileView {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Npc {
     pub npc_type: u16,
+    /// What goes on the wire in packet 23, which is not always the type.
+    ///
+    /// A negative net id names a *variant* of a positive type rather than a type of its own
+    /// (`NPCID.FromNetId`, and [`terrustia_proto::net_variants`] for what each one changes): the
+    /// coloured slimes, the small and big zombies and skeletons, and the hornet families all ride
+    /// on one base type each. `NPC.type` is always the positive base, and `NPC.netID` carries the
+    /// negative (`NPC.cs:7681-7684`).
+    ///
+    /// This is the type for everything ordinary, which is nearly everything. It was *always* the
+    /// type before, so all sixty-five variants were absent from every world this server served:
+    /// nothing errored and no test failed, because a Pinky sent as a Blue Slime is a perfectly
+    /// valid Blue Slime.
+    pub net_id: i16,
     /// Bumped each time a slot is reused, so a stale hit cannot land on the new occupant.
     pub generation: u8,
     /// Top-left corner, in pixels.
@@ -297,6 +310,7 @@ impl Npc {
         let stats = scaled(npc_stats(npc_type)?, scale);
         Some(Self {
             npc_type,
+            net_id: npc_type as i16,
             generation,
             position,
             velocity: (0.0, 0.0),
@@ -425,6 +439,12 @@ impl Npc {
         let scale = terrustia_proto::npc_params::npc_scale(npc_type);
         let stats = scaled(stats, scale);
         self.npc_type = npc_type;
+        // ...and the net id with it. `NPC.Transform` goes through `SetDefaults(newType)`, which
+        // writes `netID = Type` for a positive id (`NPC.cs:8363`), so a transformed NPC stops
+        // being whatever variant it was. Leaving this behind sends the *old* type to every client
+        // - a freed bound townsperson arriving as the bound one, because `SyncNpc::npc_type()`
+        // resolves the net id and not the type.
+        self.net_id = npc_type as i16;
         self.stats = stats;
         self.life_max = stats.life_max;
         self.life = stats.life_max;
@@ -1210,6 +1230,44 @@ impl NpcStore {
         }
     }
 
+    /// Spawn a *variant* by its negative net id — `NPC.SetDefaultsFromNetId`
+    /// (`NPC.cs:7681-7684`), which resolves the base type through `NetIdMap`, builds it, and then
+    /// applies the variant's own overrides.
+    ///
+    /// A positive id is just [`Self::spawn`] of that type, which is what a caller holding a raw
+    /// `netID` wants and what vanilla's own `SetDefaults` does with one.
+    ///
+    /// The order is vanilla's and it matters: the base type is built and *then* scaled for world
+    /// difficulty, and only then does the variant override. A Pinky's 150 life is 150 in classic
+    /// and in master alike, because `SetDefaultsFromNetId` writes it after `SetDefaults` has
+    /// already done its own scaling - which is why this cannot simply be a second scaling pass.
+    pub fn spawn_net_id(&mut self, net_id: i16, position: (f32, f32)) -> Option<u8> {
+        let base = terrustia_proto::npc_data::from_net_id(net_id);
+        let index = self.spawn(base, position)?;
+        let Some(variant) = terrustia_proto::net_variants::net_variant(net_id) else {
+            return Some(index);
+        };
+        let npc = self.get_mut(index)?;
+        npc.net_id = net_id;
+        if let Some(scale) = variant.scale {
+            npc.scale *= scale;
+        }
+        if let Some(damage) = variant.damage {
+            npc.stats.damage = damage;
+        }
+        if let Some(defense) = variant.defense {
+            npc.defense = defense;
+        }
+        if let Some(life) = variant.life {
+            npc.life = life;
+            npc.life_max = life;
+        }
+        if let Some(mul) = variant.knockback_mul {
+            npc.stats.knockback_resist *= mul;
+        }
+        Some(index)
+    }
+
     pub fn spawn(&mut self, npc_type: u16, position: (f32, f32)) -> Option<u8> {
         let index = self.slots.iter().position(Option::is_none)?;
         let generation = self.next_generation_for(index);
@@ -1505,6 +1563,25 @@ mod scaling_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Becoming another type takes the net id with it.
+    ///
+    /// `NPC.Transform` goes through `SetDefaults(newType)`, which writes `netID = Type`
+    /// (`NPC.cs:8363`). Leaving the old net id behind is invisible on the server and wrong on
+    /// every client, because packet 23 carries the net id and `SyncNpc::npc_type()` resolves *it*
+    /// rather than the type: a freed bound townsperson arrived as the bound one.
+    #[test]
+    fn a_transformed_npc_stops_being_whatever_variant_it_was() {
+        // A Pinky: a Blue Slime by type, -4 by net id.
+        let mut npc = Npc::new(1, (0.0, 0.0), 1).expect("a blue slime");
+        npc.net_id = -4;
+        npc.become_type(2);
+        assert_eq!(npc.npc_type, 2);
+        assert_eq!(
+            npc.net_id, 2,
+            "the variant does not survive the transform, and the wire must say so"
+        );
+    }
 
     /// Terrain built from a closure, for testing movement without a world.
     struct Terrain<F>(F);

@@ -16,6 +16,7 @@ mod buffs;
 mod csharp;
 mod drops;
 mod hurt_tiles;
+mod net_variants;
 mod projectiles;
 mod recipes;
 mod shimmer;
@@ -53,6 +54,11 @@ const TABLES: &[Table] = &[
         name: "projectiles",
         out: "crates/terrustia-proto/src/projectile_data.rs",
         generate: projectiles::generate,
+    },
+    Table {
+        name: "net_variants",
+        out: "crates/terrustia-proto/src/net_variants.rs",
+        generate: net_variants::generate,
     },
     Table {
         name: "banners",

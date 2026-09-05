@@ -40,6 +40,7 @@ crates/terrustia-codegen/src/drops.rs	fn parse_master	ItemDropRule.cs	25-32	cb89
 crates/terrustia-codegen/src/drops.rs	fn parse_master	ItemDropRule.cs	30-33	ce61999e6f30	e2d9e45154f0
 crates/terrustia-codegen/src/drops.rs	fn prepare	ItemDropDatabase.cs	753	153c66d302e7	53a7c190c766
 crates/terrustia-codegen/src/drops.rs	fn prepare	ItemDropDatabase.cs	759	dbe410c78d1c	53a7c190c766
+crates/terrustia-codegen/src/net_variants.rs	(file)	NPC.cs	8460-8463	ef524a1ea4d7	c01d5b391b23
 crates/terrustia-codegen/src/projectiles.rs	fn inline_default_helpers	Projectile.cs	10693-10786	a3e5a1f17569	b7e3d59ac041
 crates/terrustia-codegen/src/projectiles.rs	fn read_into	Projectile.cs	7141-7154	0a01bbde9552	bf038e01a0f2
 crates/terrustia-codegen/src/recipes.rs	fn generate	Recipe.cs	16795-16800	7d1609a03bc9	59c9a184f031
@@ -1379,6 +1380,7 @@ crates/terrustia/src/game/npc.rs	fn step_physics	NPC.cs	91581-91586	552ec2cbe5db
 crates/terrustia/src/game/npc.rs	fn step_physics	NPC.cs	92054-92071	3b601ea7301d	e7015d8e62e0
 crates/terrustia/src/game/npc.rs	impl Npc :: fn attempt_to_convert_to_evil	NPC.cs	93033-93048	32c2b1c8eafc	cc77866ce027
 crates/terrustia/src/game/npc.rs	impl Npc :: fn balance	NPC.cs	18518-18526	438b8a38420b	56ce77a86276
+crates/terrustia/src/game/npc.rs	impl Npc :: fn become_type	NPC.cs	8363	c60564adf562	6155a49b15ca
 crates/terrustia/src/game/npc.rs	impl Npc :: fn contact_damage	NPC.cs	18197	b1bea925599a	7e865ce49907
 crates/terrustia/src/game/npc.rs	impl Npc :: fn contact_damage	NPC.cs	27938-27939	04566215f0a2	7e865ce49907
 crates/terrustia/src/game/npc.rs	impl Npc :: fn contact_damage	Player.cs	31623	4c8ea0c69ee0	7e865ce49907
@@ -1400,6 +1402,7 @@ crates/terrustia/src/game/npc.rs	impl Npc :: fn strike	NPC.cs	82216-82311	26f595
 crates/terrustia/src/game/npc.rs	impl Npc :: fn strike	NPC.cs	82223-82250	e4312e0bbae8	241cbd972ebf
 crates/terrustia/src/game/npc.rs	impl Npc :: fn strike	NPC.cs	82286	cce523bd046f	241cbd972ebf
 crates/terrustia/src/game/npc.rs	impl NpcStore :: fn grow_worm_body	NPC.cs	51913-51936	095e58902bb8	ef827b375137
+crates/terrustia/src/game/npc.rs	impl NpcStore :: fn spawn_net_id	NPC.cs	7681-7684	dff3f1de2743	e1d2727519dc
 crates/terrustia/src/game/npc.rs	mod scaling_tests :: fn expert_hardmode_props_up_a_pre_hardmode_leftover	NPC.cs	18545-18593	6a1fd823bc55	d7ee5b51e00f
 crates/terrustia/src/game/npc.rs	mod scaling_tests :: fn only_bosses_scale_with_player_count_and_only_from_expert_up	NPC.cs	18186-18189	1f6e54bac920	f7b39b19aa71
 crates/terrustia/src/game/npc.rs	mod scaling_tests :: fn the_hardmode_prop_up_skips_bosses_and_the_named_set	NPC.cs	18568	796c9166aea2	0b61f8af1a96
@@ -1407,6 +1410,7 @@ crates/terrustia/src/game/npc.rs	mod scaling_tests :: fn the_hardmode_prop_up_sk
 crates/terrustia/src/game/npc.rs	mod scaling_tests :: fn town_npcs_and_friendlies_are_not_scaled_by_difficulty	NPC.cs	18180	b7d3cc488d22	fab375da57d6
 crates/terrustia/src/game/npc.rs	mod tests :: fn a_bouncing_solar_sroller_loses_a_bounce_off_a_wall	NPC.cs	93879-93900	3488d2dd7c52	365761df3dd8
 crates/terrustia/src/game/npc.rs	mod tests :: fn a_liquid_replaces_gravity_and_terminal_speed	NPC.cs	92054-92071	3b601ea7301d	3b509bdbaef3
+crates/terrustia/src/game/npc.rs	mod tests :: fn a_transformed_npc_stops_being_whatever_variant_it_was	NPC.cs	8363	c60564adf562	9450999e2688
 crates/terrustia/src/game/npc.rs	mod tests :: fn a_types_scale_is_folded_into_its_hitbox	NPC.cs	10370-10387	d9903401834a	82a2a1a74afb
 crates/terrustia/src/game/npc.rs	mod tests :: fn a_types_scale_is_folded_into_its_hitbox	NPC.cs	15672-15685	7c83fa7c3e03	82a2a1a74afb
 crates/terrustia/src/game/npc.rs	mod tests :: fn a_types_scale_is_folded_into_its_hitbox	NPC.cs	17842-17843	322f05258fbe	82a2a1a74afb
@@ -1419,12 +1423,13 @@ crates/terrustia/src/game/npc.rs	mod tests :: fn an_underground_fairy_is_born_al
 crates/terrustia/src/game/npc.rs	mod tests :: fn every_group_the_game_converts_and_nothing_else	NPC.cs	93052-93082	a8002c88a203	05d21fdfed96
 crates/terrustia/src/game/npc.rs	mod tests :: fn knockback_is_capped_and_assigned_not_accumulated	NPC.cs	82216-82311	26f5952c76a8	f436a4c20eef
 crates/terrustia/src/game/npc.rs	mod tests :: fn the_same_bunny_turns_crimson_in_a_crimson_world	NPC.cs	93055	20db8144f6b0	5bfa095268f5
-crates/terrustia/src/game/npc.rs	struct Npc	MessageBuffer.cs	1789	6b958cbf8a65	391e10879b11
-crates/terrustia/src/game/npc.rs	struct Npc	NPC.cs	6578	4e60f2450bbf	391e10879b11
-crates/terrustia/src/game/npc.rs	struct Npc	NPC.cs	79535	f43b979a3597	391e10879b11
-crates/terrustia/src/game/npc.rs	struct Npc	NPC.cs	80310	ac41b57aaef5	391e10879b11
-crates/terrustia/src/game/npc.rs	struct Npc	NPC.cs	80756-80880	49fdb14ae039	391e10879b11
-crates/terrustia/src/game/npc.rs	struct Npc	NPC.cs	82095-82101	81de9ca3702f	391e10879b11
+crates/terrustia/src/game/npc.rs	struct Npc	MessageBuffer.cs	1789	6b958cbf8a65	fef40ad8b976
+crates/terrustia/src/game/npc.rs	struct Npc	NPC.cs	6578	4e60f2450bbf	fef40ad8b976
+crates/terrustia/src/game/npc.rs	struct Npc	NPC.cs	7681-7684	dff3f1de2743	fef40ad8b976
+crates/terrustia/src/game/npc.rs	struct Npc	NPC.cs	79535	f43b979a3597	fef40ad8b976
+crates/terrustia/src/game/npc.rs	struct Npc	NPC.cs	80310	ac41b57aaef5	fef40ad8b976
+crates/terrustia/src/game/npc.rs	struct Npc	NPC.cs	80756-80880	49fdb14ae039	fef40ad8b976
+crates/terrustia/src/game/npc.rs	struct Npc	NPC.cs	82095-82101	81de9ca3702f	fef40ad8b976
 crates/terrustia/src/game/npc.rs	struct Scaling	NPC.cs	18183	1a7229c57414	b9a80c7ef6eb
 crates/terrustia/src/game/npc.rs	struct Scaling	NPC.cs	18581	3713bbfd76dc	b9a80c7ef6eb
 crates/terrustia/src/game/npc_ai.rs	fn avoidance	NPC.cs	31191-31206	dd6bbcdc0210	c7ce0a7af1c1
@@ -1748,8 +1753,8 @@ crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	3272	43583
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	50299-50302	6583807eb5db	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72072-72079	2a6f4d26e0bc	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72406	6c77495a5649	c5414c9d223d
-crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	37b7a28bd5bc
-crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	37b7a28bd5bc
+crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	1e07f04d649b
+crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	1e07f04d649b
 crates/terrustia/src/game/server/systems.rs	const STINKY	BuffID.cs	393	0f6008fbeed1	cfaa20a1d46a
 crates/terrustia/src/game/server/systems.rs	fn player_has_buff	MessageBuffer.cs	2456-2477	87cb35363490	c08c9f289848
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	7363-7366	54960e839053	00e47302005c
@@ -1814,6 +1819,7 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn npc_died	NPC.c
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn npc_died	NPC.cs	80439	8a77e9eb93da	6c7c1192555b
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn npc_died	NPC.cs	80448	43c1bf71eb08	6c7c1192555b
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn npc_died	NPC.cs	85913-85918	edeaf6f258c8	6c7c1192555b
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn npc_sync	NPC.cs	7681-7684	dff3f1de2743	460e8533a225
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn open_door_broadcast	MessageBuffer.cs	1310	0f54323474a0	afb3051b1da2
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn rain_coins	WorldGen.cs	72351-72397	37c569a406fa	c9a00724281f
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn record_lunar_pillars	NPCID.cs	4807	56059a8a6b6b	5c34d3d5e1fa
@@ -1883,6 +1889,8 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_powders	P
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_powders	Projectile.cs	14818-14824	34c13fddf29a	2b70277c367a
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_slime_rain	Main.cs	1282	8477db5e0c24	8af7d7d11ccb
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_slime_rain	Main.cs	65906	dfc952dd9dd9	8af7d7d11ccb
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_slime_rain_spawns	NPC.cs	296-301	909f0bbbc2f3	33721ab50bb6
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_slime_rain_spawns	NPC.cs	5905-5967	8cf80cf862c6	33721ab50bb6
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_spawning	NPC.cs	2409	de50bc340fb6	597fe1f3302e
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_spawning	NPC.cs	81063-81106	3553565ad8e8	597fe1f3302e
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_spawning	SceneMetrics.cs	734-751	6d4df8ac7d1c	597fe1f3302e
@@ -1953,6 +1961,7 @@ crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_mov
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod moon_lord_leech_brands	NPC.cs	42723-42754	e7fb364091ab	bff380b77ea0
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod purification_powder_turns_the_tortured_soul :: fn a_powder_thrown_at_a_bound_yellow_slime_frees_it	Projectile.cs	14806-14824	15be40f8c9c3	23faa782afb2
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod purification_powder_turns_the_tortured_soul :: fn a_powder_thrown_at_a_tortured_soul_turns_him_into_the_tax_collector	Projectile.cs	24366-24372	80818f04371c	5c21522c7b65
+crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod slime_rain_spawns	NPC.cs	5905-5967	8cf80cf862c6	aa1e36b0846c
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod tile_squares_only_reach_who_can_see_them	NetMessage.cs	1721-1731	e2c7580fdf13	4e929ec2145a
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod tile_squares_only_reach_who_can_see_them :: fn a_square_straddling_a_boundary_reaches_both_sides	RemoteClient.cs	192-215	d62b28e11723	6d6e6aa297e9
 crates/terrustia/src/game/server/systems.rs	mod slime_rain :: fn weather_rain_blocks_the_daily_roll	Main.cs	1282	8477db5e0c24	0f38246987da
@@ -1970,13 +1979,14 @@ crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wi
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wired_cannon_locks_out_every_other_cannon_in_the_world	Wiring.cs	1318	7da6c7163485	fa5703cc044c
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wired_cannon_locks_out_every_other_cannon_in_the_world	Wiring.cs	1335	6d76e87fdcfc	fa5703cc044c
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wired_sundial_and_moondial_jump_the_clock	Wiring.cs	1137-1176	682f27dbf344	9e64cc93229c
-crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	Main.cs	6342	7c0c82ce81e0	bd01fb5a250c
-crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	Main.cs	6343	3c02a1a5b76d	bd01fb5a250c
-crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	Main.cs	65601	8f010278c79f	bd01fb5a250c
-crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	Main.cs	66375-66376	be2391ccd678	bd01fb5a250c
-crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	NPC.cs	18183	1a7229c57414	bd01fb5a250c
-crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	NPC.cs	18581	3713bbfd76dc	bd01fb5a250c
-crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	WorldGen.cs	72082	85d3fcb1a04e	bd01fb5a250c
+crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	Main.cs	6342	7c0c82ce81e0	93319f41ca93
+crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	Main.cs	6343	3c02a1a5b76d	93319f41ca93
+crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	Main.cs	65601	8f010278c79f	93319f41ca93
+crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	Main.cs	66375-66376	be2391ccd678	93319f41ca93
+crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	NPC.cs	18183	1a7229c57414	93319f41ca93
+crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	NPC.cs	18581	3713bbfd76dc	93319f41ca93
+crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	NPC.cs	296-301	909f0bbbc2f3	93319f41ca93
+crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	WorldGen.cs	72082	85d3fcb1a04e	93319f41ca93
 crates/terrustia/src/game/server/tick.rs	mod freeze_time	Main.cs	6342	7c0c82ce81e0	b8da4ade4e08
 crates/terrustia/src/game/server/tick.rs	mod modify_time_rate	Main.cs	6343	3c02a1a5b76d	d37add5a96ff
 crates/terrustia/src/game/slime_rain.rs	(file)	Main.cs	9003	33260a5580d4	7743e9c0fc06

@@ -257,8 +257,18 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   Still narrowed, and each still disclosed at its own entry: the hardmode *damage* upgrades, the
   Cyborg's three-way projectile roll, the Pirate's close-range special, and the vertical
   aim-tolerance check.
-- **Slime Rain** collapses its per-type flags to one case and does not announce start and stop
-  instantly (`crates/terrustia/src/game/slime_rain.rs:39,84`).
+- ~~**Slime Rain** collapses its per-type flags to one case~~ **and had no spawns at all.** Fixed
+  2026-09-05: `NPC.SlimeRainSpawns` (`NPC.cs:5905-5967`) is transcribed, so the event is slimes
+  falling rather than a world flag and an announcement. Three of its four picks are negative net
+  ids - the Pinky at one in two hundred and the two coloured slimes - which no world this server
+  served had ever seen, because `Npc` carried no net id and packet 23 sent the type. The second
+  half of the old entry was simply wrong: vanilla does *not* announce a start or stop instantly
+  either (`slimeWarningDelay` is 420 ticks), and `slime_rain.rs`'s own module doc says so.
+- **All 65 negative net ids** were absent from every world this server served, and the Slime Rain
+  variants are only the first of them. `net_variants.rs` is the generated table
+  (`NPC.SetDefaultsFromNetId`) and `NpcStore::spawn_net_id` applies it; what remains is to route
+  the *other* callers - the small and big zombies and skeletons, the hornet families - through it,
+  which is a spawner change rather than a missing mechanism.
 - **Lantern Night's** manual-forcing toggle is unmodeled (`crates/terrustia/src/game/lantern_night.rs:43`).
 
 ## Structural
