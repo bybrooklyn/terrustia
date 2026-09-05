@@ -274,6 +274,10 @@ const FIREBALL_GRAVITY: f32 = 0.2;
 const FIREBALL_SPIN: f32 = 0.3;
 /// A falling star's own style (`Projectile.cs:24082-24133`), which is not a movement arm at all.
 const STAR_STYLE: i32 = 5;
+/// The Martian Saucer's missile (`Projectile.cs:31447-31513`). Its steering needs the player list
+/// and lives in `systems::tick_saucer_missiles`; what is read here is the tile-collision flag that
+/// phase turns on.
+const SAUCER_MISSILE_STYLE: i32 = 80;
 /// A dropped present (`Projectile.cs:29337-29366`): it drifts for half a second, tips over, and
 /// then settles into a slow fall it never exceeds.
 const PRESENT_DRIFT: f32 = 30.0;
@@ -553,12 +557,20 @@ pub fn step(
             projectile.position.0 + projectile.velocity.0,
             projectile.position.1 + projectile.velocity.1,
         );
-        // A falling star does not collide until it has been clear of terrain once, which its own
-        // arm latches into `ai[1]` above (`Projectile.cs:24170-24176`). Vanilla flips the
-        // projectile's `tileCollide` field; ours lives in the shared stats table, so the latch is
-        // read here instead of written there.
-        let collides = projectile.stats.tile_collide
-            && !(projectile.stats.ai_style == STAR_STYLE && projectile.ai[1] == 0.0);
+        // Two styles change their own `tileCollide` mid-flight. Vanilla flips the projectile's own
+        // field; ours lives in the shared stats table, so the condition is read here instead.
+        //
+        // A falling star does not collide until it has been clear of terrain once, which its arm
+        // latches into `ai[1]` above (`Projectile.cs:24170-24176`). A Saucer missile is the other
+        // way round: it starts with collision *off* so it can leave the hull it was fired from, and
+        // `tileCollide = true` is the first thing its homing phase does (`:31473`). That phase is
+        // driven from `systems::tick_saucer_missiles`, which is why only the flag it sets is read
+        // here.
+        let collides = match projectile.stats.ai_style {
+            STAR_STYLE => projectile.stats.tile_collide && projectile.ai[1] != 0.0,
+            SAUCER_MISSILE_STYLE => projectile.ai[0] == 1.0,
+            _ => projectile.stats.tile_collide,
+        };
         if collides {
             if projectile.stats.ai_style == 14 {
                 // A rolling ball bounces off what it hits instead of dying on it, and each axis is

@@ -1517,6 +1517,7 @@ crates/terrustia/src/game/projectile.rs	const BOULDER_STYLE	Projectile.cs	26596-
 crates/terrustia/src/game/projectile.rs	const FIREBALL_DELAY	Projectile.cs	24618-24641	a3a3d50ea0ac	3db63ed180c5
 crates/terrustia/src/game/projectile.rs	const MINE_DRAG	Projectile.cs	48354-48366	2e12d91f4f72	7ffcf1ca0811
 crates/terrustia/src/game/projectile.rs	const PRESENT_DRIFT	Projectile.cs	29337-29366	c0c2724d47dc	d510847d932f
+crates/terrustia/src/game/projectile.rs	const SAUCER_MISSILE_STYLE	Projectile.cs	31447-31513	5f7e5832de20	330fd0297785
 crates/terrustia/src/game/projectile.rs	const SNOWBALL	Projectile.cs	23838-23843	9c5588bcf0d2	b05e013d22bb
 crates/terrustia/src/game/projectile.rs	const STAR_STYLE	Projectile.cs	24082-24133	d5ae53ea4e5e	c91d032ff46c
 crates/terrustia/src/game/projectile.rs	const THROWN_DELAY	Projectile.cs	23907-23930	2e8c5b0e8c10	5f21d3d75a53
@@ -1527,16 +1528,17 @@ crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	48354	96b6b5078339
 crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	48378-48399	eb10839c0918	4425ece6bbd4
 crates/terrustia/src/game/projectile.rs	fn boulder	Projectile.cs	26361	684228bf3682	33118dd7193d
 crates/terrustia/src/game/projectile.rs	fn boulder	Projectile.cs	26596-26746	316f71664a22	33118dd7193d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	16781	651cda76400c	48495975e1fa
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	17308	6bcc82a4f969	48495975e1fa
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19056-19099	227d301575d8	48495975e1fa
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19872-19886	424f6fd70985	48495975e1fa
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23907-23930	2e8c5b0e8c10	48495975e1fa
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23945-23947	9f860f2ea5fa	48495975e1fa
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24170-24176	45ba72dd4bea	48495975e1fa
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24618-24641	a3a3d50ea0ac	48495975e1fa
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	29337-29366	c0c2724d47dc	48495975e1fa
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30655-30677	681d2a8a6429	48495975e1fa
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	16781	651cda76400c	a61921da376e
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	17308	6bcc82a4f969	a61921da376e
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19056-19099	227d301575d8	a61921da376e
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19872-19886	424f6fd70985	a61921da376e
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23907-23930	2e8c5b0e8c10	a61921da376e
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23945-23947	9f860f2ea5fa	a61921da376e
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24170-24176	45ba72dd4bea	a61921da376e
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24618-24641	a3a3d50ea0ac	a61921da376e
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	29337-29366	c0c2724d47dc	a61921da376e
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30655-30677	681d2a8a6429	a61921da376e
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	31473	20db8144f6b0	a61921da376e
 crates/terrustia/src/game/projectile.rs	impl Powder :: fn step	Projectile.cs	24366-24372	80818f04371c	ec35674f69cd
 crates/terrustia/src/game/projectile.rs	impl Projectile :: fn can_damage	Projectile.cs	12491-12494	0387966662de	039cb5d97aea
 crates/terrustia/src/game/projectile.rs	impl ProjectileStore :: fn launch	Projectile.cs	14916-14919	2c62941898b4	39a262f21b0e
@@ -1848,8 +1850,8 @@ crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	3272	43583
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	50299-50302	6583807eb5db	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72072-72079	2a6f4d26e0bc	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72406	6c77495a5649	c5414c9d223d
-crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	c33c72799bcc
-crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	c33c72799bcc
+crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	5c6ac5a30384
+crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	5c6ac5a30384
 crates/terrustia/src/game/server/systems.rs	const STINKY	BuffID.cs	393	0f6008fbeed1	cfaa20a1d46a
 crates/terrustia/src/game/server/systems.rs	fn player_has_buff	MessageBuffer.cs	2456-2477	87cb35363490	c08c9f289848
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	7363-7366	54960e839053	00e47302005c
@@ -1955,6 +1957,9 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_contact_d
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_contact_damage	Player.cs	31659-31661	02b5d71922dd	60eafe9e6830
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_contact_damage	Projectile.cs	14894	53d1ecd7924a	60eafe9e6830
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_contact_damage	Projectile.cs	14916-14919	2c62941898b4	60eafe9e6830
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage_sigils	NPC.cs	78239-78250	fe59b001dcfe	0b27f798f588
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage_sigils	Projectile.cs	37106-37169	30e0c14a17a1	0b27f798f588
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage_sigils :: const HEAL_COLOUR	CombatText.cs	20	62671f7b672b	ee87118e9183
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_detonators	Wiring.cs	212-244	5b1abb2df77d	872824d143e1
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_falling_stars	Projectile.cs	24093-24096	28b56f64c3b2	e00246a023eb
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_falling_stars	Projectile.cs	54028-54061	ca61f3a28f72	e00246a023eb
@@ -1984,6 +1989,8 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_powders	N
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_powders	NPC.cs	5623	05f14efbef73	2b70277c367a
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_powders	Projectile.cs	14787-14826	13d58afc83ac	2b70277c367a
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_powders	Projectile.cs	14818-14824	34c13fddf29a	2b70277c367a
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_saucer_missiles	Projectile.cs	31447-31513	5f7e5832de20	872e9b5f68f8
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_saucer_missiles :: const ARMING	NPC.cs	36188	8b07badc686f	a73bcf73ed47
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_slime_rain	Main.cs	1282	8477db5e0c24	8af7d7d11ccb
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_slime_rain	Main.cs	65906	dfc952dd9dd9	8af7d7d11ccb
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_slime_rain_spawns	NPC.cs	296-301	909f0bbbc2f3	33721ab50bb6
@@ -2073,6 +2080,9 @@ crates/terrustia/src/game/server/systems.rs	mod town_buff_defense :: fn tipsy_mu
 crates/terrustia/src/game/server/systems.rs	mod town_npc_persistence :: fn a_hurt_town_npc_regenerates_toward_full_but_not_past_it	NPC.cs	93622-93648	010e3ba392cf	236de0cc0736
 crates/terrustia/src/game/server/systems.rs	mod town_npc_persistence :: fn the_travelling_merchant_is_not_recorded_as_a_resident	WorldFile.cs	1724	388194be7fb6	64f274755cda
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_bunny_cannon_stops_at_four_bunnies	WorldGen.cs	51158-51199	56744b1290a5	8e10f18e2b08
+crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_dark_mage_sigil_heals_the_hurt_around_it_and_then_goes	Projectile.cs	37136-37168	1cca9536b7cf	1b6062476488
+crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_saucer_missile_arms_and_then_turns_onto_the_closest_player	Projectile.cs	31447-31513	5f7e5832de20	dab5a3ce5abe
+crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_saucer_missile_burns_out_after_three_seconds	Projectile.cs	31479-31483	f0d13c9e9e8c	814935cf3622
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wired_boulder_statue_drops_one_boulder_and_then_waits	Wiring.cs	1998-2017	4d8907ffa0f3	9b3d1f3bf45c
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wired_cannon_locks_out_every_other_cannon_in_the_world	Wiring.cs	1318	7da6c7163485	fa5703cc044c
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wired_cannon_locks_out_every_other_cannon_in_the_world	Wiring.cs	1335	6d76e87fdcfc	fa5703cc044c

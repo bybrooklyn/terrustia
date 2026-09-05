@@ -297,14 +297,29 @@ Closed 2026-09-05, each neutralisation-verified:
   colliding until it has been clear of terrain once.
 - **Style 58, the present**, and **style 68, the ale**: both plain arcs with their own numbers.
 
-**The 26 that remain, read against `Projectile.cs` rather than assumed.** Two styles genuinely never
-touch a velocity (79, 133); twelve steer inline (45, 58 closed, 65, 68 closed, 80, 84, 98, 102, 109,
-112, 128); eleven delegate to an `AI_NNN_` method of their own (111, 135, 136, 149, 157, 171, 173,
-179, 180, 183, 186, 187). **None of them falls**: they are lasers, deathrays, homing bolts and
-hovering clouds, so a straight line is a poorer approximation than it was of a thrown bone rather
-than a free one. Ranked by what a player would notice, the next three are the Saucer's deathray and
-missile (79/80), the Empress's four lances and streaks (171/173/179/180), and the Dark Mage's two
-(133).
+**Two more closed the same day, and neither was a movement gap** - which is why reading the styles
+rather than counting them mattered:
+
+- **Style 80, the Saucer's missile.** It arms for twenty ticks with tile collision *off* (so a
+  saucer can fire from inside its own hull), locks onto whoever is closest, speeds up by four, and
+  turns a fifth of the remaining angle at them every tick for half a second, then burns out at 180.
+  It flew where it was pointed and never turned, so the Saucer's missile phase was a spread you
+  could stand still and watch go past. In `systems::tick_saucer_missiles`, beside the Moon Lord's
+  brand, because `Player.FindClosest` is a search a projectile cannot do from inside its own tick.
+- **Style 133, the Dark Mage's two sigils, and this one was the worst of the set.** The heal sweeps
+  every hurt NPC within a thousand pixels for up to 500 life and then ends itself
+  (`Projectile.cs:37136-37168`); the raise is a telegraph that ends itself at eighty ticks.
+  `army/mage.rs` already had the entire decision to cast it - it counts hurt things nearby and skips
+  straight to raising when fewer than two are worth healing - and then threw a sigil that healed
+  nothing and lingered for 900 ticks. The mage's signature spell was a decision with no consequence,
+  which is the "produced but never consumed" shape the C2 audit named as root cause R4.
+
+**22 types remain, across twenty styles**, read against `Projectile.cs` rather than assumed: 45, 65,
+84, 98, 102 (2), 109, 111, 112 (2), 128, 135, 136, 149, 157, 171, 173, 179, 180, 183, 186, 187. Eight
+steer inline and twelve delegate to an `AI_NNN_` method of their own. **None of them falls**: they
+are lasers, deathrays, homing bolts and hovering clouds, so a straight line is a poorer
+approximation than it was of a thrown bone rather than a free one. Ranked by what a player would
+notice, the next is the Empress of Light's four lances and streaks (171/173/179/180).
 
 **The explosion is the other half of style 16 and is not modelled.** A bomb reaches the ground and
 expires; `Projectile.Kill`'s own switch widens the hitbox and breaks tiles, so a grenade lands and

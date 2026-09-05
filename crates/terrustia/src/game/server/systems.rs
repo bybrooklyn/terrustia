@@ -1974,6 +1974,204 @@ impl GameServer {
     }
 
     /// Move every projectile, and remove the ones that are finished.
+    /// The Dark Mage's healing sigil actually heals, and its summoning circle stops lingering.
+    ///
+    /// `aiStyle == 133` (`Projectile.cs:37106-37169`). Both are the mage's own spells and neither
+    /// does anything to what it touches: the heal sweeps every hurt NPC within a thousand pixels,
+    /// and the raise is purely a telegraph that ends itself.
+    ///
+    /// **The heal did nothing at all before this.** `army/mage.rs` has the whole decision - it
+    /// counts hurt things nearby and skips straight to raising when fewer than two are worth
+    /// healing - and then threw a sigil that was an ordinary hostile projectile with a 900-tick
+    /// life. The mage's signature spell, the reason a wave of goblins is hard to grind down, was a
+    /// decision with no consequence: exactly the "produced but never consumed" shape this project's
+    /// own audit named as a root cause.
+    ///
+    /// Vanilla's filter is unusual and transcribed as-is: `damage >= 1` (so it will not heal a
+    /// critter or a town NPC), `lifeMax >= 30` (nor anything trivial), and an explicit exclusion of
+    /// 564 and 565, which are the Old One's Army's own crystal and its portal.
+    fn tick_dark_mage_sigils(&mut self) {
+        use terrustia_proto::projectile::ids::{DARK_MAGE_HEAL, DARK_MAGE_PORTAL};
+
+        /// `this.ai[0] >= 40f` for the heal, `>= 80f` for the raise's fade-out.
+        const HEAL_AT: f32 = 40.0;
+        const RAISE_ENDS: f32 = 80.0;
+        /// `num1025 = 500`, capped at what the target is actually missing.
+        const HEAL_FOR: i32 = 500;
+        const HEAL_RANGE: f32 = 1000.0;
+        /// `CombatText.HealLife` (`CombatText.cs:20`), packed the way packet 81 carries it.
+        const HEAL_COLOUR: (u8, u8, u8) = (100, 255, 100);
+
+        let sigils: Vec<(u16, u16, (f32, f32))> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| matches!(p.projectile_type, DARK_MAGE_HEAL | DARK_MAGE_PORTAL))
+            .map(|(index, p)| (index, p.projectile_type, p.center()))
+            .collect();
+        let mut spent = Vec::new();
+        let mut healed = Vec::new();
+        for (index, kind, centre) in sigils {
+            let Some(sigil) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            sigil.ai[0] += 1.0;
+            let age = sigil.ai[0];
+            if kind == DARK_MAGE_PORTAL {
+                // The raise is a fade in, a hold and a fade out, and then it is gone. Only the last
+                // of those is a server's business.
+                if age >= RAISE_ENDS {
+                    spent.push(index);
+                }
+                continue;
+            }
+            if age < HEAL_AT {
+                continue;
+            }
+            for (npc_index, npc) in self.npcs.iter_mut() {
+                let missing = npc.life_max - npc.life;
+                if npc.stats.damage < 1
+                    || npc.life_max < 30
+                    || matches!(npc.npc_type, 564 | 565)
+                    || missing <= 0
+                {
+                    continue;
+                }
+                let hitbox = npc.center();
+                if (hitbox.0 - centre.0).hypot(hitbox.1 - centre.1) > HEAL_RANGE {
+                    continue;
+                }
+                let amount = HEAL_FOR.min(missing);
+                npc.life += amount;
+                npc.dirty = true;
+                healed.push((npc_index, hitbox, amount));
+            }
+            spent.push(index);
+        }
+        for (index, at, amount) in healed {
+            // `NPC.HealEffect` on a server is one packet and no particles (`NPC.cs:78239-78250`).
+            let mut w = terrustia_proto::PacketWriter::new(terrustia_proto::id::COMBAT_TEXT_INT);
+            w.f32(at.0)
+                .f32(at.1)
+                .u8(HEAL_COLOUR.0)
+                .u8(HEAL_COLOUR.1)
+                .u8(HEAL_COLOUR.2)
+                .i32(amount);
+            if let Ok(frame) = w.finish() {
+                self.broadcast(frame, None);
+            }
+            self.broadcast_npc(index);
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
+    /// The Martian Saucer's missile: it arms, picks whoever is closest, and turns hard at them.
+    ///
+    /// `aiStyle == 80` (`Projectile.cs:31447-31513`), and it lives here rather than in
+    /// `projectile::step` for the same reason the Moon Lord's brand does - `Player.FindClosest` is
+    /// a search over the player list, which a projectile cannot see from inside its own tick.
+    ///
+    /// Three phases. It coasts for twenty ticks with **no tile collision at all**, which is what
+    /// lets a saucer fire from inside its own hull; then it locks on, speeds up by four, and turns
+    /// a fifth of the remaining angle toward its target every tick for half a second; then it flies
+    /// straight, now colliding, until it hits something or its three-second fuse runs out.
+    ///
+    /// Before this the missile went where it was pointed and never turned, so the Saucer's whole
+    /// missile phase was a spread of shots you could stand still and watch go past.
+    fn tick_saucer_missiles(&mut self) {
+        use terrustia_proto::projectile::ids::SAUCER_MISSILE;
+
+        /// Vanilla passes this as `ai1` at the `NewProjectile` call (`NPC.cs:36188`, `20f`). It is
+        /// seeded here instead because `Shot` carries no ai values and one launch-site constant for
+        /// one projectile type is not worth a field on every shot in the game.
+        const ARMING: f32 = 20.0;
+        /// `num634`, `num636` and the share of the angle closed per tick.
+        const FUSE: f32 = 180.0;
+        const HOMING_FOR: f32 = 30.0;
+        const TURN: f64 = 0.2;
+        /// What locking on adds to its speed.
+        const SPEED_UP: f32 = 4.0;
+
+        let missiles: Vec<u16> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == SAUCER_MISSILE)
+            .map(|(index, _)| index)
+            .collect();
+        let mut spent = Vec::new();
+        for index in missiles {
+            let Some(missile) = self.projectiles.get(index) else {
+                continue;
+            };
+            let (centre, phase) = (missile.center(), missile.ai[0]);
+            // `Player.FindClosest(position, width, height)`, resolved before the mutable borrow.
+            let target = self
+                .closest_player(centre, (0, 0))
+                .and_then(|slot| self.player(slot))
+                .map(|p| {
+                    (
+                        p.position.0 + PLAYER_HALF_WIDTH,
+                        p.position.1 + PLAYER_HEIGHT / 2.0,
+                    )
+                });
+            let Some(missile) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            if missile.local_ai[0] == 0.0 {
+                missile.local_ai[0] = 1.0;
+                missile.ai[1] = ARMING;
+            }
+            if phase == 0.0 {
+                if missile.ai[1] > 0.0 {
+                    missile.ai[1] -= 1.0;
+                    continue;
+                }
+                // Lock on. Vanilla stores the target's slot in `ai[1]`; this reads the closest
+                // player fresh each tick instead, which is the same player unless one dies or
+                // disconnects mid-flight - in which case following the live answer is better than
+                // steering at an empty slot.
+                missile.ai[0] = 1.0;
+                let speed = missile.velocity.0.hypot(missile.velocity.1);
+                if speed > 0.0 {
+                    let scale = (speed + SPEED_UP) / speed;
+                    missile.velocity.0 *= scale;
+                    missile.velocity.1 *= scale;
+                }
+                missile.dirty = true;
+                continue;
+            }
+            missile.local_ai[1] += 1.0;
+            if missile.local_ai[1] >= FUSE {
+                spent.push(index);
+                continue;
+            }
+            if missile.local_ai[1] < HOMING_FOR
+                && let Some(at) = target
+            {
+                let to = (at.0 - centre.0, at.1 - centre.1);
+                let heading = f64::from(missile.velocity.1.atan2(missile.velocity.0));
+                let wanted = f64::from(to.1.atan2(to.0));
+                // The shorter way round, which is what vanilla's two pi corrections are for.
+                let mut turn = wanted - heading;
+                if turn > std::f64::consts::PI {
+                    turn -= std::f64::consts::TAU;
+                }
+                if turn < -std::f64::consts::PI {
+                    turn += std::f64::consts::TAU;
+                }
+                let (sin, cos) = (turn * TURN).sin_cos();
+                let (sin, cos) = (sin as f32, cos as f32);
+                let v = missile.velocity;
+                missile.velocity = (v.0 * cos - v.1 * sin, v.0 * sin + v.1 * cos);
+                missile.dirty = true;
+            }
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
     pub(super) fn tick_projectiles(&mut self) {
         // Before the movement below, matching `Projectile.Update`'s own order: the AI runs, and
         // then what survives it moves.
@@ -1982,6 +2180,11 @@ impl GameServer {
         // at a *particular* player and dies on the boss that made it, neither of which a projectile
         // can see from inside its own tick.
         self.tick_moon_leech_brands();
+        // And the Saucer's missile, which picks its own target out of the player list.
+        self.tick_saucer_missiles();
+        // And the Dark Mage's two sigils, which act on the NPCs around them rather than on whatever
+        // they touch.
+        self.tick_dark_mage_sigils();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -9311,6 +9514,147 @@ mod wired_mines_and_doors {
             .projectiles
             .iter()
             .any(|(_, p)| p.projectile_type == projectile_type)
+    }
+
+    /// The Dark Mage's sigil heals the hurt things around it, and stops after one sweep.
+    ///
+    /// `Projectile.cs:37136-37168`. `army/mage.rs` had the entire decision to cast it - it counts
+    /// hurt things nearby and skips to raising when fewer than two are worth healing - and then
+    /// threw a projectile that healed nothing, so the mage's signature spell was a decision with no
+    /// consequence.
+    ///
+    /// Vanilla's filter is asserted alongside the heal because it is unusual and easy to widen by
+    /// accident: `damage >= 1` and `lifeMax >= 30` between them mean a critter standing in the
+    /// wave is not healed.
+    #[test]
+    fn a_dark_mage_sigil_heals_the_hurt_around_it_and_then_goes() {
+        use terrustia_proto::projectile::ids::DARK_MAGE_HEAL;
+
+        let world = crate::world::World::empty(500, 300, "sigil probe");
+        let mut server = GameServer::new(Config::default(), world);
+
+        // A hurt Goblin Warrior in reach, and a hurt Bunny standing next to it.
+        let goblin = server.npcs.spawn(29, (2000.0, 2000.0)).expect("a goblin");
+        let bunny = server.npcs.spawn(46, (2020.0, 2000.0)).expect("a bunny");
+        for index in [goblin, bunny] {
+            let npc = server.npcs.get_mut(index).expect("just spawned");
+            npc.life = 1;
+        }
+        let goblin_max = server.npcs.get(goblin).expect("the goblin").life_max;
+
+        let sigil = server
+            .projectiles
+            .launch(DARK_MAGE_HEAL, (2000.0, 2000.0), (0.0, 0.0), 0, 900)
+            .expect("the sigil is a known type");
+        for _ in 0..39 {
+            server.tick_dark_mage_sigils();
+        }
+        assert_eq!(
+            server.npcs.get(goblin).expect("the goblin").life,
+            1,
+            "the wave should not land before its fortieth tick"
+        );
+
+        server.tick_dark_mage_sigils();
+        assert_eq!(
+            server.npcs.get(goblin).expect("the goblin").life,
+            goblin_max,
+            "and then it should heal the goblin to full"
+        );
+        assert_eq!(
+            server.npcs.get(bunny).expect("the bunny").life,
+            1,
+            "but never a critter: `damage >= 1 && lifeMax >= 30` excludes it"
+        );
+        assert!(
+            server.projectiles.get(sigil).is_none(),
+            "and the sigil is spent after its one sweep"
+        );
+    }
+
+    /// The Saucer's missile arms, locks on, and turns hard at whoever is closest.
+    ///
+    /// `aiStyle == 80` (`Projectile.cs:31447-31513`). Fired straight *up* at a player standing to
+    /// one side, so nothing but the homing phase can bring it round: before the fix the missile
+    /// went where it was pointed for its whole life and the Saucer's missile phase was a spread of
+    /// shots you could stand still and watch go past.
+    ///
+    /// The twenty coasting ticks are asserted first and separately, because they are what lets a
+    /// saucer fire from inside its own hull, and a missile that started homing immediately would
+    /// pass this test's second half while breaking that.
+    #[test]
+    fn a_saucer_missile_arms_and_then_turns_onto_the_closest_player() {
+        use terrustia_proto::projectile::ids::SAUCER_MISSILE;
+
+        let world = crate::world::World::empty(500, 300, "missile probe");
+        let mut server = GameServer::new(Config::default(), world);
+        let (out_tx, _out_rx) = mpsc::channel(256);
+        let mut player = Player::new(0, "127.0.0.1:1".parse().expect("loopback"), out_tx);
+        player.state = ConnState::Playing;
+        player.life = 100;
+        player.position = (2600.0, 2000.0);
+        server.players[0] = Some(player);
+
+        // Straight up, from well to the player's left.
+        let index = server
+            .projectiles
+            .launch(SAUCER_MISSILE, (2000.0, 2000.0), (0.0, -8.0), 50, 600)
+            .expect("the missile is a known type");
+
+        for _ in 0..20 {
+            server.tick_saucer_missiles();
+        }
+        let armed = server.projectiles.get(index).expect("still in the air");
+        assert_eq!(
+            armed.velocity,
+            (0.0, -8.0),
+            "it should still be coasting on the twentieth tick, not steering"
+        );
+        assert_eq!(armed.ai[0], 0.0, "and not locked on yet");
+
+        for _ in 0..12 {
+            server.tick_saucer_missiles();
+        }
+        let homing = server.projectiles.get(index).expect("still in the air");
+        assert_eq!(homing.ai[0], 1.0, "it should have locked on");
+        assert!(
+            homing.velocity.0 > 2.0,
+            "and be turning east onto the player, not still going {:?}",
+            homing.velocity
+        );
+        assert!(
+            homing.velocity.0.hypot(homing.velocity.1) > 8.0,
+            "having sped up by four on lock-on: {}",
+            homing.velocity.0.hypot(homing.velocity.1)
+        );
+    }
+
+    /// ...and it dies on its own fuse rather than flying for ever (`Projectile.cs:31479-31483`).
+    #[test]
+    fn a_saucer_missile_burns_out_after_three_seconds() {
+        use terrustia_proto::projectile::ids::SAUCER_MISSILE;
+
+        let world = crate::world::World::empty(500, 300, "missile fuse probe");
+        let mut server = GameServer::new(Config::default(), world);
+        let (out_tx, _out_rx) = mpsc::channel(256);
+        let mut player = Player::new(0, "127.0.0.1:1".parse().expect("loopback"), out_tx);
+        player.state = ConnState::Playing;
+        player.life = 100;
+        player.position = (2600.0, 2000.0);
+        server.players[0] = Some(player);
+
+        let index = server
+            .projectiles
+            .launch(SAUCER_MISSILE, (2000.0, 2000.0), (0.0, -8.0), 50, 3600)
+            .expect("the missile is a known type");
+        // Twenty to arm, one to lock on, then a hundred and eighty of flight.
+        for _ in 0..(20 + 1 + 180) {
+            server.tick_saucer_missiles();
+        }
+        assert!(
+            server.projectiles.get(index).is_none(),
+            "the missile outlived its own fuse"
+        );
     }
 
     /// A Boulder Statue the current reached drops its boulder, and then does not drop another until
