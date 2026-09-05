@@ -2592,7 +2592,12 @@ impl GameServer {
         } else {
             value
         };
-        self.drop_coins(value, center, midas);
+        // `NPCLoot_DropMoney(closestPlayer)` reads the same closest player's luck the loot rules
+        // do (`NPC.cs:80439`).
+        let coin_luck = self
+            .closest_player(center, (0, 0))
+            .map_or(0.0, |slot| self.luck_of(slot));
+        self.drop_coins(value, center, midas, coin_luck);
         self.drop_loot(
             npc_type,
             center,
@@ -2942,6 +2947,13 @@ impl GameServer {
             red_hat_skeletron,
             empress_genuinely_enraged,
         };
+        // `NPCLoot_DropItems(closestPlayer)` (`NPC.cs:79741-79752`) puts the *closest* player in
+        // `DropAttemptInfo.player`, and `closestPlayer` is `Main.player[Player.FindClosest(
+        // position, width, height)]` (`NPC.cs:79649`) - not whoever dealt the damage. Every
+        // luck-scaled rule below reads this one number.
+        let credited_luck = self
+            .closest_player(center, (0, 0))
+            .map_or(0.0, |slot| self.luck_of(slot));
 
         // Pools that give exactly one of their options.
         for pool in terrustia_proto::conditional_drops::one_from(npc_type, at) {
@@ -2970,7 +2982,7 @@ impl GameServer {
         }
         // Chance-gated pools: roll the gate first, and only on success pick which option.
         for pool in terrustia_proto::conditional_drops::chance_pools(npc_type, at) {
-            if pool.one_in > 1 && !rand::Rng::random_ratio(&mut self.rng, 1, pool.one_in) {
+            if !self.drop_roll_lands(pool.one_in, 1, pool.scaling, credited_luck) {
                 continue;
             }
             let pick = pool.options[rand::Rng::random_range(&mut self.rng, 0..pool.options.len())];
@@ -2986,9 +2998,7 @@ impl GameServer {
             // rules (`CommonDrop`/`ByCondition`'s own `chanceNumerator`) roll `M`-in-`N` instead —
             // `rule.numerator` is `1` for everything but those, so this is exactly the old roll for
             // every rule that never needed the field.
-            if rule.one_in > 1
-                && !rand::Rng::random_ratio(&mut self.rng, rule.numerator, rule.one_in)
-            {
+            if !self.drop_roll_lands(rule.one_in, rule.numerator, rule.scaling, credited_luck) {
                 continue;
             }
             // The expert treasure bag is instanced, not shared: one for each interacting player,
@@ -3016,13 +3026,19 @@ impl GameServer {
             // it every kill. Rolled before the links rather than folded into the first one,
             // because it gates the *chain* - failing it means no link is tried, not that the
             // chain falls through to its second link.
-            if chain.one_in > 1 && !rand::Rng::random_ratio(&mut self.rng, 1, chain.one_in) {
+            // The outer gate is the moon event's own `FrostMoonDropGatingChance`, which rolls
+            // `info.player.RollLuck(num2)` (`Terraria.GameContent.ItemDropRules/Conditions.cs:77`), so it scales like an ordinary
+            // drop rather than being a bare rng roll.
+            if !self.drop_roll_lands(
+                chain.one_in,
+                1,
+                terrustia_proto::npc_drops::LuckScaling::Full,
+                credited_luck,
+            ) {
                 continue;
             }
             for rule in chain.links {
-                if rule.one_in > 1
-                    && !rand::Rng::random_ratio(&mut self.rng, rule.numerator, rule.one_in)
-                {
+                if !self.drop_roll_lands(rule.one_in, rule.numerator, rule.scaling, credited_luck) {
                     continue;
                 }
                 let stack = if rule.max > rule.min {
@@ -3034,7 +3050,7 @@ impl GameServer {
                 break;
             }
         }
-        self.drop_flat_loot(npc_type, center);
+        self.drop_flat_loot(npc_type, center, credited_luck);
     }
 
     /// The item a `one_from`/`chance_pools` pick brings with it automatically, if any — Golem's
@@ -3055,10 +3071,10 @@ impl GameServer {
     }
 
     /// The unconditional table.
-    fn drop_flat_loot(&mut self, npc_type: u16, center: (f32, f32)) {
+    fn drop_flat_loot(&mut self, npc_type: u16, center: (f32, f32), luck: f32) {
         for chain in terrustia_proto::npc_drops::drops(npc_type) {
             for rule in *chain {
-                if !rand::Rng::random_ratio(&mut self.rng, 1, rule.one_in) {
+                if !self.drop_roll_lands(rule.one_in, 1, rule.luck, luck) {
                     continue;
                 }
                 let stack = if rule.max > rule.min {
@@ -3079,37 +3095,60 @@ impl GameServer {
     /// on a blood moon and raised by Midas, then peeled off largest-denomination-first into several
     /// scattered stacks rather than one. The old code paid the raw value as one tidy pile of coins.
     ///
-    /// Two disclosed narrowings. The luck double-roll (`num2 = 2` when a `luck` check passes, keep
-    /// the better or, for bad luck, worse of two rolls) is left out: the server does not track a
-    /// player's luck, so luck reads as zero and the roll happens once, which is the exact `luck ==
-    /// 0` behaviour. And the divide-into-more-stacks step is guarded to leave at least one coin of a
-    /// denomination it has entered, where source lets platinum/gold/silver divide to zero: that is a
-    /// latent spin loop and empty-item drop in source (only its copper branch guards it), unwanted
-    /// on this server's packet path.
-    fn drop_coins(&mut self, value: f32, center: (f32, f32), midas: bool) {
+    /// The luck double-roll is modelled now that the server has a real luck figure per player:
+    /// `num2 = 2` when `Main.rand.NextFloat() < Math.Abs(luck)` passes, and the second roll
+    /// replaces the first only in the direction the luck points. It was left out before with the
+    /// note that "the server does not track a player's luck", which was true of this server and
+    /// never true of the game's.
+    ///
+    /// One narrowing remains, and it is a deliberate divergence rather than a gap: the
+    /// divide-into-more-stacks step is guarded to leave at least one coin of a denomination it has
+    /// entered, where source lets platinum/gold/silver divide to zero. That is a latent spin loop
+    /// and an empty-item drop in source (only its copper branch guards it), unwanted on this
+    /// server's packet path.
+    fn drop_coins(&mut self, value: f32, center: (f32, f32), midas: bool, luck: f32) {
         if value <= 0.0 {
             return;
         }
-        let mut num = value;
-        if midas {
-            num *= 1.0 + rand::Rng::random_range(&mut self.rng, 30..=50) as f32 * 0.01;
-        }
-        num *= 1.0 + rand::Rng::random_range(&mut self.rng, -20..=75) as f32 * 0.01;
-        // The jackpot cascade: each rarer than the last, and each worth a little more.
-        for (one_in, lo, hi) in [
-            (2u32, 5i32, 10i32),
-            (4, 10, 20),
-            (8, 15, 30),
-            (16, 20, 40),
-            (32, 25, 50),
-            (64, 50, 100),
-        ] {
-            if rand::Rng::random_ratio(&mut self.rng, 1, one_in) {
-                num *= 1.0 + rand::Rng::random_range(&mut self.rng, lo..=hi) as f32 * 0.01;
+        // `if (Main.rand.NextFloat() < Math.Abs(luck)) { num2 = 2; }` (`NPC.cs:80440-80443`): luck
+        // in *either* direction sometimes buys a second roll of the whole payout, and which of the
+        // two is kept is decided by the sign - the larger for good luck, the smaller for bad. So
+        // being unlucky costs money as reliably as being lucky earns it, and the number of rolls
+        // is the same either way.
+        let rolls = if rand::Rng::random::<f32>(&mut self.rng) < luck.abs() {
+            2
+        } else {
+            1
+        };
+        let mut num = 0.0f32;
+        for roll in 0..rolls {
+            let mut this = value;
+            if midas {
+                this *= 1.0 + rand::Rng::random_range(&mut self.rng, 30..=50) as f32 * 0.01;
             }
-        }
-        if self.world.blood_moon {
-            num *= 1.0 + rand::Rng::random_range(&mut self.rng, 0..=100) as f32 * 0.01;
+            this *= 1.0 + rand::Rng::random_range(&mut self.rng, -20..=75) as f32 * 0.01;
+            // The jackpot cascade: each rarer than the last, and each worth a little more.
+            for (one_in, lo, hi) in [
+                (2u32, 5i32, 10i32),
+                (4, 10, 20),
+                (8, 15, 30),
+                (16, 20, 40),
+                (32, 25, 50),
+                (64, 50, 100),
+            ] {
+                if rand::Rng::random_ratio(&mut self.rng, 1, one_in) {
+                    this *= 1.0 + rand::Rng::random_range(&mut self.rng, lo..=hi) as f32 * 0.01;
+                }
+            }
+            if self.world.blood_moon {
+                this *= 1.0 + rand::Rng::random_range(&mut self.rng, 0..=100) as f32 * 0.01;
+            }
+            // `if (i == 0) { num = num3; } else if (luck < 0f) { if (num3 < num) ... } else if
+            // (num3 > num) ...` - the first roll is taken outright, and the second only replaces
+            // it in the direction the luck points.
+            if roll == 0 || (luck < 0.0 && this < num) || (luck >= 0.0 && this > num) {
+                num = this;
+            }
         }
 
         // Peel denominations off the top, scattering each into its own stack, high to low: copper
@@ -6111,6 +6150,44 @@ impl GameServer {
         if self.weather.coin_rain < 0 {
             self.weather.coin_rain = 0;
         }
+    }
+
+    /// Whether one drop rule's own roll lands, with the credited player's luck applied the way
+    /// that rule's vanilla class applies it.
+    ///
+    /// The three classes are not interchangeable and the difference is real
+    /// (`terrustia_proto::npc_drops::LuckScaling`'s own doc has the citations): an ordinary
+    /// `CommonDrop` is `info.player.RollLuck(chanceDenominator) < chanceNumerator`
+    /// (`CommonDrop.cs:36`), so a lucky player really does see more of everything;
+    /// `CommonDropNotScalingWithLuck` rolls `info.rng` and cannot be helped; and
+    /// `CommonDropScalingWithOnlyBadLuck` is `RollOnlyBadLuck`, where being unlucky makes the drop
+    /// *likelier* and being lucky does nothing.
+    ///
+    /// `< numerator` rather than `== 0`: `chanceNumerator` is usually 1, which makes the two the
+    /// same, and is not always.
+    fn drop_roll_lands(
+        &mut self,
+        one_in: u32,
+        numerator: u32,
+        scaling: terrustia_proto::npc_drops::LuckScaling,
+        luck: f32,
+    ) -> bool {
+        use terrustia_proto::npc_drops::LuckScaling;
+        let Ok(range) = i32::try_from(one_in) else {
+            return false;
+        };
+        let Ok(numerator) = i32::try_from(numerator) else {
+            return false;
+        };
+        let effective = match scaling {
+            LuckScaling::Full => luck,
+            LuckScaling::None => 0.0,
+            // `RollOnlyBadLuck(luck, range)` is `RollLuck` with its good-luck branch deleted
+            // (`Luck.cs:31-38`), which is the same thing as rolling with the good half of the luck
+            // discarded.
+            LuckScaling::OnlyBad => luck.min(0.0),
+        };
+        self.roll_luck(effective, range) < numerator
     }
 
     /// `Luck.RollLuck(luck, range)` against this server's own rng.
@@ -9953,7 +10030,7 @@ mod godmode {
             p.state = ConnState::Playing;
             server.players[0] = Some(p);
             server.rng = rand::rngs::SmallRng::seed_from_u64(seed);
-            server.drop_coins(FACE, (1000.0, 1000.0), false);
+            server.drop_coins(FACE, (1000.0, 1000.0), false, 0.0);
             let mut total = 0i64;
             while let Ok(frame) = rx.try_recv() {
                 if frame.len() >= 23 && frame[2] == terrustia_proto::id::SYNC_ITEM {

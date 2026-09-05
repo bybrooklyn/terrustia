@@ -33,11 +33,40 @@ use crate::csharp::{read_lossy, resolve_locals};
 /// condition of their own. Anything else is left for the hand-written table.
 ///
 /// `ScalingWithOnlyBadLuck` (`ItemDropRule.cs:45-48`) has exactly `Common`'s signature and no
-/// condition; it only changes how the player's luck stat bends the roll, which this project does
-/// not model either way. Leaving it out lost the Groom's and Bride's Bloody Tear entirely.
+/// condition; it only changes how the player's luck stat bends the roll. It is *which* of these
+/// five a rule is that decides that, so the name is captured and carried through to the table
+/// rather than discarded: see [`luck_of`].
 const FLAT: &str = "Common|NotScalingWithLuck|ScalingWithOnlyBadLuck|Food|StatusImmunityItem";
 
-type Rule = (i64, i64, i64, i64);
+/// (item, one_in, min, max, luck-scaling variant name as `npc_drops` spells it).
+type Rule = (i64, i64, i64, i64, &'static str);
+
+/// Which `Luck` roll a `FLAT` constructor's rule uses, by the class it returns.
+///
+/// - `Common` -> `CommonDrop`, whose `TryDroppingItem` is
+///   `info.player.RollLuck(chanceDenominator) < chanceNumerator` (`CommonDrop.cs:36`). Full luck,
+///   and this is vanilla's default: an ordinary drop scales unless it is one of the exceptions.
+/// - `Food` -> `ItemDropWithConditionRule`, which extends `CommonDrop` and inherits that roll
+///   (`ItemDropRule.cs:107-110`).
+/// - `StatusImmunityItem` -> `ExpertGetsRerolls` -> `CommonDropWithRerolls`, which also rolls
+///   `info.player.RollLuck` (`ItemDropRule.cs:112-115`, `CommonDropWithRerolls.cs`).
+/// - `NotScalingWithLuck` -> `CommonDropNotScalingWithLuck`, which rolls `info.rng.Next` and is
+///   the reason this distinction has to exist at all (`ItemDropRule.cs:50-53`).
+/// - `ScalingWithOnlyBadLuck` -> `CommonDropScalingWithOnlyBadLuck`, whose roll is
+///   `info.player.RollOnlyBadLuck` (`CommonDropScalingWithOnlyBadLuck.cs:17`): bad luck makes it
+///   *more* likely and good luck does nothing at all.
+///
+/// An unrecognised name is `Full`, which is the safe default in the sense that matters: it is what
+/// `Common` is, and `Common` is the overwhelming majority. A new constructor added to `FLAT`
+/// without a case here would be silently luck-scaled, so `FLAT` and this function are meant to be
+/// edited together.
+fn luck_of(constructor: &str) -> &'static str {
+    match constructor {
+        "NotScalingWithLuck" => "LuckScaling::None",
+        "ScalingWithOnlyBadLuck" => "LuckScaling::OnlyBad",
+        _ => "LuckScaling::Full",
+    }
+}
 type Chain = Vec<Rule>;
 
 /// Split one call's arguments, respecting nested parentheses, starting just past the opening `(`
@@ -261,7 +290,7 @@ fn parse(text: &str) -> (BTreeMap<i64, Vec<Chain>>, usize) {
             let one_in: i64 = caps.get(3).map_or(1, |m| m.as_str().parse().unwrap());
             let min: i64 = caps.get(4).map_or(1, |m| m.as_str().parse().unwrap());
             let max: i64 = caps.get(5).map_or(1, |m| m.as_str().parse().unwrap());
-            rules.push((item, one_in, min, max));
+            rules.push((item, one_in, min, max, luck_of(&caps[1])));
         }
         // `NormalvsExpert(item, classicChance, expertChance)` rolls at a different rate depending
         // on the world. The classic branch is taken here and the difference is a known
@@ -270,7 +299,10 @@ fn parse(text: &str) -> (BTreeMap<i64, Vec<Chain>>, usize) {
         for caps in normal_vs_expert_re.captures_iter(&line) {
             let item: i64 = caps[1].parse().unwrap();
             let one_in: i64 = caps[2].parse().unwrap();
-            rules.push((item, one_in, 1, 1));
+            // `NormalvsExpert` builds two `Common` rules (`ItemDropRule.cs:87-90`), so both
+            // branches scale. `NormalvsExpertNotScalingWithLuck` is a separate constructor and is
+            // not in `normal_vs_expert_re`'s pattern.
+            rules.push((item, one_in, 1, 1, "LuckScaling::Full"));
         }
         if rules.is_empty() {
             continue;
@@ -436,10 +468,21 @@ fn parse_master(text: &str, master_rng: i64) -> BTreeMap<i64, Vec<Rule>> {
             } else {
                 targets_of(trimmed, current_type, &arrays)
             };
+            // `MasterModeCommonDrop` is `ByCondition(IsMasterMode, item)`
+            // (`ItemDropRule.cs:25-28`) -> `ItemDropWithConditionRule`, which *extends*
+            // `CommonDrop` and inherits its `info.player.RollLuck` roll, so a relic scales with
+            // luck. `MasterModeDropOnAllPlayers` is `DropPerPlayerOnThePlayer`
+            // (`ItemDropRule.cs:30-33`), whose whole body rolls `info.rng`
+            // (`DropPerPlayerOnThePlayer.cs:24`), so a master pet does not.
+            let luck = if &caps[1] == "CommonDrop" {
+                "LuckScaling::Full"
+            } else {
+                "LuckScaling::None"
+            };
             for npc in targets {
                 let rules = out.entry(npc).or_default();
-                if !rules.contains(&(item, one_in, 1, 1)) {
-                    rules.push((item, one_in, 1, 1));
+                if !rules.contains(&(item, one_in, 1, 1, luck)) {
+                    rules.push((item, one_in, 1, 1, luck));
                 }
             }
         }
@@ -486,6 +529,24 @@ fn emit(
         "    pub one_in: u32,".into(),
         "    pub min: i16,".into(),
         "    pub max: i16,".into(),
+        "    /// How the interacting player's luck bends this roll.".into(),
+        "    pub luck: LuckScaling,".into(),
+        "}".into(),
+        "".into(),
+        "/// Which of `Luck`'s three rolls a drop rule uses.".into(),
+        "///".into(),
+        "/// Vanilla decides this by which `ItemDropRule` constructor built the rule, and it is not".into(),
+        "/// cosmetic: `CommonDrop.TryDroppingItem` is `info.player.RollLuck(chanceDenominator)`".into(),
+        "/// (`CommonDrop.cs:36`), so an ordinary drop really does get likelier for a lucky player,".into(),
+        "/// while `CommonDropNotScalingWithLuck` rolls `info.rng` and cannot.".into(),
+        "#[derive(Debug, Clone, Copy, PartialEq, Eq)]".into(),
+        "pub enum LuckScaling {".into(),
+        "    /// `Luck.RollLuck`: good luck narrows the range, bad luck widens it.".into(),
+        "    Full,".into(),
+        "    /// `info.rng.Next`: luck cannot touch it.".into(),
+        "    None,".into(),
+        "    /// `Luck.RollOnlyBadLuck`: bad luck narrows the range and good luck does nothing.".into(),
+        "    OnlyBad,".into(),
         "}".into(),
         "".into(),
         "/// A run of alternatives, tried in order until one of them lands.".into(),
@@ -503,12 +564,13 @@ fn emit(
         lines.push(format!("        {npc} => &["));
         for chain in chains {
             lines.push("            &[".into());
-            for &(item, one_in, low, high) in chain {
+            for &(item, one_in, low, high, luck) in chain {
                 lines.push("                Drop {".into());
                 lines.push(format!("                    item: {item},"));
                 lines.push(format!("                    one_in: {one_in},"));
                 lines.push(format!("                    min: {low},"));
                 lines.push(format!("                    max: {high},"));
+                lines.push(format!("                    luck: {luck},"));
                 lines.push("                },".into());
             }
             lines.push("            ],".into());
@@ -545,12 +607,13 @@ fn emit(
     ]);
     for (&npc, rules) in master {
         lines.push(format!("        {npc} => &["));
-        for &(item, one_in, low, high) in rules {
+        for &(item, one_in, low, high, luck) in rules {
             lines.push("            Drop {".into());
             lines.push(format!("                item: {item},"));
             lines.push(format!("                one_in: {one_in},"));
             lines.push(format!("                min: {low},"));
             lines.push(format!("                max: {high},"));
+            lines.push(format!("                luck: {luck},"));
             lines.push("            },".into());
         }
         lines.push("        ],".into());

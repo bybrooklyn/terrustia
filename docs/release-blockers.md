@@ -185,11 +185,19 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   `CalculateCoinLuck`, and both `Luck.RollLuck` branches); `Player::luck` is the figure, refreshed on
   packet 134, on packet 50 (`stinky` is one of the terms) and on a Lantern Night starting or ending
   (+0.3, and the server's own state).
-  **Two consumers are wired: the falling-star aim and the money-rain roll.** Two are not yet, and
-  each is named where it stands: `CommonDrop.TryDroppingItem` (`CommonDrop.cs:36`) rolls
-  `info.player.RollLuck(chanceDenominator)`, so *every* ordinary drop scales with luck unless its
-  rule is a `NotScalingWithLuck` variant - that needs a per-rule flag on `Conditional` and is the
-  next piece of this work. Ambient spawn rates are the other.
+  **The drop tables read it too**, as of the same day. `CommonDrop.TryDroppingItem`
+  (`CommonDrop.cs:36`) rolls `info.player.RollLuck(chanceDenominator) < chanceNumerator`, so every
+  ordinary drop scales unless its rule is one of the `NotScalingWithLuck` variants;
+  `npc_drops::LuckScaling` is that distinction, emitted per rule by the generator from the
+  constructor source used, and hand-marked in `conditional_drops.rs` for the ~10 entries the
+  generated table does not own. `drop_coins`' luck double-roll (`NPC.cs:80440-80459`) is modelled
+  as well. The luck used is the *closest* player's, which is what
+  `NPCLoot_DropItems(closestPlayer)` passes (`NPC.cs:79649`, `:79741-79752`).
+  Two over-drops fell out of that work and are fixed: the Twins' trophies and the Groom's and
+  Bride's Bloody Tear were each registered in *both* the generated and the hand-written table, so
+  `drop_loot` rolled them twice - 19 and 36 per cent against the 10 and 20 the game intends.
+  `no_item_is_registered_in_both_tables` now guards that seam.
+  **Ambient spawn rates are the one consumer still not wired.**
   Two of the ten terms are absent on a server in vanilla too: `usedGalaxyPearl` is a player-file
   field no packet carries, and `stinky` is read off the server's own buff state, so a server's
   figure differs from the client's tooltip by up to those. Disclosed at the module.

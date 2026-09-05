@@ -89,6 +89,13 @@ pub struct Conditions {
 /// rules in `ItemDropDatabase.cs` roll `2`-in-`3` or `3`-in-`4` rather than a flat `1`-in-`N`. Every
 /// constructor below except [`m_in_n`] defaults `numerator` to `1`, so nothing already using
 /// `always`/`sometimes`/`a_few` changes rate.
+///
+/// `scaling` is which of `Luck`'s three rolls the rule uses, which vanilla decides by the
+/// `ItemDropRule` constructor that built it - see [`crate::npc_drops::LuckScaling`]. `Full` is the
+/// default because `Common`/`ByCondition` are the default, and both roll
+/// `info.player.RollLuck(chanceDenominator) < chanceNumerator`; the ~30 registrations in
+/// `ItemDropDatabase.cs` that do not are marked with [`not_scaling`] or [`only_bad_luck`] and each
+/// cites its own line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Conditional {
     pub item: u16,
@@ -96,7 +103,24 @@ pub struct Conditional {
     pub numerator: u32,
     pub min: i16,
     pub max: i16,
+    pub scaling: crate::npc_drops::LuckScaling,
 }
+
+/// The same rule with luck taken out of it: `ItemDropRule.NotScalingWithLuck`
+/// (`ItemDropRule.cs:50-53`), whose `CommonDropNotScalingWithLuck` rolls `info.rng.Next`.
+const fn not_scaling(rule: Conditional) -> Conditional {
+    Conditional {
+        scaling: crate::npc_drops::LuckScaling::None,
+        ..rule
+    }
+}
+
+// There is deliberately no `only_bad_luck` companion to [`not_scaling`].
+// `ItemDropRule.ScalingWithOnlyBadLuck` (`ItemDropRule.cs:45-48`) is registered exactly once in
+// the whole database (`ItemDropDatabase.cs:179`, the Groom's and the Bride's Bloody Tear), it
+// carries no condition, and so it belongs to the generated table - which labels it
+// `LuckScaling::OnlyBad` itself. A helper here would have no caller, and one written for a future
+// caller is one nobody has checked against source.
 
 const fn always(item: u16) -> Conditional {
     Conditional {
@@ -105,6 +129,7 @@ const fn always(item: u16) -> Conditional {
         numerator: 1,
         min: 1,
         max: 1,
+        scaling: crate::npc_drops::LuckScaling::Full,
     }
 }
 
@@ -115,6 +140,7 @@ const fn sometimes(item: u16, one_in: u32) -> Conditional {
         numerator: 1,
         min: 1,
         max: 1,
+        scaling: crate::npc_drops::LuckScaling::Full,
     }
 }
 
@@ -125,6 +151,7 @@ const fn a_few(item: u16, one_in: u32, min: i16, max: i16) -> Conditional {
         numerator: 1,
         min,
         max,
+        scaling: crate::npc_drops::LuckScaling::Full,
     }
 }
 
@@ -140,6 +167,7 @@ const fn m_in_n(item: u16, numerator: u32, one_in: u32, min: i16, max: i16) -> C
         numerator,
         min,
         max,
+        scaling: crate::npc_drops::LuckScaling::Full,
     }
 }
 
@@ -184,8 +212,13 @@ pub fn trophy(npc_type: u16) -> Option<u16> {
         113 => 1365,
         134 => 1366,
         127 => 1367,
-        125 => 1368,
-        126 => 1369,
+        // 125 and 126 are deliberately absent, and it is the same reason 491, 551, 564, 565, 576
+        // and 577 always were. `RegisterBossTrophies` (`ItemDropDatabase.cs:865-904`) writes most
+        // of these as `ByCondition(condition, item, 10)`, which is this table's business, but
+        // eight of them as a plain `Common(item, 10)` (`:896-903`) - and a plain `Common` with no
+        // condition is exactly what the *generated* table takes. The Twins' two were in both, so
+        // `drop_loot` rolled each trophy twice and Retinazer and Spazmatism dropped theirs at
+        // about 19 per cent rather than 10. `no_item_is_registered_in_both_tables` is the guard.
         262 => 1370,
         245 => 1371,
         50 => 2489,
@@ -291,6 +324,10 @@ pub fn conditional(npc_type: u16, at: Conditions) -> Vec<Conditional> {
                     numerator: 1,
                     min: d.min,
                     max: d.max,
+                    // The generator worked this out from the constructor: a relic is
+                    // `MasterModeCommonDrop` and scales, a master pet is
+                    // `MasterModeDropOnAllPlayers` and does not.
+                    scaling: d.luck,
                 }),
         );
     }
@@ -426,11 +463,12 @@ pub fn conditional(npc_type: u16, at: Conditions) -> Vec<Conditional> {
             out.push(sometimes(671, 200)); // Cobalt Shield
             out.push(sometimes(4679, 200)); // Ice Skates
         }
-        // `ItemDropRule.ScalingWithOnlyBadLuck(4271, 5)` (`ItemDropDatabase.cs:179`) — bad luck
-        // raises the effective chance, good luck never lowers it below 1/5. This project has no
-        // player-luck state in scope for drop rolls; modelled as the unscaled 1/5 floor, the same
-        // documented-simplification precedent `NormalvsExpert` already sets elsewhere.
-        53 | 536 => out.push(sometimes(4271, 5)), // The Groom / The Bride: Silver Locket
+        // The Groom's and the Bride's Bloody Tear used to be pushed here as well as being in the
+        // generated table, so `drop_loot` rolled it twice and the item landed on about 36 per cent
+        // of kills against the 20 the game intends. `ScalingWithOnlyBadLuck` is in the generator's
+        // own `FLAT` set (`ItemDropDatabase.cs:179` is an unconditional registration), so
+        // `npc_drops` carries it, and now carries the `OnlyBad` label with it. Nothing belongs
+        // here. `no_item_is_registered_in_both_tables` is the guard.
         // `LeadingConditionRule(NotRemixSeed()/RemixSeed())` (`ItemDropDatabase.cs:941-944`) picks
         // which of two items an ordinary vs. remix-seed world gives — not the same item at two
         // rates, two *different* items. Only the ordinary-world (`NotRemix`) branch is in scope;
@@ -520,35 +558,36 @@ pub fn conditional(npc_type: u16, at: Conditions) -> Vec<Conditional> {
         _ => {}
     }
     // DD2 mage/ogre flat items (`ItemDropDatabase.cs:745-777`): the `OneFromOptions` pools these
-    // NPCs also drop live in `chance_pools`, not here — this is only the plain `DropBasedOnExpertMode`
-    // items, mode-scaled and, per `NotScalingWithLuck`, already ignoring the luck this project
-    // has no state for anywhere.
+    // NPCs also drop live in `chance_pools`, not here — this is only the plain
+    // `DropBasedOnExpertMode` items, mode-scaled. Every one is `NotScalingWithLuck`, so luck
+    // cannot move any of them: the Old One's Army is the one event that gives a lucky player
+    // exactly the same odds as everybody else.
     match npc_type {
         564 if at.expert => {
-            out.push(always(3814));
-            out.push(a_few(3815, 1, 4, 4));
+            out.push(not_scaling(always(3814)));
+            out.push(not_scaling(a_few(3815, 1, 4, 4)));
         }
         564 => {
-            out.push(sometimes(3814, 2));
-            out.push(a_few(3815, 2, 4, 4));
+            out.push(not_scaling(sometimes(3814, 2)));
+            out.push(not_scaling(a_few(3815, 2, 4, 4)));
         }
         565 | 577 if at.expert => {
-            out.push(sometimes(3814, 4));
-            out.push(a_few(3815, 4, 4, 4));
+            out.push(not_scaling(sometimes(3814, 4)));
+            out.push(not_scaling(a_few(3815, 4, 4, 4)));
         }
         565 | 577 => {
-            out.push(sometimes(3814, 8));
-            out.push(a_few(3815, 8, 4, 4));
+            out.push(not_scaling(sometimes(3814, 8)));
+            out.push(not_scaling(a_few(3815, 8, 4, 4)));
         }
         576 if at.expert => {
-            out.push(sometimes(3814, 2));
-            out.push(a_few(3815, 2, 4, 4));
-            out.push(sometimes(3856, 4));
+            out.push(not_scaling(sometimes(3814, 2)));
+            out.push(not_scaling(a_few(3815, 2, 4, 4)));
+            out.push(not_scaling(sometimes(3856, 4)));
         }
         576 => {
-            out.push(sometimes(3814, 4));
-            out.push(a_few(3815, 4, 4, 4));
-            out.push(sometimes(3856, 5));
+            out.push(not_scaling(sometimes(3814, 4)));
+            out.push(not_scaling(a_few(3815, 4, 4, 4)));
+            out.push(not_scaling(sometimes(3856, 5)));
         }
         _ => {}
     }
@@ -661,13 +700,7 @@ pub fn conditional(npc_type: u16, at: Conditions) -> Vec<Conditional> {
         && let Some(wave) = at.pumpkin_moon_wave
     {
         let gate = pumpkin_moon_gate_denominator(wave, at.expert);
-        out.push(Conditional {
-            item: 1857,
-            one_in: gate * 20,
-            numerator: 1,
-            min: 1,
-            max: 1,
-        });
+        out.push(sometimes(1857, gate * 20));
     }
 
     // Pumpking's and Mourning Wood's own trophies: `rule.OnSuccess(ByCondition(
@@ -853,10 +886,31 @@ pub fn bundled_with(item: u16) -> Option<(u16, i16, i16)> {
 pub struct ChancePool {
     pub one_in: u32,
     pub options: &'static [u16],
+    /// Which of `Luck`'s rolls the *gate* uses. `OneFromOptionsDropRule` rolls
+    /// `info.player.RollLuck(chanceDenominator)` (`OneFromOptionsDropRule.cs`), and
+    /// `OneFromOptionsNotScaledWithLuckDropRule` rolls `info.rng.Next`, which is the entire
+    /// difference between the two classes and the reason vanilla has both.
+    ///
+    /// The *pick* among the options is never luck-scaled in either class, so there is nothing here
+    /// for a pool with a gate of 1: it always succeeds and only chooses which item.
+    pub scaling: crate::npc_drops::LuckScaling,
 }
 
 const fn pool(one_in: u32, options: &'static [u16]) -> ChancePool {
-    ChancePool { one_in, options }
+    ChancePool {
+        one_in,
+        options,
+        scaling: crate::npc_drops::LuckScaling::Full,
+    }
+}
+
+/// A pool whose gate luck cannot touch: `OneFromOptionsNotScalingWithLuck`.
+const fn unlucky_pool(one_in: u32, options: &'static [u16]) -> ChancePool {
+    ChancePool {
+        one_in,
+        options,
+        scaling: crate::npc_drops::LuckScaling::None,
+    }
 }
 
 /// `(24 - wave - expertBump) / 2.5`, floored toward zero the way the game's own `(int)` cast does,
@@ -983,27 +1037,37 @@ pub fn chance_pools(npc_type: u16, at: Conditions) -> Vec<ChancePool> {
         // (`ItemDropDatabase.cs:935`) — expert halves the gate rather than swapping the pool.
         471 => vec![pool(if at.expert { 1 } else { 2 }, &[3052, 3053, 3054])],
         // DD2 Dark Mage, tiers 1 and 3 (`ItemDropDatabase.cs:767-777`): two independent
-        // `NormalvsExpertOneFromOptionsNotScalingWithLuck` pools each, mode-scaled. Luck-scaling is
-        // out of scope project-wide already (see `by_mode`'s own precedent); everything else here
-        // is a plain mode-based gate on an otherwise-ordinary pool.
-        564 if at.expert => vec![pool(1, &[3810, 3809]), pool(2, &[3857, 3855])],
-        564 => vec![pool(2, &[3810, 3809]), pool(3, &[3857, 3855])],
-        565 => vec![pool(6, &[3810, 3809]), pool(6, &[3857, 3855])],
+        // `NormalvsExpertOneFromOptionsNotScalingWithLuck` pools each, mode-scaled. The whole DD2
+        // roster's loot is `...NotScalingWithLuck`, alone among the events - the Old One's Army
+        // gives the same odds to a lucky player as to anybody else - so all eight of these pools
+        // are `unlucky_pool`.
+        564 if at.expert => vec![
+            unlucky_pool(1, &[3810, 3809]),
+            unlucky_pool(2, &[3857, 3855]),
+        ],
+        564 => vec![
+            unlucky_pool(2, &[3810, 3809]),
+            unlucky_pool(3, &[3857, 3855]),
+        ],
+        565 => vec![
+            unlucky_pool(6, &[3810, 3809]),
+            unlucky_pool(6, &[3857, 3855]),
+        ],
         // DD2 Ogre, tiers 2 and 3 (`ItemDropDatabase.cs:751-763`): same shape as the Dark Mage
         // above, two mode-scaled pools each.
         576 if at.expert => {
             vec![
-                pool(2, &[3811, 3812]),
-                pool(1, &[3852, 3854, 3823, 3835, 3836]),
+                unlucky_pool(2, &[3811, 3812]),
+                unlucky_pool(1, &[3852, 3854, 3823, 3835, 3836]),
             ]
         }
         576 => vec![
-            pool(3, &[3811, 3812]),
-            pool(2, &[3852, 3854, 3823, 3835, 3836]),
+            unlucky_pool(3, &[3811, 3812]),
+            unlucky_pool(2, &[3852, 3854, 3823, 3835, 3836]),
         ],
         577 => vec![
-            pool(6, &[3811, 3812]),
-            pool(4, &[3852, 3854, 3823, 3835, 3836]),
+            unlucky_pool(6, &[3811, 3812]),
+            unlucky_pool(4, &[3852, 3854, 3823, 3835, 3836]),
         ],
         // The pumpkin moon's scarecrow family (`npcNetIds`, `ItemDropDatabase.cs:341-345`): the
         // wave gate and the pool's own `OneFromOptions(10, ...)` gate are two independent rolls
@@ -1104,7 +1168,9 @@ fn classic_only(npc_type: u16) -> Vec<Conditional> {
             a_few(4959, 7, 1, 1),
             a_few(4758, 4, 1, 1),
             a_few(4981, 4, 1, 1),
-            a_few(4980, 3, 1, 1),
+            // `NotScalingWithLuck(4980, 3)` (`ItemDropDatabase.cs:317`), alone among the five:
+            // the Volatile Gelatin is the one Queen Slime drop luck cannot help with.
+            not_scaling(a_few(4980, 3, 1, 1)),
         ],
         13 => vec![
             a_few(56, 1, 20, 60),
@@ -1279,11 +1345,15 @@ pub fn conditional_chains(npc_type: u16, at: Conditions) -> Vec<ConditionalChain
         // then 1/5 of what remains, then 1/4 of what remains after that. Checked: 1/3 (wand) +
         // 1/9*3 (armor) + 1/3 (nothing) sums to 1, and 1/6, then (5/6)*(1/5)=1/6, then
         // (4/6)*(1/4)=1/6 reproduces the real 1/9 per piece exactly.
+        // `ByCondition(condition, 1129, 3)` is a `CommonDrop` subclass and scales; the
+        // `OneFromOptionsNotScalingWithLuck(2, 842, 843, 844)` it falls through to does not
+        // (`ItemDropDatabase.cs:550`). The three hand-worked armour denominators reproduce that
+        // pool's own gate, so they inherit its class rather than the wand's.
         222 => vec![chain(vec![
             a_few(1129, 3, 1, 1),
-            a_few(842, 6, 1, 1),
-            a_few(843, 5, 1, 1),
-            a_few(844, 4, 1, 1),
+            not_scaling(a_few(842, 6, 1, 1)),
+            not_scaling(a_few(843, 5, 1, 1)),
+            not_scaling(a_few(844, 4, 1, 1)),
         ])],
         // Skeletron: `ByCondition(condition, 1281, 7).OnFailedRoll(Common(1273,
         // 7)).OnFailedRoll(Common(1313, 7))` (`ItemDropDatabase.cs:563`) — at most one of
@@ -1301,7 +1371,10 @@ pub fn conditional_chains(npc_type: u16, at: Conditions) -> Vec<ConditionalChain
         // King Slime: `NotScalingWithLuck(2585, 3).OnFailedRoll(Common(2610))`
         // (`ItemDropDatabase.cs:404`) — 1/3 chance of the Slime Hook, else the Slime Gun
         // guaranteed. Item 2610 previously appeared as a drop nowhere in this project.
-        50 => vec![chain(vec![a_few(2585, 3, 1, 1), always(2610)])],
+        // `NotScalingWithLuck(2585, 3).OnFailedRoll(Common(2610))`
+        // (`ItemDropDatabase.cs:404`): the two links are different classes, so the Slime Hook's
+        // 1-in-3 is fixed and the Slime Gun that follows it does scale.
+        50 => vec![chain(vec![not_scaling(a_few(2585, 3, 1, 1)), always(2610)])],
         _ => Vec::new(),
     }
 }
@@ -1490,11 +1563,25 @@ mod tests {
         // rate rather than their own real wave-gated one — see `trophy`'s own doc for why.
         assert_eq!(
             trophies.len(),
-            23,
-            "and twenty-three have trophies: {trophies:?}"
+            21,
+            "and twenty-one have trophies here: {trophies:?}"
         );
-        // The Twins are the one boss whose halves have different trophies.
-        assert_ne!(trophy(125), trophy(126));
+        // The Twins are the one boss whose halves have different trophies, and both of theirs are
+        // registered as a plain `Common` (`ItemDropDatabase.cs:896-897`), so they belong to the
+        // generated table rather than this one. They were in both, at nearly twice the rate.
+        assert_eq!(trophy(125), None);
+        assert_eq!(trophy(126), None);
+        let flat_trophy = |npc: u16, item: u16| {
+            crate::npc_drops::drops(npc)
+                .iter()
+                .flat_map(|chain| chain.iter())
+                .any(|d| d.item == item && d.one_in == 10)
+        };
+        assert!(
+            flat_trophy(125, 1368),
+            "Retinazer's, at the standard 1-in-10"
+        );
+        assert!(flat_trophy(126, 1369), "and Spazmatism's");
         // ...but they share a bag.
         assert_eq!(treasure_bag(125), treasure_bag(126));
     }
@@ -1879,6 +1966,9 @@ mod tests {
                 one_in: 1,
                 min: 1,
                 max: 1,
+                // `Common` -> `CommonDrop` -> `info.player.RollLuck`, which is the default and is
+                // what makes this drop one of the many a lucky player sees more of.
+                luck: crate::npc_drops::LuckScaling::Full,
             }),
         );
     }
@@ -2113,9 +2203,9 @@ mod tests {
             chain.links,
             vec![
                 a_few(1129, 3, 1, 1),
-                a_few(842, 6, 1, 1),
-                a_few(843, 5, 1, 1),
-                a_few(844, 4, 1, 1),
+                not_scaling(a_few(842, 6, 1, 1)),
+                not_scaling(a_few(843, 5, 1, 1)),
+                not_scaling(a_few(844, 4, 1, 1)),
             ]
         );
         // 1129 must no longer also appear as an independent `classic_only` roll, or the chain
@@ -2220,8 +2310,9 @@ mod tests {
         assert_eq!(chains.len(), 1);
         assert_eq!(
             chains[0].links,
-            vec![a_few(2585, 3, 1, 1), always(2610)],
-            "1/3 Slime Hook, else the Slime Gun guaranteed"
+            vec![not_scaling(a_few(2585, 3, 1, 1)), always(2610)],
+            "1/3 Slime Hook, else the Slime Gun guaranteed - and the Hook is the \
+             `NotScalingWithLuck` link, so luck cannot help with it"
         );
         assert!(
             !classic_only(KING_SLIME).iter().any(|d| d.item == 2585),
@@ -2868,5 +2959,219 @@ mod tests {
             Some((1785, 25, 50)),
             "JackOLanternLauncher"
         );
+    }
+}
+
+/// Which of `Luck`'s three rolls each drop rule uses. Vanilla decides this by the
+/// `ItemDropRule` constructor that built the rule, and the difference is real:
+/// `CommonDrop.TryDroppingItem` is `info.player.RollLuck(chanceDenominator) < chanceNumerator`
+/// (`CommonDrop.cs:36`), so an ordinary drop *is* likelier for a lucky player. This project had no
+/// luck state, so every rule rolled the flat denominator and the distinction had nowhere to live.
+#[cfg(test)]
+mod luck_scaling {
+    use super::*;
+    use crate::npc_drops::LuckScaling;
+
+    /// No item may be registered for the same NPC in both the generated flat table and the
+    /// hand-written conditional one, because `drop_loot` rolls both and every duplicate is a
+    /// silent over-drop: two independent 1-in-10 rolls land 19 per cent of the time, not 10.
+    ///
+    /// This found four when it was written - the Twins' two trophies, and the Groom's and the
+    /// Bride's Bloody Tear - which is the whole reason it is a test rather than a one-off script.
+    /// The seam it guards is real and easy to cross: `npc_drops` takes every rule with no
+    /// condition, and "no condition" is a property of the *registration*, not of the item, so a
+    /// trophy or a boss drop can quietly qualify for both halves.
+    #[test]
+    fn no_item_is_registered_in_both_tables() {
+        let at = Conditions::default();
+        let mut dupes = Vec::new();
+        for npc in 0u16..=700 {
+            let flat: std::collections::BTreeSet<u16> = crate::npc_drops::drops(npc)
+                .iter()
+                .flat_map(|chain| chain.iter())
+                .map(|d| d.item)
+                .collect();
+            for rule in conditional(npc, at) {
+                if flat.contains(&rule.item) {
+                    dupes.push((npc, rule.item));
+                }
+            }
+        }
+        assert!(dupes.is_empty(), "{dupes:?}");
+    }
+
+    /// `Common` is the default and the overwhelming majority, which is what makes luck worth
+    /// having at all: the great bulk of the table scales.
+    #[test]
+    fn the_generated_table_is_mostly_luck_scaled() {
+        let mut full = 0;
+        let mut none = 0;
+        let mut only_bad = 0;
+        for npc in 0u16..=700 {
+            for chain in crate::npc_drops::drops(npc) {
+                for rule in *chain {
+                    match rule.luck {
+                        LuckScaling::Full => full += 1,
+                        LuckScaling::None => none += 1,
+                        LuckScaling::OnlyBad => only_bad += 1,
+                    }
+                }
+            }
+        }
+        assert!(full > 700, "the bulk of the table scales: {full}");
+        // Exactly three, and each identified: npc 48's Spiky Ball
+        // (`ItemDropRule.NotScalingWithLuck(320, 2)`, `ItemDropDatabase.cs:1181`) and the two DD2
+        // Ogres' Ogre Masks, which source spells as a bare `new CommonDropNotScalingWithLuck(3865,
+        // ...)` (`:753`, `:759`) - the generator rewrites that form before parsing, and this is
+        // what proves the rewrite still happens. Every *other* `NotScalingWithLuck` registration
+        // in the database is wrapped in a `DropBasedOnExpertMode` or is a `OneFromOptions` pool,
+        // so it belongs to the hand-written table and is checked in the tests below instead.
+        assert_eq!(
+            none, 3,
+            "the flat table's three unscaled rules, or the generator stopped reading the \
+             constructor name"
+        );
+        // The Groom and the Bride, the only `ScalingWithOnlyBadLuck` in the whole database
+        // (`ItemDropDatabase.cs:179`), one rule each.
+        assert_eq!(only_bad, 2);
+
+        // The master table is an even split, and that is the shape rather than a coincidence:
+        // every boss has one `MasterModeCommonDrop` relic (which scales) and one
+        // `MasterModeDropOnAllPlayers` pet or mount (which does not).
+        let mut master_full = 0;
+        let mut master_none = 0;
+        for npc in 0u16..=700 {
+            for rule in crate::npc_drops::master_drops(npc) {
+                match rule.luck {
+                    LuckScaling::Full => master_full += 1,
+                    LuckScaling::None => master_none += 1,
+                    LuckScaling::OnlyBad => panic!("no master rule uses only-bad luck"),
+                }
+            }
+        }
+        assert_eq!(
+            (master_full, master_none),
+            (32, 32),
+            "one relic and one pet per boss"
+        );
+    }
+
+    /// Spot-checks against source, one per variant, so a generator change that flattened the
+    /// distinction would fail here rather than silently.
+    #[test]
+    fn the_variants_match_the_constructors_source_uses() {
+        let rule_for = |npc: u16, item: u16| {
+            crate::npc_drops::drops(npc)
+                .iter()
+                .flat_map(|chain| chain.iter())
+                .find(|d| d.item == item)
+                .copied()
+        };
+        // `RegisterToNPC(48, ItemDropRule.NotScalingWithLuck(320, 2))`
+        // (`ItemDropDatabase.cs:1181`) — the Spike Ball's Spiky Ball.
+        assert_eq!(
+            rule_for(48, 320).map(|d| d.luck),
+            Some(LuckScaling::None),
+            "npc 48's item 320 is registered `NotScalingWithLuck`"
+        );
+        // `RegisterToMultipleNPCs(ItemDropRule.ScalingWithOnlyBadLuck(4271, 5), 53, 536)`
+        // (`ItemDropDatabase.cs:179`) — the Groom and the Bride.
+        for npc in [53u16, 536] {
+            assert_eq!(
+                rule_for(npc, 4271).map(|d| d.luck),
+                Some(LuckScaling::OnlyBad),
+                "npc {npc}'s item 4271 is `ScalingWithOnlyBadLuck`"
+            );
+        }
+        // `RegisterToNPC(type, ItemDropRule.Common(3549))` (`ItemDropDatabase.cs:591`) — the
+        // Cultist's Ancient Manipulator, an ordinary drop.
+        assert_eq!(rule_for(439, 3549).map(|d| d.luck), Some(LuckScaling::Full));
+    }
+
+    /// The Old One's Army is the one event whose whole loot table is `NotScalingWithLuck`: a lucky
+    /// player gets exactly the odds everybody else does. Both halves of it are marked, the pools
+    /// in `chance_pools` and the flat items in `by_mode`.
+    #[test]
+    fn nothing_the_old_ones_army_drops_scales_with_luck() {
+        for at in [
+            Conditions::default(),
+            Conditions {
+                expert: true,
+                ..Conditions::default()
+            },
+        ] {
+            for npc in [564u16, 565, 576, 577] {
+                let pools = chance_pools(npc, at);
+                assert!(!pools.is_empty(), "npc {npc} must have pools to check");
+                for pool in pools {
+                    assert_eq!(
+                        pool.scaling,
+                        LuckScaling::None,
+                        "npc {npc}'s pool {:?} is `OneFromOptionsNotScalingWithLuck`",
+                        pool.options
+                    );
+                }
+                // 3814 and 3815 are the Defender Medals and the Etherian Mana, on every one of them.
+                for rule in conditional(npc, at) {
+                    if matches!(rule.item, 3814 | 3815 | 3856 | 3865) {
+                        assert_eq!(
+                            rule.scaling,
+                            LuckScaling::None,
+                            "npc {npc}'s item {} is `NotScalingWithLuck`",
+                            rule.item
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// A chain's links can be different classes, and King Slime's are: the Slime Hook is
+    /// `NotScalingWithLuck` and the Slime Gun that follows it is a plain `Common`
+    /// (`ItemDropDatabase.cs:404`). Getting this wrong in either direction would be invisible in
+    /// play and wrong in the numbers.
+    #[test]
+    fn one_chain_can_mix_scaled_and_unscaled_links() {
+        let chains = conditional_chains(50, Conditions::default());
+        let links = &chains[0].links;
+        assert_eq!(links[0].item, 2585);
+        assert_eq!(links[0].scaling, LuckScaling::None);
+        assert_eq!(links[1].item, 2610);
+        assert_eq!(links[1].scaling, LuckScaling::Full);
+    }
+
+    /// Queen Slime's five drops are four `Common` and one `NotScalingWithLuck`
+    /// (`ItemDropDatabase.cs:313-317`), which is the finest-grained case in the table.
+    #[test]
+    fn queen_slimes_volatile_gelatin_is_the_one_that_does_not_scale() {
+        let at = Conditions::default();
+        let rules = conditional(657, at);
+        let scaling_of = |item: u16| rules.iter().find(|d| d.item == item).map(|d| d.scaling);
+        assert_eq!(scaling_of(4986), Some(LuckScaling::Full));
+        assert_eq!(scaling_of(4959), Some(LuckScaling::Full));
+        assert_eq!(scaling_of(4758), Some(LuckScaling::Full));
+        assert_eq!(scaling_of(4981), Some(LuckScaling::Full));
+        assert_eq!(
+            scaling_of(4980),
+            Some(LuckScaling::None),
+            "the Volatile Gelatin"
+        );
+    }
+
+    /// A master relic scales and a master pet does not, because they are built by two different
+    /// factories (`ItemDropRule.cs:25-33`). Both come through `master_drops`, so the generated
+    /// value has to survive being copied into a `Conditional`.
+    #[test]
+    fn a_master_relic_scales_where_a_master_pet_does_not() {
+        let master = Conditions {
+            master: true,
+            ..Conditions::default()
+        };
+        // King Slime: relic 4929 (`MasterModeCommonDrop`) and pet 4797
+        // (`MasterModeDropOnAllPlayers`).
+        let rules = conditional(50, master);
+        let scaling_of = |item: u16| rules.iter().find(|d| d.item == item).map(|d| d.scaling);
+        assert_eq!(scaling_of(4929), Some(LuckScaling::Full), "the relic");
+        assert_eq!(scaling_of(4797), Some(LuckScaling::None), "the pet");
     }
 }
