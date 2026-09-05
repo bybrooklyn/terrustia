@@ -100,20 +100,22 @@ worst first by what a player or operator would actually notice.
    siting depend on that distinction and are wrong because of it. The comment records that fixing it
    means reworking `caves()`'s topology, "a materially bigger and riskier change", and that it was
    flagged rather than attempted. This is the most serious entry in this file.
-2. **An actuator toggle is lost inside one wire flood**
-   (`crates/terrustia/src/world/wiring.rs:907-911`). The Active Stone Block arm rewrites from the
-   caller's stale tile snapshot rather than re-reading, so a toggle applied a few arms earlier in the
-   same flood is dropped. Marked "Known gap, not fixed here"; the arms added beside it in 2026-09-04's
-   wiring lane deliberately re-read instead.
+2. ~~An actuator toggle is lost inside one wire flood.~~ **Fixed 2026-09-05.** Both stone-block arms
+   rewrite from a fresh read now, so a tile that is both an Active Stone Block and actuated keeps
+   both changes; `an_actuated_active_stone_block_keeps_both_changes` pins it, and neutralising the
+   fix fails it on the vanished toggle alone.
 3. **`follows_boss` is broader than vanilla's segment gate**
    (`crates/terrustia/src/game/server/systems.rs:95-102`). Vanilla gates on `realLife == -1`, set only
    for worm segments and the Wall of Flesh mouth. Anything raised through `follows_boss` reads as a
    segment here, so a boss escort that is not a body part would wrongly skip Soul Drain.
 4. **Self-update cannot replace the running binary off Unix**
    (`crates/terrustia/src/update.rs:58-60`). The operator has to finish the update by hand on Windows.
-5. **One bad Journey-power id in a `.wld` silently defaults every power after it**
-   (`crates/terrustia/src/world/wld.rs:1330-1332`), rather than failing the section or skipping the one
-   record it could not read.
+   Separately, and now fixed: Windows ARM64 could not self-update *at all*, because `target_triple`
+   had no arm for a target `release.yml` has been publishing.
+5. ~~One bad Journey-power id in a `.wld` silently defaults every power after it.~~ **Addressed
+   2026-09-05**, though not by changing what it does: stopping the read is correct, since an id whose
+   payload width is unknown cannot be stepped over without misreading everything after it. It now
+   names the id and says what that costs, so the loss is diagnosable rather than silent.
 
 ## Player-visible gaps, disclosed in code
 
