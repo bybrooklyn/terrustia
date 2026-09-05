@@ -21,7 +21,7 @@ that reads it.
 | `npc_drops.rs` | ~6,800 | `ItemDropDatabase` | `gen_drops.py` |
 | `projectile_data.rs` | ~10,000 | `Projectile.SetDefaults` | `gen_projectiles.py` |
 | `banners.rs` | ~520 | `BannerSystem` / `ItemID.Sets.KillsToBanner` | `gen_banners.py` |
-| `placed_items.rs` | 2,550 | `Item.SetDefaults` | — |
+| `placed_items.rs` | 2,550 | `Item.SetDefaults` | — (`just check-placed-items`) |
 | `town_names.rs` | 517 | localisation + `NPC.getNewNPCNameInner` | `gen_town_names.py` |
 | `buffs.rs` | ~450 | `Main.debuff`, `BuffID.Sets`, `NPCID.Sets.DebuffImmunitySets` | `gen_buffs.py` |
 | `tile_drops.rs` | 395 | `WorldGen.KillTile_GetItemDrops` | — |

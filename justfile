@@ -182,6 +182,14 @@ check-drops:
 check-npc-data:
     python3 tools/check_npc_data.py {{DECOMPILED}}
 
+# Cross-check `placed_items.rs` against `Item.SetDefaults`' own createTile/placeStyle pairs.
+#
+# The second table with no generator, and the same protection by the same road: every (tile, style)
+# the game defines has to be here with the same item. Pairs that are ours alone are fine - they
+# come from the `GetItemDrop_*` merge, a different source - so only one direction is checked.
+check-placed-items:
+    python3 tools/check_placed_items.py {{DECOMPILED}}
+
 # Cross-check the checked-in shimmer-decraft recipes against the decompiled game
 check-recipes:
     python3 tools/check_recipes.py {{DECOMPILED}} crates/terrustia-proto/src/recipes.rs
@@ -250,7 +258,7 @@ check-mutants *ARGS:
 # reintroduces one.
 #
 # Every data cross-check in one go: the tables, the citations, the dead writes, and the checkers
-check-data: check-drops check-npc-data check-recipes check-parity check-spawn-reach check-mutants check-dead-writes
+check-data: check-drops check-npc-data check-placed-items check-recipes check-parity check-spawn-reach check-mutants check-dead-writes
 
 # Regenerate every transcribed data table from a decompiled tree, then format
 regen:

@@ -297,7 +297,13 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   its own record (the four Lunar Towers' `boss`, the Skeleton Merchant's `town_npc`, and the Torch
   God's size, which `SetDefaults` genuinely never sets). Rule 7's protection is that a table cannot
   drift from source unseen, and that is now true of `npc_data.rs` without a risky 13,000-line
-  replacement. `tile_object.rs` and `placed_items.rs` still have neither a generator nor a checker.
+  replacement.
+  **`placed_items.rs` got the same treatment the same day**, and unlike the NPC table it was not
+  already right: `just check-placed-items` re-does the inversion `Item.SetDefaults` supports and
+  found **69 (tile, style) pairs missing outright and one wrong** - seventy framed objects that
+  gave nothing back when mined, and a Boreal Wood sofa that gave the wrong bench. All seventy are
+  fixed and all 1,027 pairs the game defines now match. `tile_object.rs` is the one left with
+  neither a generator nor a checker.
 - **Lane B (error handling and data safety) is the only lane in `TODO.md` with no "(done)" marker**, and
   485 `.unwrap()` calls remain in production files (`net/listener.rs`, `net/codec.rs`, `world/wld.rs`,
   `world/wld_save.rs`, `admin/audit.rs` and others). The lane's claim is scoped to paths the outside
