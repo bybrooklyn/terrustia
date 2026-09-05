@@ -17,6 +17,23 @@ use super::*;
 /// (`npc_params::self_growing_sand_worm`).
 type SandWormToGrow = (u8, (f32, f32), u16, u16, usize, usize);
 
+/// Whether this NPC's life *is* another NPC's, which is vanilla's `realLife != -1`.
+///
+/// `realLife` names the NPC a segment reads its health from (`NPC.cs:7363-7366` assigns `statLife`
+/// and `statLifeMax` straight off it), so it is set for worm segments and the Wall of Flesh mouth
+/// and for nothing else. Soul Drain checks it (`soulDrain && realLife == -1`, `NPC.cs:92802`) so a
+/// worm is drained once rather than once per link.
+///
+/// [`Npc::follows`] is this project's own worm link and matches that exactly. [`Npc::follows_boss`]
+/// used to be ORed in with it and should not have been: a boss *part* steers itself and holds its
+/// own life (`free_the_golem_head`'s own comment says the freed head reads its own health rather
+/// than the body's), so vanilla drains one. Skeletron's hands and Golem's fists were silently immune
+/// here, which is the sort of thing nobody reports as a bug because a debuff quietly doing nothing
+/// looks exactly like a debuff that was never applied.
+fn shares_a_life_pool(npc: &crate::game::npc::Npc) -> bool {
+    npc.follows.is_some()
+}
+
 /// Whether a player or NPC's hitbox overlaps the pixel square one tile occupies — the entity half
 /// of `Collision.EmptyTile(x, y, ignoreTiles: true)`, which skips the ordinary "is a block
 /// already there" check entirely and tests only entities. `occupants` is
@@ -92,15 +109,7 @@ impl GameServer {
             let around = crate::game::buffs::Around {
                 npc_type: npc.npc_type,
                 ai1: npc.ai[1],
-                // Pre-existing narrowing, found while pricing `Spawn::parent` for the Palworld pal
-                // encounter but not this site's to fix: vanilla's own gate is `realLife == -1`
-                // (`NPC.cs:92802`), set only for worm segments and the Wall of Flesh mouth, both of
-                // which share one life pool across every part. `follows_boss` is broader than that:
-                // anything raised through it (a boss's own escort, not only a body segment) reads as
-                // a segment here too, and would wrongly skip Soul Drain (`buffs.rs`'s own
-                // `!around.is_segment` check) if it were ever hurt. The Palworld guards are
-                // unaffected: they carry no `follows_boss`, only `Spawn::handle`'s one-way link.
-                is_segment: npc.follows.is_some() || npc.follows_boss.is_some(),
+                is_segment: shares_a_life_pool(npc),
                 get_good: false,
                 lava_wet: false,
                 daybreaks: count(DAYBREAK_SPEAR),
@@ -7227,6 +7236,48 @@ impl GameServer {
         let index = self.take_item_slot(item, position)?;
         self.broadcast_item(index);
         Some(index)
+    }
+}
+
+/// What Soul Drain is allowed to drain, which is vanilla's `realLife` question and not "is this
+/// attached to something bigger".
+#[cfg(test)]
+mod soul_drain_reaches_boss_parts {
+    use super::*;
+    use crate::game::npc::Npc;
+
+    /// A worm segment shares the head's life, so draining it once per link would drain the same
+    /// pool several times over; a boss part holds its own life and is drained like anything else.
+    ///
+    /// Neutralised by restoring `|| npc.follows_boss.is_some()`: the part assertion fails while the
+    /// segment one still passes, which is the exact shape of the bug (one class correctly exempt,
+    /// another wrongly exempt beside it).
+    #[test]
+    fn a_worm_segment_is_exempt_and_a_boss_part_is_not() {
+        let mut segment = Npc::new(terrustia_proto::npc_params::GOLEM_HEAD, (0.0, 0.0), 0)
+            .expect("a real NPC type");
+        segment.follows = Some(3);
+        assert!(
+            shares_a_life_pool(&segment),
+            "a worm segment reads its life from the link ahead of it, so it is vanilla's realLife \
+             case and Soul Drain must not tick once per segment"
+        );
+
+        let mut part = Npc::new(terrustia_proto::npc_params::GOLEM_HEAD, (0.0, 0.0), 0)
+            .expect("a real NPC type");
+        part.follows_boss = Some(3);
+        assert!(
+            !shares_a_life_pool(&part),
+            "a boss part steers itself and holds its own life, so vanilla drains it: Skeletron's \
+             hands and Golem's fists were silently immune while this said otherwise"
+        );
+
+        let ordinary = Npc::new(terrustia_proto::npc_params::GOLEM_HEAD, (0.0, 0.0), 0)
+            .expect("a real NPC type");
+        assert!(
+            !shares_a_life_pool(&ordinary),
+            "and an unattached NPC is drained, or the whole debuff does nothing"
+        );
     }
 }
 
