@@ -105,14 +105,6 @@ PYTHON_CHECKERS = sorted({checker for _, checker in PYTHON_TARGETS})
 # an entry says "this checker provably cannot see this class of row, and here is the class". Every
 # surviving mutant is still printed either way.
 BUDGET: dict[tuple[str, str], tuple[float, str]] = {
-    ("conditional_drops.rs", "check_drops.py"): (
-        0.10,
-        "check_drops.py compares game-minus-ours and reports ours-minus-game separately without "
-        "gating on it (see that file's own reverse-direction section). A row that gives an NPC "
-        "something `ItemDropDatabase` never registers for it therefore cannot be caught by "
-        "corrupting it: there is nothing on the game side to stop matching. 14 items across 8 "
-        "NPCs are currently in that state and are listed by every run of the checker.",
-    ),
 }
 
 RUST_TARGETS = [

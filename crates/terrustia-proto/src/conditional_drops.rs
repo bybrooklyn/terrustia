@@ -179,16 +179,20 @@ pub fn treasure_bag(npc_type: u16) -> Option<u16> {
         13..=15 => 3320,   // Eater of Worlds, any segment
         266 => 3321,       // Brain of Cthulhu
         222 => 3322,       // Queen Bee
-        35 | 36 => 3323,   // Skeletron
-        113 => 3324,       // Wall of Flesh
-        134 => 3325,       // The Destroyer
+        35 => 3323, // Skeletron: the head only; a hand (36) is not a boss and drops none of this
+        113 => 3324, // Wall of Flesh
+        134 => 3325, // The Destroyer
         125 | 126 => 3326, // The Twins
-        127 => 3327,       // Skeletron Prime
-        262 => 3328,       // Plantera
-        245 => 3329,       // Golem
-        370 => 3330,       // Duke Fishron
-        439 => 3331,       // Lunatic Cultist
-        398 => 3332,       // Moon Lord
+        127 => 3327, // Skeletron Prime
+        262 => 3328, // Plantera
+        245 => 3329, // Golem
+        370 => 3330, // Duke Fishron
+        // **No Lunatic Cultist (439).** Item 3331 is a real Cultist treasure bag - `Item.cs:30557`
+        // defines it and `Player.cs:7820` knows to roll npc 439's loot when one is opened - but
+        // `RegisterBoss_AncientCultist` (`ItemDropDatabase.cs:585-592`) registers four rules and no
+        // `BossBag`, and 3331 appears in no other registration anywhere in the tree. It is an
+        // unobtainable item in 1.4.5.7, and this map used to hand one out on every expert kill.
+        398 => 3332, // Moon Lord
         // The four 1.4-era bosses this table was missing entirely. Every one of them suppresses
         // its classic loot in expert (`classic_only` returns `&[]` there, matching vanilla's own
         // `Conditions.NotExpert` wrapper), so without a bag they dropped literally nothing in an
@@ -207,7 +211,7 @@ pub fn trophy(npc_type: u16) -> Option<u16> {
         4 => 1360,
         13..=15 => 1361,
         266 => 1362,
-        35 | 36 => 1363,
+        35 => 1363,
         222 => 1364,
         113 => 1365,
         134 => 1366,
@@ -273,6 +277,32 @@ pub fn lunar_fragment(npc_type: u16) -> Option<u16> {
 
 /// Everything that only drops under some condition.
 ///
+/// Whether this NPC can drop a Soul of Light or Night at all.
+///
+/// `Conditions.SoulOfWhateverConditionCanDrop` (`Conditions.cs:1574-1606`), which both soul rules
+/// share before they check the biome. Six types are excluded by name, one more by
+/// `NPCID.Sets.DontDropDungeonKeysOrSouls` (`NPCID.cs:4440`, which holds only type 23), and the
+/// rest by being a boss, friendly, worth no coins, having one hit point, or standing above the rock
+/// layer.
+///
+/// The position check is the `at.underground` flag. Vanilla drops it under a remix seed
+/// (`Conditions.cs:1594-1597`), which this server does not offer; that narrowing is on the record
+/// in the divergence ledger rather than silently applied here.
+fn can_drop_a_biome_soul(npc_type: u16, at: Conditions) -> bool {
+    if matches!(npc_type, 1 | 13 | 14 | 15 | 23 | 121 | 535) {
+        return false;
+    }
+    let Some(stats) = crate::npc_data::npc_stats(npc_type) else {
+        return false;
+    };
+    at.hard_mode
+        && at.underground
+        && !stats.boss
+        && !stats.friendly
+        && stats.life_max > 1
+        && stats.value >= 1.0
+}
+
 /// Returns an empty list for most types, which is the point: a condition that never applies costs
 /// a match arm and nothing else.
 pub fn conditional(npc_type: u16, at: Conditions) -> Vec<Conditional> {
@@ -369,32 +399,27 @@ pub fn conditional(npc_type: u16, at: Conditions) -> Vec<Conditional> {
         out.push(always(5005));
     }
 
-    // Hardmode's crafting materials. Every one of these is what gates the tier above it, so
-    // dropping any of them early would let a world skip a step.
-    if at.hard_mode {
-        match npc_type {
-            // Souls of Night: anything in the evil underground.
-            _ if at.underground && (at.in_corruption || at.in_crimson) => {
-                out.push(a_few(547, 5, 1, 2));
-            }
-            _ => {}
+    // Hardmode's two biome souls, which gate essentially all of hardmode crafting: 142 recipes in
+    // `recipes.rs` want one or the other.
+    //
+    // `RegisterToGlobal(new ItemDropWithConditionRule(520, 5, 1, 1, new Conditions.SoulOfLight()))`
+    // and the same for 521 with `SoulOfNight` (`ItemDropDatabase.cs:696-697`): one in five, exactly
+    // one, from any NPC that passes the shared gate below and is standing in the right biome.
+    //
+    // This block used to name the wrong items entirely. It dropped 547 and 548 - Souls of Fright
+    // and Might, which are mechanical-boss materials - from ordinary underground enemies, and
+    // **neither Soul of Light nor Soul of Night dropped anywhere in the server at all**, so a world
+    // could reach hardmode and then not craft its way out of it. It also invented four drops on top:
+    // 20-40 Rune Hats from every Wyvern (whose real Soul of Flight drop is already below, at its own
+    // `RegisterToNPC(87, ...)` transcription), Souls of Night and Magical Harps from Pixies, Death
+    // Sickles from Unicorns and Keybrands from Goldfish, none of which the game registers for those
+    // types; Pixie Dust and the Unicorn Horn already come from `npc_drops.rs` correctly.
+    if can_drop_a_biome_soul(npc_type, at) {
+        if at.in_hallow {
+            out.push(a_few(520, 5, 1, 1));
         }
-        if at.underground && at.in_hallow {
-            out.push(a_few(548, 5, 1, 2));
-        }
-        match npc_type {
-            // A wyvern is the only source of Soul of Flight.
-            87 => out.push(a_few(754, 1, 20, 40)),
-            // The hallow's own three.
-            75 => {
-                out.push(a_few(521, 2, 1, 5));
-                out.push(sometimes(494, 25));
-            }
-            // A unicorn's horn.
-            86 => out.push(sometimes(1327, 5)),
-            // Mimics, which are the point of a hardmode chest.
-            55 => out.push(sometimes(671, 1)),
-            _ => {}
+        if at.in_corruption || at.in_crimson {
+            out.push(a_few(521, 5, 1, 1));
         }
     }
 
@@ -778,6 +803,17 @@ pub fn one_from(npc_type: u16, at: Conditions) -> &'static [&'static [u16]] {
     match npc_type {
         // The ninja set: hood, shirt, trousers.
         50 => &[&[256, 257, 258]],
+        // Plantera, on every kill after the first. `RegisterBoss_Plantera` builds the Grenade
+        // Launcher and its 50-150 rockets as one rule and hangs it off `FirstTimeKillingPlantera`
+        // with `OnSuccess`, then repeats *that same rule* as one option of an eight-way
+        // `OneFromRulesRule` on `OnFailedConditions` (`ItemDropDatabase.cs:425-428`). So the first
+        // kill gives the launcher outright and every later one gives a single weapon from the pool,
+        // the launcher included.
+        //
+        // `conditional()` above carries the first-kill half. This is the other, and it was simply
+        // absent: a second Plantera dropped no weapon at all. The launcher's rockets ride along
+        // through `bundled_with`, which is exactly the nested-`OnSuccess` shape that map exists for.
+        262 if at.downed_plantera => &[&[758, 1255, 788, 1178, 1259, 1155, 3018, 5477]],
         // The Wall of Flesh: an emblem and a weapon, one of each. The emblems are the whole of
         // early hardmode's damage progression, so a run that gets neither is noticeably poorer.
         113 => &[&[489, 490, 491, 2998], &[426, 434, 514, 4912]],
@@ -866,6 +902,11 @@ pub fn moon_lord_weapons(npc_type: u16, at: Conditions) -> &'static [u16] {
 pub fn bundled_with(item: u16) -> Option<(u16, i16, i16)> {
     match item {
         1258 => Some((1261, 60, 180)), // Stynger -> Stynger Bolt
+        // Grenade Launcher -> Rocket I, `Common(758).OnSuccess(Common(771, 1, 50, 150))`
+        // (`ItemDropDatabase.cs:425-426`). Only reached through `one_from`'s Plantera pool: the
+        // first-kill drop in `conditional()` carries its own rockets already, and nothing else
+        // calls this map.
+        758 => Some((771, 50, 150)),
         // Pumpking's own pool (`ItemDropDatabase.cs:347-349`): the Stake Launcher's own ammunition.
         1835 => Some((1836, 30, 60)), // StakeLauncher -> Stake
         // Mourning Wood's own pool (`ItemDropDatabase.cs:354-357`): both weapons' own ammunition.
@@ -1363,7 +1404,12 @@ pub fn conditional_chains(npc_type: u16, at: Conditions) -> Vec<ConditionalChain
         // unconditional roll per item, not part of this fallback chain — see `conditional`'s own
         // `at.red_hat_skeletron` arm, now that `Conditions` carries the per-instance state it
         // needs.
-        35 | 36 => vec![chain(vec![
+        //
+        // **The head only.** `RegisterBoss_Skeletron` puts every one of these on `short type = 35`
+        // (`ItemDropDatabase.cs:555-570`) and nothing on 36, the hand. This arm used to read
+        // `35 | 36`, and a hand has 600 life and takes damage, so killing one dropped a Skeletron
+        // Treasure Bag and rolled a trophy - twice a fight, and without ever killing the head.
+        35 => vec![chain(vec![
             a_few(1281, 7, 1, 1),
             a_few(1273, 7, 1, 1),
             a_few(1313, 7, 1, 1),
@@ -1547,11 +1593,16 @@ mod tests {
                 trophies.insert(trophy);
             }
         }
-        // Nineteen, not fifteen: Betsy, the Empress of Light, Queen Slime and Deerclops were
+        // Eighteen, not fifteen: Betsy, the Empress of Light, Queen Slime and Deerclops were
         // absent, and all four suppress their classic loot in expert, so an expert kill of any of
         // them used to yield nothing whatsoever. `ItemDropDatabase.cs` registers exactly these
-        // nineteen `BossBag`/`BossBagByCondition` items.
-        assert_eq!(bags.len(), 19, "nineteen bosses have bags: {bags:?}");
+        // eighteen `BossBag`/`BossBagByCondition` items - 3318, 3319, 3320, 3321, 3322, 3323,
+        // 3324, 3325, 3326, 3327, 3328, 3329, 3330, 3332, 3860, 4782, 4957, 5111.
+        //
+        // It said nineteen until 2026-09-05, and the nineteenth was the Lunatic Cultist's 3331,
+        // which this project handed out and the game registers nowhere. The count was the assertion
+        // guarding the map, and it was guarding it at the wrong number.
+        assert_eq!(bags.len(), 18, "eighteen bosses have bags: {bags:?}");
         // Moon Lord, Empress of Light and Deerclops added: their trophies (3595, 4783, 5108) were
         // simply absent from this table before, found by tools/check_drops.py against source.
         // Queen Slime's (4958) added later still: it was present only as a stray, wrongly
@@ -1604,8 +1655,8 @@ mod tests {
             ..underground_evil
         };
         assert!(
-            conditional(3, after).iter().any(|d| d.item == 547),
-            "and none after"
+            conditional(3, after).iter().any(|d| d.item == 521),
+            "and the Soul of Night after"
         );
     }
 
@@ -1619,8 +1670,141 @@ mod tests {
             ..plain()
         };
         let drops: HashSet<u16> = conditional(3, hallow).iter().map(|d| d.item).collect();
-        assert!(drops.contains(&548), "Soul of Light");
-        assert!(!drops.contains(&547), "but not Soul of Night");
+        assert!(drops.contains(&520), "Soul of Light");
+        assert!(!drops.contains(&521), "but not Soul of Night");
+    }
+
+    /// The souls are the *right* souls, and they come at the game's own rate.
+    ///
+    /// This block used to drop 547 and 548 - Souls of Fright and Might, which are mechanical-boss
+    /// materials - so ordinary underground enemies handed out mech-boss loot while Souls of Light
+    /// and Night, which gate 142 recipes, dropped nowhere in the server at all.
+    #[test]
+    fn the_biome_souls_are_the_biome_souls() {
+        for (biome, want, unwanted) in [
+            (
+                Conditions {
+                    in_hallow: true,
+                    ..soul_ground()
+                },
+                520u16,
+                521u16,
+            ),
+            (
+                Conditions {
+                    in_corruption: true,
+                    ..soul_ground()
+                },
+                521,
+                520,
+            ),
+            (
+                Conditions {
+                    in_crimson: true,
+                    ..soul_ground()
+                },
+                521,
+                520,
+            ),
+        ] {
+            let drops = conditional(3, biome);
+            let soul = drops
+                .iter()
+                .find(|d| d.item == want)
+                .unwrap_or_else(|| panic!("item {want} should drop: {drops:?}"));
+            assert_eq!(
+                (soul.one_in, soul.min, soul.max),
+                (5, 1, 1),
+                "one in five, exactly one"
+            );
+            assert!(
+                !drops.iter().any(|d| d.item == unwanted),
+                "and not {unwanted}"
+            );
+            for mech in [547u16, 548, 549] {
+                assert!(
+                    !drops.iter().any(|d| d.item == mech),
+                    "a mechanical boss's own soul ({mech}) is not biome loot: {drops:?}"
+                );
+            }
+        }
+    }
+
+    /// `Conditions.SoulOfWhateverConditionCanDrop`: a boss, a critter, a town NPC or a worthless
+    /// enemy drops no soul however deep it dies.
+    #[test]
+    fn a_soul_needs_more_than_a_biome() {
+        let ground = Conditions {
+            in_hallow: true,
+            ..soul_ground()
+        };
+        for npc in [
+            4u16, // the Eye of Cthulhu, a boss
+            1,    // excluded by name, with 13, 14, 15, 121 and 535
+            13,   // an Eater of Worlds segment
+            23,   // `NPCID.Sets.DontDropDungeonKeysOrSouls`
+            22,   // the Guide: friendly
+            46,   // a bunny: one hit point and no value
+        ] {
+            assert!(
+                !conditional(npc, ground).iter().any(|d| d.item == 520),
+                "npc {npc} should drop no Soul of Light"
+            );
+        }
+    }
+
+    /// Plantera's second kill gives a weapon. The first-kill branch was the only one modelled, so
+    /// every Plantera after the first dropped none of the eight at all.
+    #[test]
+    fn a_repeat_plantera_still_gives_a_weapon() {
+        let again = Conditions {
+            hard_mode: true,
+            downed_plantera: true,
+            ..plain()
+        };
+        let pools = one_from(262, again);
+        assert_eq!(pools.len(), 1, "one pool of eight: {pools:?}");
+        assert_eq!(pools[0].len(), 8);
+        assert!(
+            pools[0].contains(&758),
+            "the Grenade Launcher is one of the eight"
+        );
+        // And its rockets ride along, the way the game nests them under it.
+        assert_eq!(bundled_with(758), Some((771, 50, 150)));
+        // The first kill takes the other branch and has no pool.
+        let first = Conditions {
+            hard_mode: true,
+            ..plain()
+        };
+        assert!(
+            one_from(262, first).is_empty(),
+            "the first kill is the outright drop"
+        );
+    }
+
+    /// Skeletron's hand is not Skeletron. It has 600 life and takes damage, so every one of these
+    /// was reachable twice a fight without ever killing the head.
+    #[test]
+    fn a_skeletron_hand_is_not_a_boss() {
+        assert_eq!(treasure_bag(36), None, "no treasure bag");
+        assert_eq!(trophy(36), None, "no trophy");
+        assert!(
+            conditional_chains(36, plain()).is_empty(),
+            "no weapon chain"
+        );
+        // The head still has all three.
+        assert_eq!(treasure_bag(35), Some(3323));
+        assert_eq!(trophy(35), Some(1363));
+        assert_eq!(conditional_chains(35, plain()).len(), 1);
+    }
+
+    /// Ground a soul can actually drop on: hardmode, below the rock layer.
+    fn soul_ground() -> Conditions {
+        Conditions {
+            hard_mode: true,
+            underground: true,
+            ..plain()
+        }
     }
 
     /// A soul needs depth as well as a biome.
@@ -2241,9 +2425,12 @@ mod tests {
     /// single kill could grant 0, 1, 2 or all 3 — real vanilla is one chain, stopping at the
     /// first that lands, so at most one per kill. Fails on the unfixed code (all three were
     /// independent entries in `classic_only(35 | 36)`).
+    ///
+    /// The *head* only, npc 35. This test used to loop over `[35, 36]` and pass, which is how the
+    /// hand quietly kept its own copy of the boss's whole loot table.
     #[test]
     fn skeletrons_three_weapons_are_one_chain_not_three_independent_rolls() {
-        for skeletron in [35u16, 36] {
+        for skeletron in [35u16] {
             let chains = conditional_chains(skeletron, plain());
             assert_eq!(chains.len(), 1, "npc {skeletron}: {chains:?}");
             assert_eq!(

@@ -325,6 +325,22 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   across 72 tile types were reachable through ordinary placement. The one site that had noticed
   (`dispatch.rs`'s container placement) had written its own arithmetic around it and said in a
   comment that the table was wrong and not its to fix.
+- **Sixteen global drop rules have no source in this server.** `ItemDropDatabase.RegisterToGlobal`
+  hangs a rule off *every* NPC rather than a type, so nothing keys it by npc and
+  `check_drops.py`'s per-type comparison was structurally blind to it. Found 2026-09-05 by adding
+  that check; all sixteen were missing. What it costs, in play:
+  - **The five biome keys and the Desert Key** (1533-1537, 4714) never drop, so none of the
+    Dungeon's six biome chests can ever be opened and their six weapons are unobtainable.
+  - **The Pirate Map** (1315) never drops, so a Pirate Invasion cannot be summoned by ordinary play.
+  - **The four hardmode yoyos** (3282, 3286, 3289, 3290) never drop.
+  - The two Halloween weapons, the Goodie Bag, the Present and the Living Fire Block never drop.
+
+  Each needs a fact `conditional_drops::Conditions` does not carry: a jungle/snow/desert/ocean
+  biome flag, a depth band, or a season. They are on `check_drops.py`'s `GLOBAL_DEFERRED` with the
+  reason per item, and the check *gates* on anything not on that list, so nothing new can join them
+  silently. Implementing them means plumbing those facts from the server, which is the next change,
+  not this one.
+
 - **Lane B (error handling and data safety) is the only lane in `TODO.md` with no "(done)" marker**, and
   485 `.unwrap()` calls remain in production files (`net/listener.rs`, `net/codec.rs`, `world/wld.rs`,
   `world/wld_save.rs`, `admin/audit.rs` and others). The lane's claim is scoped to paths the outside

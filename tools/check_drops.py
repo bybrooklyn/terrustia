@@ -73,7 +73,6 @@ DEFERRED: dict[int | tuple[int, int], str] = {
     # `NPC.AI_120_HallowBoss_IsGenuinelyEnraged()`, per-instance `ai[3]` state set when the fight
     # begins in daylight at full life. This server has no ai style 120 at all, so there is no
     # instance state to read. It used to drop from every Empress kill in every mode instead.
-    5005: "needs the Empress's own daytime-enrage state (per-instance ai[3])",
     # `Conditions.EyeOfCthulhuDefeatedAndNoAltarsInWorld` needs two facts `conditional_drops`'
     # `Conditions` does not carry: whether the Eye is down, and how many altars are unsmashed.
     # Item 43 has no other drop source in the game, so this is item-keyed rather than per-npc.
@@ -333,10 +332,23 @@ def parse_game(root: Path) -> dict[int, set[int]]:
         if (
             "RegisterToNPC(" not in line
             and "RegisterToMultipleNPCs(" not in line
-            and (m := re.match(r"[\w.<>\[\]]+\s+(\w+)\s*=\s*(?:new\s|ItemDropRule\.)", line))
+            and (
+                m := re.match(
+                    r"([\w.<>\[\]]+)\s+(\w+)\s*=\s*(?:new\s|ItemDropRule\.)", line
+                )
+            )
         ):
+            # A declaration whose *type* is a rule is registered as a name even when it carries no
+            # item yet, so a later line can hang something off it. `RegisterBoss_Plantera` declares
+            # `LeadingConditionRule leadingConditionRule2 = new LeadingConditionRule(condition);`
+            # and only fills it in three lines later; without the name existing here, the
+            # `leadingConditionRule.OnSuccess(leadingConditionRule2)` that attaches it to the
+            # already-registered parent has nothing to attach. A `Conditions.NotExpert condition =`
+            # is not a rule and is left out, so nothing can be chained onto a condition by mistake.
+            if m.group(1).endswith("Rule") or m.group(1).endswith("Rule[]"):
+                pending.setdefault(m.group(2), set())
             if items := _items_in(line):
-                pending.setdefault(m.group(1), set()).update(items)
+                pending.setdefault(m.group(2), set()).update(items)
             continue
 
         # A rule-chain continuation line has neither call in it — it is `ruleVar.OnSuccess(...)`
@@ -344,7 +356,7 @@ def parse_game(root: Path) -> dict[int, set[int]]:
         # a *later* one will.
         chain_target: set[int] | None = None
         if "RegisterToNPC(" not in line and "RegisterToMultipleNPCs(" not in line:
-            if m := re.match(r"(\w+)\.(?:OnSuccess|OnFailedRoll)\(", line):
+            if m := re.match(r"(\w+)\.(?:OnSuccess|OnFailedRoll|OnFailedConditions)\(", line):
                 name = m.group(1)
                 chain_target = rule_vars.get(name)
                 if chain_target is None:
@@ -365,12 +377,34 @@ def parse_game(root: Path) -> dict[int, set[int]]:
                     # Hold the items against the name instead, and flush them when the name is
                     # bound below. `parent.OnSuccess(child)` with a bare identifier is an alias,
                     # so binding the parent binds the child too.
+                    # A rule variable hung off another can be the sole argument, one of several
+                    # (`OnSuccess(itemDropRule, hideLootReport: true)`), or nested inside a rule
+                    # built inline (`OnFailedConditions(new OneFromRulesRule(1, itemDropRule,
+                    # ...))`). Plantera's Grenade Launcher and its 50-150 rockets are the third
+                    # shape, and reading only the first left them looking like loot we invented.
+                    #
+                    # The sole-identifier form aliases unconditionally, because the name it points
+                    # at may not exist yet: `RegisterBoss_Twins` writes
+                    # `leadingConditionRule.OnSuccess(leadingConditionRule2);` before
+                    # `leadingConditionRule2` has been given anything, and requiring it to be known
+                    # already loses the Twins' whole non-expert table. The wider forms only alias a
+                    # name already seen, since anything else is an ordinary argument.
                     if inner := re.fullmatch(
-                        r"\w+\.(?:OnSuccess|OnFailedRoll)\(\s*([A-Za-z_]\w*)\s*\);?", line
+                        r"\w+\.(?:OnSuccess|OnFailedRoll|OnFailedConditions)"
+                        r"\(\s*([A-Za-z_]\w*)\s*\);?",
+                        line,
                     ):
                         aliases.setdefault(name, set()).add(inner.group(1))
-                    else:
-                        pending.setdefault(name, set()).update(_items_in(line))
+                        continue
+                    named = {
+                        tok
+                        for tok in re.findall(r"(?<![\w.])([A-Za-z_]\w*)", line[len(name) + 1 :])
+                        if tok in pending or tok in aliases or tok in rule_vars
+                    }
+                    if named:
+                        aliases.setdefault(name, set()).update(named)
+                    if items := _items_in(line):
+                        pending.setdefault(name, set()).update(items)
                     continue
             if chain_target is None:
                 continue
@@ -379,6 +413,15 @@ def parse_game(root: Path) -> dict[int, set[int]]:
         targets: set[int] = set()
         if chain_target is not None:
             targets |= chain_target
+            # A rule hung off one that is *already* bound. The pending/alias branch above only
+            # runs while the parent is still unresolved, and `RegisterBoss_Plantera` registers its
+            # outer rule on the line after declaring it, so by the time
+            # `leadingConditionRule.OnSuccess(leadingConditionRule2)` arrives the parent is bound
+            # and the child was dropped. That lost the Grenade Launcher and its 50-150 rockets,
+            # which then read as loot this project had invented for Plantera.
+            for tok in re.findall(r"(?<![\w.])([A-Za-z_]\w*)", line[line.index("(") :]):
+                if tok in pending or tok in aliases:
+                    bind(tok, targets)
         elif m := re.search(r"RegisterToNPC\((\w+)\s*,", line):
             tok = m.group(1)
             if tok.isdigit():
@@ -474,6 +517,67 @@ def _expand_npcs(label: str) -> list[int]:
     return npcs
 
 
+# Global drop rules: `RegisterToGlobal(...)`, which hangs a rule off *every* NPC rather than a type.
+#
+# The per-npc comparison below is structurally blind to these - there is no npc to key them by - so
+# they went unchecked in both directions until 2026-09-05, and all sixteen of them turned out to be
+# missing from this server entirely. What that cost, before it was measured: the five biome keys and
+# the Desert Key never dropped, so none of the Dungeon's six biome chests could ever be opened; the
+# Pirate Map never dropped, so a Pirate Invasion could not be summoned by ordinary play; and the four
+# hardmode yoyos, the two Halloween weapons, the Goodie Bag, the Present and the Living Fire Block
+# had no source at all.
+#
+# The check is set membership rather than per-npc: a global rule is satisfied if the item can be
+# produced anywhere in `conditional_drops.rs`, since which NPC carries it is the rule's own
+# condition's business.
+GLOBAL_DEFERRED: dict[int, str] = {
+    1533: "Jungle Key: needs `Conditions.JungleKeyCondition`'s jungle-biome flag, which "
+          "`Conditions` does not carry yet",
+    1534: "Corruption Key: the same, for the corruption",
+    1535: "Crimson Key: the same, for the crimson",
+    1536: "Hallowed Key: the same, for the hallow",
+    1537: "Frozen Key: the same, for the snow biome",
+    4714: "Desert Key: the same, for the desert",
+    1315: "Pirate Map: needs the ocean-and-surface flag `Conditions.PirateMap` reads",
+    3282: "Cascade: needs `Conditions.YoyoCascade`'s depth and biome test",
+    3286: "Yelets: the same",
+    3289: "Amarok: the same",
+    3290: "Hel-Fire: the same",
+    1825: "Halloween weapon: needs the Halloween season flag",
+    1827: "Halloween weapon: the same",
+    1774: "Goodie Bag: the same",
+    1869: "Present: needs the Christmas season flag",
+    2701: "Living Fire Block: needs `Conditions.LivingFlames`' biome test",
+}
+
+
+def check_globals(root: Path, repo: Path) -> list[str]:
+    """Every `RegisterToGlobal` item, against what our table can produce anywhere."""
+    text = (root / "Terraria.GameContent.ItemDropRules" / "ItemDropDatabase.cs").read_text(
+        errors="replace"
+    )
+    wanted: set[int] = set()
+    for line in text.splitlines():
+        if "RegisterToGlobal(" in line and "public IItemDropRule" not in line:
+            wanted |= _items_in(line)
+    if not wanted:
+        raise SystemExit("parsed 0 RegisterToGlobal items; ItemDropDatabase.cs's shape changed")
+    cond = (repo / "crates" / "terrustia-proto" / "src" / "conditional_drops.rs").read_text()
+    cond = re.sub(r"^[ \t]*//.*$", "", cond, flags=re.M)
+    ours = {
+        int(n)
+        for n in re.findall(r"(?:always|sometimes|a_few|m_in_n)\((\d+)", cond)
+    }
+    missing = sorted(wanted - ours)
+    deferred = [f"  item {item}: {GLOBAL_DEFERRED[item]}" for item in missing if item in GLOBAL_DEFERRED]
+    gaps = [
+        f"  item {item}: registered globally and produced nowhere here, and not on the deferred list"
+        for item in missing
+        if item not in GLOBAL_DEFERRED
+    ]
+    return deferred, gaps
+
+
 def parse_ours(root: Path) -> dict[int, set[int]]:
     """What our two tables give, keyed the same way."""
     ours: dict[int, set[int]] = {}
@@ -492,6 +596,11 @@ def parse_ours(root: Path) -> dict[int, set[int]]:
             ours.setdefault(npc, set()).update(items)
 
     cond = (root / "crates" / "terrustia-proto" / "src" / "conditional_drops.rs").read_text()
+    # Comments go first, before any scan below reads it. `classic_only`'s Queen Slime arm explains
+    # in prose that a stray `a_few(4958, 20, 1, 1)` used to be there, and that line sits between
+    # npc 636's arm and npc 657's, so the arm scan read the Empress as dropping Queen Slime's
+    # trophy. Prose about a drop is not a drop.
+    cond = re.sub(r"^[ \t]*//.*$", "", cond, flags=re.M)
     for m in re.finditer(
         r"^        (\d+(?:\.\.=\d+)?(?:\s*\|\s*\d+)*) => vec!\[(.*?)\],\n", cond, re.S | re.M
     ):
@@ -713,11 +822,24 @@ def main() -> int:
         print(f"WE DROP WHAT THE DATABASE DOES NOT REGISTER ({total} items, {len(extras)} NPCs):")
         for npc, items in extras.items():
             print(f"  npc {npc}: extra {items}")
-        print("  Each needs a trace through the game before it is called a bug or excused: it is")
-        print("  either loot registered outside ItemDropDatabase, loot on the wrong NPC, or loot")
-        print("  invented here. Not gated yet, deliberately - see this section's comment.")
+        print("  Each is loot on an NPC the game does not give it to: an over-drop, an item on")
+        print("  the wrong type, or one invented here. Every one of the fourteen this used to")
+        print("  list turned out to be one of those or a hole in this checker; none was an")
+        print("  excusable difference, which is why the direction is gated now.")
         print()
-    if boss_gaps or other_gaps:
+    global_deferred, global_gaps = check_globals(Path(sys.argv[1]), repo)
+    if global_deferred:
+        print(f"GLOBAL RULES WITH NO SOURCE HERE, DEFERRED ({len(global_deferred)}):")
+        print("\n".join(global_deferred))
+        print("  A `RegisterToGlobal` rule hangs off every NPC, so nothing keys it by type and the")
+        print("  per-npc comparison above cannot see it. Each line names what it still needs.")
+        print()
+    if global_gaps:
+        print(f"GLOBAL RULES WITH NO SOURCE HERE ({len(global_gaps)}):")
+        print("\n".join(global_gaps))
+        print()
+
+    if boss_gaps or other_gaps or extras or global_gaps:
         print("Every gap above is either a bug or a decision. If it is a decision, put the item")
         print("in DEFERRED at the top of this file with the reason, so it stays visible; do not")
         print("widen a rule to make it disappear. A count with no list is how 102 items went")
