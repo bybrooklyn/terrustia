@@ -205,6 +205,15 @@ pub mod ids {
     /// The antlion's sand ball. Its speed, damage and reload are `npc_params::ANTLION_*`.
     pub const ANTLION_SHOT_TYPE: u16 = 31;
 
+    /// A night's falling star, in its two halves.
+    ///
+    /// `FALLING_STAR_SPAWNER` is what `WorldGen.SpawnFallingObjects` puts in the sky: it does not
+    /// collide with anything, streaks for 180 ticks, and then replaces itself with
+    /// `FALLING_STAR`, which does collide and drops a Fallen Star where it lands
+    /// (`Projectile.cs:54028-54061` and `:79348`).
+    pub const FALLING_STAR: u16 = 12;
+    pub const FALLING_STAR_SPAWNER: u16 = 720;
+
     /// The giant cursed skull's shot.
     pub const GIANT_SKULL_SHOT_TYPE: u16 = 299;
 

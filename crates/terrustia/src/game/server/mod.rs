@@ -1258,14 +1258,14 @@ pub struct GameServer {
     slime_rain: crate::game::slime_rain::SlimeRainState,
     /// Lantern Night — see [`crate::game::lantern_night`]'s own module doc.
     lantern_night: crate::game::lantern_night::LanternNightState,
-    /// Whether tonight's `Star.starfallBoost` cleared 3, rolled at dusk by
-    /// [`Self::roll_starfall_night`].
+    /// `Star.starfallBoost` (`Star.cs:35`), rolled at dusk by [`Self::roll_starfall_boost`].
     ///
-    /// The boost itself is a `float` in the game (`Star.cs:35`) and its other reader is the star
-    /// fall that actually drops Fallen Stars (`WorldGen.cs:72406`), which this server does not
-    /// model. The one thing the spawner asks of it is `> 3f` (`NPC.cs:2409`), so that is what is
-    /// kept: a bool per night rather than a number nothing else here would read.
-    starfall_night: bool,
+    /// A number rather than the `> 3f` bool this used to be, because it now has two readers that
+    /// ask different questions of it. The Enchanted Nightcrawler's spawn wants to know whether it
+    /// cleared 3 (`NPC.cs:2409`); the star fall multiplies its own rate by the whole of it
+    /// (`WorldGen.cs:72406`), so the ordinary nights that land between 1.0 and 1.5 are the
+    /// difference between a sky that drops stars and one that drops half again as many.
+    starfall_boost: f32,
     /// `NPC.Spawner.fairyLog` (`NPC.cs:150`): whether this world still has a fallen log in it,
     /// which is the one gate on the underground fairy (`spawn::underground_fairy`).
     ///
@@ -1420,7 +1420,7 @@ impl GameServer {
             party: crate::game::party::PartyState::default(),
             slime_rain: crate::game::slime_rain::SlimeRainState::default(),
             lantern_night: crate::game::lantern_night::LanternNightState::default(),
-            starfall_night: false,
+            starfall_boost: 1.0,
             fairy_log: false,
             palette: crate::term::Palette::PLAIN,
         };

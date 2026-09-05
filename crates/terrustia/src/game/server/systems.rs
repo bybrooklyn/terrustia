@@ -12,6 +12,9 @@
 
 use super::*;
 
+/// `ItemID.FallenStar`, the one item this file spawns from nothing but the passage of a night.
+const FALLEN_STAR: i32 = 75;
+
 /// A desert worm head raised this tick and the chain it wants: its slot, where it is, its body and
 /// tail types, and the inclusive segment range to roll in
 /// (`npc_params::self_growing_sand_worm`).
@@ -1460,8 +1463,100 @@ impl GameServer {
         (*free[at]).to_string()
     }
 
+    /// `Projectile.AI_148_StarSpawner` (`Projectile.cs:54028-54061`), and the one line of
+    /// `aiStyle == 5` that is not dust (`Projectile.cs:24093-24096`):
+    ///
+    /// ```csharp
+    /// // AI_148_StarSpawner
+    /// if (Main.dayTime && !Main.remixWorld) { Kill(); return; }
+    /// ai[0] += Main.dayRate;
+    /// ...
+    /// if (owner != Main.myPlayer || !(ai[0] >= 180f)) return;
+    /// if (ai[1] > -1f) {
+    ///     velocity.X *= 0.35f;
+    ///     if (base.Center.X < Main.player[(int)ai[1]].Center.X) velocity.X = Math.Abs(velocity.X);
+    ///     else velocity.X = 0f - Math.Abs(velocity.X);
+    /// }
+    /// NewProjectile(..., position.X, position.Y, velocity.X, velocity.Y, 12, 1000, 10f, Main.myPlayer);
+    /// Kill();
+    ///
+    /// // aiStyle 5
+    /// if (!Main.remixWorld && type == 12 && Main.dayTime && damage == 1000) Kill();
+    /// ```
+    ///
+    /// Both are here rather than in `game::projectile::step` because both read state that a
+    /// projectile cannot see from inside its own tick: whether it is day, and where a *particular*
+    /// player is right now. The steering deliberately reads the player's live position at the
+    /// moment the star is handed over rather than a position stored at spawn: the spawner has been
+    /// in the air for three seconds by then, and the point of aiming at all is to correct for that.
+    ///
+    /// The star inherits the spawner's *corner* as its centre, because that is what
+    /// `NewProjectile(position.X, position.Y, ...)` does with a projectile whose own constructor
+    /// then subtracts half its width. The two are different sizes, so the star lands about a tile
+    /// off where the streak pointed. Vanilla's, kept.
+    ///
+    /// `owner != Main.myPlayer` cannot fail here: every one of these is the server's own.
+    fn tick_falling_stars(&mut self) {
+        use terrustia_proto::projectile::ids::{FALLING_STAR, FALLING_STAR_SPAWNER};
+
+        let day = self.world.day_time;
+        let mut spent = Vec::new();
+        let mut handovers = Vec::new();
+        for (index, p) in self.projectiles.iter_mut() {
+            if p.projectile_type == FALLING_STAR_SPAWNER {
+                if day {
+                    spent.push(index);
+                    continue;
+                }
+                p.ai[0] += 1.0;
+                if p.ai[0] >= 180.0 {
+                    handovers.push((p.position, p.velocity, p.ai[1]));
+                    spent.push(index);
+                }
+            } else if p.projectile_type == FALLING_STAR && day && p.damage == 1000 {
+                // A star still in the air at dawn never lands. It is killed rather than left to
+                // fall, which is also what drops its Fallen Star: sunrise is a way for a star to
+                // reach the ground, not a way for one to be lost.
+                spent.push(index);
+            }
+        }
+
+        for (position, velocity, target) in handovers {
+            let mut velocity = velocity;
+            if target > -1.0
+                && let Some(player) = self.player(target as u8)
+            {
+                velocity.0 *= 0.35;
+                // Centres, not corners: a 16-wide spawner against a 20-wide player.
+                let star_centre = position.0 + 8.0;
+                let player_centre = player.position.0 + PLAYER_HALF_WIDTH;
+                velocity.0 = if star_centre < player_centre {
+                    velocity.0.abs()
+                } else {
+                    -velocity.0.abs()
+                };
+            }
+            // Damage 1000 is not a number the star ever deals: nothing on this server lets a
+            // falling star hit anybody. It is the tag `Projectile.Kill` reads to decide this is a
+            // *natural* star and so drops an item (`damage > 500`), which is how vanilla tells one
+            // apart from a Starfury shot of the same type.
+            if let Some(spawned) =
+                self.projectiles
+                    .launch(FALLING_STAR, position, velocity, 1000, 0)
+            {
+                self.broadcast_projectile(spawned);
+            }
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
     /// Move every projectile, and remove the ones that are finished.
     pub(super) fn tick_projectiles(&mut self) {
+        // Before the movement below, matching `Projectile.Update`'s own order: the AI runs, and
+        // then what survives it moves.
+        self.tick_falling_stars();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -1906,6 +2001,34 @@ impl GameServer {
         .encode()
         {
             self.broadcast(frame, None);
+        }
+        // `Projectile.Kill_ExplodeTiles` (`Projectile.cs:79348-79351`), which despite its name is
+        // where every on-death item drop lives:
+        //
+        // ```csharp
+        // if (owner != Main.myPlayer) return;
+        // ...
+        // if (type == 12 && damage > 500 && !Main.remixWorld) {
+        //     Item.RequestNewItem(GetItemSource_DropAsItem(), base.Center, 75);
+        // }
+        // ```
+        //
+        // The `damage > 500` is what separates a night's own star from a Starfury shot: only
+        // `AI_148_StarSpawner` hands one over at 1000. This runs on every death the server
+        // decides, which is the whole set for a projectile it owns: hitting ground, running out of
+        // time, and dawn.
+        if projectile.projectile_type == terrustia_proto::projectile::ids::FALLING_STAR
+            && projectile.damage > 500
+        {
+            let centre = projectile.center();
+            self.spawn_item(
+                terrustia_proto::item::ItemStack {
+                    id: FALLEN_STAR,
+                    stack: 1,
+                    prefix: 0,
+                },
+                centre,
+            );
         }
         // The server ends a projectile here; a client reporting its own kill ends it in
         // `on_client_projectile_kill`. Both have to drop the skip runs, because a projectile
@@ -5067,7 +5190,7 @@ impl GameServer {
             self.announce("Party time's over!");
             self.broadcast_world_data();
         }
-        self.roll_starfall_night();
+        self.roll_starfall_boost();
         self.roll_natural_lantern_night();
         // `WorldGen.mysticLogsEvent.StartNight()`, immediately after `LanternNight.CheckNight()`
         // in `Main.UpdateTime_StartNight` (`Main.cs:66211-66212`) and in that order here for the
@@ -5101,20 +5224,29 @@ impl GameServer {
     /// else if (Main.rand.Next(maxValue2) == 0) { starfallBoost = (float)Main.rand.Next(100, 151) * 0.01f; }
     /// ```
     ///
-    /// Only the first branch can clear the `> 3f` the spawner asks for, and only where it rolled
-    /// 301 or above (`300 * 0.01f` is exactly 3 and does not), so a meteor-shower night is a shade
-    /// under one in ten. The second branch tops out at 1.5 and so can never clear it; its draw is
-    /// not reproduced here, because what it lands on feeds only the star fall that drops Fallen
-    /// Stars (`WorldGen.cs:72406`), which this server does not model, and this `rng` is not
-    /// vanilla's stream in any case. `Main.tenthAnniversaryWorld` is not modelled anywhere in this
-    /// server, so the ordinary 10 is the whole of the outer roll.
+    /// Only the first branch can clear the `> 3f` the Enchanted Nightcrawler's spawn asks for, and
+    /// only where it rolled 301 or above (`300 * 0.01f` is exactly 3 and does not), so a
+    /// meteor-shower night is a shade under one in ten. `Main.tenthAnniversaryWorld` is not
+    /// modelled anywhere in this server, so the ordinary 10 and 3 are the whole of the two rolls.
     ///
-    /// The Enchanted Nightcrawler is the one thing that reads this (`NPC.cs:2409`), and without it
-    /// NPC 484 was in no pool and no branch at all.
-    fn roll_starfall_night(&mut self) {
+    /// **The second branch is drawn now, where it used to be skipped.** It tops out at 1.5 and so
+    /// can never make a meteor-shower night, and the old comment here said its result "feeds only
+    /// the star fall that drops Fallen Stars, which this server does not model". It does now
+    /// ([`Self::spawn_falling_objects`]), and the boost is that routine's rate multiplier, so a
+    /// night that rolls 1.2 here really does drop a fifth again as many stars.
+    ///
+    /// Two things read the result. The Enchanted Nightcrawler's spawn (`NPC.cs:2409`) asks whether
+    /// it is over 3, and without it NPC 484 was in no pool and no branch at all; the star fall
+    /// asks how much of one it is.
+    fn roll_starfall_boost(&mut self) {
         use rand::Rng;
-        self.starfall_night =
-            self.rng.random_range(0..10) == 0 && self.rng.random_range(300..501) > 300;
+        self.starfall_boost = if self.rng.random_range(0..10) == 0 {
+            self.rng.random_range(300..501) as f32 * 0.01
+        } else if self.rng.random_range(0..3) == 0 {
+            self.rng.random_range(100..151) as f32 * 0.01
+        } else {
+            1.0
+        };
     }
 
     /// `LanternNight::CheckNight`, called once at dusk — see `game/lantern_night.rs`'s own module
@@ -5648,6 +5780,174 @@ impl GameServer {
             };
             self.broadcast_tile_square(&square, None);
         }
+
+        // The last thing `UpdateWorld` does (`WorldGen.cs:72173`), and in that position here for
+        // the same reason everything else in this function is in the order it is.
+        self.spawn_falling_objects();
+    }
+
+    /// `WorldGen.SpawnFallingObjects`'s star arm (`WorldGen.cs:72398-72434`):
+    ///
+    /// ```csharp
+    /// if (Main.dayTime && !Main.remixWorld) return;
+    /// for (int i = 0; i < Main.dayRate; i++) {
+    ///     double num24 = (double)Main.maxTilesX / 4200.0;
+    ///     num24 *= (double)Star.starfallBoost;
+    ///     if ((double)Main.rand.Next(8000) < 10.0 * num24) {
+    ///         int num25 = 12;
+    ///         int num26 = Main.rand.Next(Main.maxTilesX - 50) + 100; num26 *= 16;
+    ///         int num27 = Main.rand.Next((int)((double)Main.maxTilesY * 0.05)); num27 *= 16;
+    ///         Vector2 position5 = new Vector2(num26, num27);
+    ///         int num28 = -1;
+    ///         int range = 15;
+    ///         int num29 = Player.FindClosest(position5, 1, 1);
+    ///         range = ((!Main.remixWorld) ? Main.player[num29].RollLuck(range)
+    ///                                    : Main.player[num29].RollBadLuck(range));
+    ///         if (range == 0 && (double)Main.player[num29].position.Y < Main.worldSurface * 16.0
+    ///             && Main.player[num29].afkCounter < Player.AFKTimeNeededForNoLuckyStars) {
+    ///             int num30 = Main.rand.Next(1, 640);
+    ///             position5.X = Main.player[num29].position.X + (float)Main.rand.Next(-num30, num30 + 1);
+    ///             num28 = num29;
+    ///         }
+    ///         if (!Collision.SolidCollision(position5, 16, 16)) {
+    ///             float num31 = Main.rand.Next(-100, 101);
+    ///             float num32 = Main.rand.Next(200) + 100;
+    ///             float num33 = (float)Math.Sqrt(num31 * num31 + num32 * num32);
+    ///             num33 = (float)num25 / num33;
+    ///             num31 *= num33; num32 *= num33;
+    ///             Projectile.NewProjectile(..., num31, num32, 720, 0, 0f, Main.myPlayer, 0f, num28);
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// This is where Fallen Stars come from, and until now this server had none: the whole
+    /// pre-hardmode mana ladder (Fallen Star into Mana Crystal into a bigger mana pool) had no
+    /// first rung on it, because nothing in the world ever produced the item. `roll_starfall_night`
+    /// used to say so in its own doc comment.
+    ///
+    /// **What is narrowed, and why.** `SpawnFallingObjects` has four other arms. The boulder rain
+    /// and the Don't Starve arm are both gated on `Main.drunkWorld && Main.getGoodWorld` or
+    /// `Main.dontStarveWorld && Main.getGoodWorld`, secret-seed combinations this server does not
+    /// model at all; `meteorShowerCount` is set only by worldgen (`WorldGen.cs:6180`), which this
+    /// server does not yet run for that field; and coin rain reads `Main.coinRain`, which is Slime
+    /// Rain's payout and is tracked separately. Each is absent because its *input* is absent, not
+    /// because the arm was skipped.
+    ///
+    /// `Main.dayRate` is 1 except while a client is fast-forwarding time, which is a Journey power
+    /// this server resolves elsewhere, so the loop is one pass. `RollLuck(15)` reduces to
+    /// `Main.rand.Next(15)` at zero luck, and player luck is unmodelled here (it is a known gap in
+    /// `TODO.md`), so that is exactly what this draws - and it is exactly what a vanilla player
+    /// with no luck buffs gets. `afkCounter` is not tracked, so the AFK half of the lucky-star test
+    /// cannot fire; the effect is that an idle player on this server keeps drawing stars towards
+    /// themselves for the three minutes vanilla would have stopped after.
+    fn spawn_falling_objects(&mut self) {
+        use rand::Rng;
+
+        // `Main.isThereAWorldSurface` (`WorldGen.cs:72227`): the whole routine is skipped without
+        // one, which is also what keeps the unit-test worlds out of it.
+        if self.world.day_time {
+            return;
+        }
+        let w = self.world.width();
+        let h = self.world.height();
+        if w <= 50 || h <= 20 {
+            return;
+        }
+        let chance = 10.0 * (f64::from(w) / 4200.0) * f64::from(self.starfall_boost);
+        if f64::from(self.rng.random_range(0..8000)) >= chance {
+            return;
+        }
+
+        // Vanilla's own arithmetic, quirk included: `Next(maxTilesX - 50) + 100` reaches 49 tiles
+        // *past* the right edge of the world on its top draw. A star that lands there falls
+        // outside the map and is never seen, which is why the game gets away with it; it is
+        // transcribed rather than clamped because clamping would pile those draws onto the last
+        // column instead of losing them, and that is a visible difference, not an invisible one.
+        let mut x = (self.rng.random_range(0..w - 50) + 100) * 16;
+        let y = self.rng.random_range(0..(f64::from(h) * 0.05) as i32) * 16;
+        let mut aimed_at = -1.0f32;
+
+        let closest = self.closest_player((x as f32, y as f32));
+        if let Some(slot) = closest {
+            // `RollLuck(15)` at zero luck. See the note above.
+            let range = self.rng.random_range(0..15);
+            let (px, py) = match self.player(slot) {
+                Some(p) => p.position,
+                None => return,
+            };
+            if range == 0 && py < f32::from(self.world.surface) * 16.0 {
+                let num30 = self.rng.random_range(1..640);
+                x = (px + self.rng.random_range(-num30..=num30) as f32) as i32;
+                aimed_at = f32::from(slot);
+            }
+        }
+
+        let position = (x as f32, y as f32);
+        if self.solid_collision(position, (16.0, 16.0)) {
+            return;
+        }
+        // A fixed speed of 12 in whatever direction the two draws point, which is why the star
+        // streaks rather than falls: the vector is normalised, not scaled.
+        let num31 = self.rng.random_range(-100..101) as f32;
+        let num32 = (self.rng.random_range(0..200) + 100) as f32;
+        let num33 = 12.0 / (num31 * num31 + num32 * num32).sqrt();
+        let Some(index) = self.projectiles.launch(
+            terrustia_proto::projectile::ids::FALLING_STAR_SPAWNER,
+            position,
+            (num31 * num33, num32 * num33),
+            0,
+            0,
+        ) else {
+            return;
+        };
+        if let Some(p) = self.projectiles.get_mut(index) {
+            p.ai[1] = aimed_at;
+        }
+        self.broadcast_projectile(index);
+    }
+
+    /// `Player.FindClosest(position, 1, 1)` (`Player.cs:4934-4958`): the nearest living player by
+    /// *Manhattan* distance between centres, not Euclidean. The game's own choice, kept because a
+    /// star aimed by one metric and judged by another would not land where it looks like it should.
+    ///
+    /// Vanilla falls back to the first active player when every one of them is dead; here that is
+    /// `None`, and every caller treats it as "nobody to aim at", which is the same outcome by a
+    /// shorter road.
+    fn closest_player(&self, position: (f32, f32)) -> Option<u8> {
+        self.players
+            .iter()
+            .flatten()
+            .filter(|p| p.is_playing() && p.life > 0)
+            .min_by(|a, b| {
+                let d = |p: &crate::game::player::Player| {
+                    (p.position.0 + PLAYER_HALF_WIDTH - position.0).abs()
+                        + (p.position.1 + PLAYER_HEIGHT / 2.0 - position.1).abs()
+                };
+                d(a).total_cmp(&d(b))
+            })
+            .map(|p| p.slot)
+    }
+
+    /// `Collision.SolidCollision(position, width, height)`: whether a box overlaps a solid tile.
+    fn solid_collision(&self, position: (f32, f32), size: (f32, f32)) -> bool {
+        let first = (
+            (position.0 / 16.0).floor() as i32,
+            (position.1 / 16.0).floor() as i32,
+        );
+        let last = (
+            ((position.0 + size.0) / 16.0).floor() as i32,
+            ((position.1 + size.1) / 16.0).floor() as i32,
+        );
+        for x in first.0..=last.0 {
+            for y in first.1..=last.1 {
+                let tile = self.world.tile(x, y);
+                if tile.is_active() && terrustia_proto::tile_solid::solid(tile.block) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Keep the Old Man standing at the dungeon door until Skeletron is beaten.
@@ -6581,7 +6881,7 @@ impl GameServer {
             // because none of its three clauses varies per candidate tile: tonight's meteor
             // shower, a sky with 55 clouds or fewer in it, and no overcast layer either up or
             // still counting back down toward one.
-            starfall_night: self.starfall_night
+            starfall_night: self.starfall_boost > 3.0
                 && self.world.num_clouds <= 55
                 && self.weather.cloud_bg_active == 0.0,
             // `NPC.Spawner.fairyLog`, kept by `scan_for_fallen_logs` at load and at every dusk.
@@ -12621,5 +12921,224 @@ mod fallen_log_scan {
         }
         let each = start.elapsed().as_secs_f64() / f64::from(TICKS) * 1e6;
         println!("tick_npcs, {filled} fighters: {each:.1} us/tick");
+    }
+}
+
+/// Fallen Stars: the whole chain, from the roll at the end of `UpdateWorld` to the item on the
+/// ground. Before this existed the server had no Fallen Star in it at all, which left the
+/// pre-hardmode mana ladder with no first rung: a player could not build a Mana Crystal because
+/// nothing in the world ever produced the star it is made from.
+#[cfg(test)]
+mod falling_stars {
+    use super::*;
+    use terrustia_proto::projectile::ids::{FALLING_STAR, FALLING_STAR_SPAWNER};
+
+    /// A world wide enough to clear `spawn_falling_objects`' own size guard, with sky at the top
+    /// and a floor for a star to land on.
+    fn night_world() -> crate::world::World {
+        let mut world = crate::world::World::empty(500, 300, "starfall probe");
+        for x in 0..500 {
+            world.set_tile(x, 200, Tile::block(1));
+        }
+        world
+    }
+
+    fn night_server() -> GameServer {
+        let mut server = GameServer::new(Config::default(), night_world());
+        server.world.day_time = false;
+        // The rate is `10 * (width / 4200) * boost` against `rand(0..8000)`, so at 500 tiles wide
+        // an ordinary night's boost of 1 fires about once in 6,700 ticks. These tests are about
+        // what happens when it fires, not how often, so the boost is turned up until the roll is
+        // certain. `roll_starfall_boost` is what sets it in a real night, and it is tested
+        // separately for the range it can produce.
+        server.starfall_boost = 100_000.0;
+        server
+    }
+
+    fn count_of(server: &GameServer, projectile_type: u16) -> usize {
+        server
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == projectile_type)
+            .count()
+    }
+
+    /// `if (Main.dayTime && !Main.remixWorld) return;` - the first line of the star arm. Stars
+    /// fall at night and only at night, however high the boost is.
+    #[test]
+    fn no_star_falls_in_daylight() {
+        let mut server = night_server();
+        server.world.day_time = true;
+        for _ in 0..200 {
+            server.spawn_falling_objects();
+        }
+        assert_eq!(
+            count_of(&server, FALLING_STAR_SPAWNER),
+            0,
+            "the sky is not supposed to be dropping stars in the middle of the afternoon"
+        );
+    }
+
+    /// The roll fires and puts a spawner in the sky, in the top five per cent of the world, with
+    /// the fixed speed of 12 the game normalises every star to.
+    #[test]
+    fn a_night_roll_puts_a_streak_in_the_sky() {
+        let mut server = night_server();
+        server.spawn_falling_objects();
+
+        let (_, star) = server
+            .projectiles
+            .iter()
+            .find(|(_, p)| p.projectile_type == FALLING_STAR_SPAWNER)
+            .expect("a certain roll must produce a star");
+        assert!(
+            star.position.1 < f32::from(server.world.height() as i16) * 16.0 * 0.05,
+            "stars start in the top five per cent of the world, not wherever: {:?}",
+            star.position
+        );
+        let speed = (star.velocity.0 * star.velocity.0 + star.velocity.1 * star.velocity.1).sqrt();
+        assert!(
+            (speed - 12.0).abs() < 0.01,
+            "the velocity is normalised to 12, which is what makes a star streak rather than \
+             fall: got {speed}"
+        );
+        assert!(
+            star.velocity.1 > 0.0,
+            "and it points downwards: {:?}",
+            star.velocity
+        );
+    }
+
+    /// `AI_148_StarSpawner`: 180 ticks of streak, and then the spawner is gone and a real star is
+    /// in its place carrying the 1000 damage that marks it as a natural one.
+    #[test]
+    fn the_streak_hands_over_to_a_real_star_after_three_seconds() {
+        let mut server = night_server();
+        server.spawn_falling_objects();
+        assert_eq!(count_of(&server, FALLING_STAR_SPAWNER), 1);
+        // Nothing else may roll while this one is in the air, or the count below is not about it.
+        server.starfall_boost = 0.0;
+
+        for _ in 0..179 {
+            server.tick_falling_stars();
+        }
+        assert_eq!(
+            count_of(&server, FALLING_STAR),
+            0,
+            "the star is handed over at 180 ticks, not before"
+        );
+
+        server.tick_falling_stars();
+        assert_eq!(
+            count_of(&server, FALLING_STAR_SPAWNER),
+            0,
+            "the spawner kills itself once it has handed over"
+        );
+        let (_, star) = server
+            .projectiles
+            .iter()
+            .find(|(_, p)| p.projectile_type == FALLING_STAR)
+            .expect("a real star");
+        assert_eq!(
+            star.damage, 1000,
+            "the damage is the tag `Kill` reads to tell a night's own star from a Starfury shot"
+        );
+    }
+
+    /// `Projectile.Kill_ExplodeTiles`: a star that reaches the ground leaves a Fallen Star behind.
+    /// This is the whole point of the chain.
+    #[test]
+    fn a_star_that_lands_drops_a_fallen_star() {
+        let mut server = night_server();
+        let index = server
+            .projectiles
+            .launch(FALLING_STAR, (2000.0, 3150.0), (0.0, 12.0), 1000, 0)
+            .expect("a free slot");
+
+        // Straight down onto the floor at tile 200.
+        for _ in 0..40 {
+            server.tick_projectiles();
+            if server.projectiles.get(index).is_none() {
+                break;
+            }
+        }
+        assert!(
+            server.projectiles.get(index).is_none(),
+            "the star should have hit the floor by now"
+        );
+
+        let stars: Vec<_> = server
+            .items
+            .iter()
+            .filter(|(_, item)| item.item.id == FALLEN_STAR)
+            .collect();
+        assert_eq!(
+            stars.len(),
+            1,
+            "a star that lands leaves exactly one Fallen Star, which is the only way this server \
+             produces the item at all"
+        );
+    }
+
+    /// The same star with an ordinary weapon's damage on it drops nothing: `damage > 500` is what
+    /// separates a night's star from a Starfury shot of the same projectile type.
+    #[test]
+    fn a_starfury_shot_of_the_same_type_drops_nothing() {
+        let mut server = night_server();
+        let index = server
+            .projectiles
+            .launch(FALLING_STAR, (2000.0, 3150.0), (0.0, 12.0), 40, 0)
+            .expect("a free slot");
+        for _ in 0..40 {
+            server.tick_projectiles();
+            if server.projectiles.get(index).is_none() {
+                break;
+            }
+        }
+        assert!(server.projectiles.get(index).is_none(), "it still lands");
+        assert!(
+            !server
+                .items
+                .iter()
+                .any(|(_, item)| item.item.id == FALLEN_STAR),
+            "only a natural star drops one"
+        );
+    }
+
+    /// `Star.NightSetup`'s two branches. The second one used to be skipped on the stated grounds
+    /// that nothing read what it produced; the star fall reads all of it.
+    #[test]
+    fn the_dusk_roll_produces_every_boost_the_game_can() {
+        let mut server = night_server();
+        let mut plain = 0;
+        let mut modest = 0;
+        let mut shower = 0;
+        for _ in 0..4000 {
+            server.roll_starfall_boost();
+            let boost = server.starfall_boost;
+            if boost == 1.0 {
+                plain += 1;
+            } else if (1.0..=1.5).contains(&boost) {
+                modest += 1;
+            } else if (3.0..=5.0).contains(&boost) {
+                shower += 1;
+            } else {
+                panic!("a boost the game cannot produce: {boost}");
+            }
+        }
+        assert!(
+            plain > 0 && modest > 0 && shower > 0,
+            "all three arms happen"
+        );
+        // `Next(10) == 0` is the shower, so about one night in ten.
+        assert!(
+            (200..800).contains(&shower),
+            "a meteor-shower night is a shade under one in ten: {shower} of 4000"
+        );
+        // Of the nine nights in ten that miss it, one in three lands in the middle band.
+        assert!(
+            (900..1500).contains(&modest),
+            "and a modest night is one in three of the rest: {modest} of 4000"
+        );
     }
 }
