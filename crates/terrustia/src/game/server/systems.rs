@@ -7699,8 +7699,10 @@ impl GameServer {
             &mut self.player_biomes,
             &mut self.rng,
         );
-        for (npc_type, position) in spawned {
-            if let Some(index) = self.npcs.spawn(npc_type, position) {
+        // A *net* id, not a type: several of vanilla's own spawn arms pick a negative one, which
+        // names a size or colour variant of a positive type rather than a type of its own.
+        for (net_id, position) in spawned {
+            if let Some(index) = self.npcs.spawn_net_id(net_id, position) {
                 self.broadcast_npc(index);
             }
         }

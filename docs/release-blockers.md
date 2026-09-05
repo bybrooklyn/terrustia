@@ -267,8 +267,11 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
 - **All 65 negative net ids** were absent from every world this server served, and the Slime Rain
   variants are only the first of them. `net_variants.rs` is the generated table
   (`NPC.SetDefaultsFromNetId`) and `NpcStore::spawn_net_id` applies it; what remains is to route
-  the *other* callers - the small and big zombies and skeletons, the hornet families - through it,
-  which is a spawner change rather than a missing mechanism.
+  the *other* callers through it. **The largest of those landed the same day**: the surface night's
+  closing switch swaps one zombie in three for a small or a big one (`NPC.cs:4811-4814`), fourteen
+  net ids across the seven zombie styles, and `try_spawn` now carries a net id rather than a type
+  so an arm that picks one can say so. What remains is `-38` to `-43` (`NPC.cs:4569`, `:4581-4610`)
+  and the rain zombies' `-54`/`-55`, each a spawner change rather than a missing mechanism.
 - **Lantern Night's** manual-forcing toggle is unmodeled (`crates/terrustia/src/game/lantern_night.rs:43`).
 
 ## Structural

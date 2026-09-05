@@ -1562,16 +1562,19 @@ pub fn zombie_settings(
 /// (`NPC.cs:4771-4816`) and not in a pool, so the fallthrough is transcribed and [`pool`]'s surface
 /// night is reached only through the arms above that hand the draw back on purpose.
 ///
-/// The negative ids vanilla spawns alongside six of these arms (`-38` to `-43`, `NPC.cs:4569`,
-/// `:4581-4610`; `-54`/`-55` in the rain arm; and `-26` to `-37` and `-44`/`-45` in the closing
-/// switch, `:4772-4815`) are not types: `NPCID.FromNetId` (`NPCID.cs:12478`) maps them back onto
-/// the very same NPC with a size multiplier (`NPC.cs:8080-8137`) through `NetIdMap`
+/// The negative ids this chain returns are not types: `NPCID.FromNetId` (`NPCID.cs:12478`) maps
+/// them back onto the very same NPC with a size multiplier through `NetIdMap`
 /// (`NPCID.cs:10451-10460`), so `SmallRainZombie` and `BigRainZombie` are both 223 and
-/// `Small`/`Big Female Zombie` are both 200. `tools/check_spawn_reach.py` drops them from vanilla's
-/// roster for that reason, and nothing here models NPC scale, so they are dropped here too. The
-/// closing switch's own `Main.rand.Next(3) == 0` size swap (`:4812-4815`) is therefore the last
-/// statement of the chain and changes nothing downstream, so unlike the rolls above it, it is not
-/// reproduced.
+/// `Small`/`Big Female Zombie` are both 200. `tools/check_spawn_reach.py` drops them from
+/// vanilla's roster for exactly that reason, and the roster probe here resolves them the same way.
+///
+/// **The closing switch's own size swap is reproduced** (`:4811-4814`,
+/// `if (Main.rand.Next(3) == 0) { type8 = ((Main.rand.Next(2) != 0) ? num55 : num54); }`): one
+/// surface-night zombie in three is a small or a big one. It was dropped on the stated grounds
+/// that "nothing here models NPC scale", which was true until `net_variants.rs` and
+/// `NpcStore::spawn_net_id` existed. The other negative arms - `-38` to `-43` (`NPC.cs:4569`,
+/// `:4581-4610`) and the rain zombies' `-54`/`-55` - are still absent, and are a spawner change
+/// rather than a missing mechanism now.
 ///
 /// `ground_block` is the tile the spawn stands on, the game's own `spawnTileY` (`NPC.cs:329`), which
 /// is this server's `y + 1`. Only the snow arm reads it.
@@ -1581,7 +1584,7 @@ pub fn seasonal_night_pick(
     ground_block: u16,
     luck: f32,
     rng: &mut SmallRng,
-) -> Option<u16> {
+) -> Option<i16> {
     let one_in = |rng: &mut SmallRng, n: u32| rng.random_ratio(1, n);
 
     // NPC.cs:4539. The Raven is the season's own bird, and a graveyard has one whether or not it is
@@ -1609,7 +1612,7 @@ pub fn seasonal_night_pick(
         }
         // NPC.cs:4561: `Main.rand.Next(317, 319)`, so 317 or 318.
         if at.halloween && one_in(rng, 2) {
-            return Some(317 + rng.random_range(0..2)); // DemonEyeOwl, DemonEyeSpaceship
+            return Some(317 + rng.random_range(0..2i16)); // DemonEyeOwl, DemonEyeSpaceship
         }
         // NPC.cs:4566. The plain Demon Eye, which the surface night pool also carries; the same
         // reasoning as the Wandering Eye above applies, so the roll stands and the draw is left to
@@ -1625,7 +1628,7 @@ pub fn seasonal_night_pick(
             193, // GreenEye
             194, // PurpleEye
         ];
-        return Some(EYES[rng.random_range(0..EYES.len())]);
+        return Some(EYES[rng.random_range(0..EYES.len())] as i16);
     }
     // NPC.cs:4623 and :4628. `RollOnlyBadLuck(300)` is a plain `Main.rand.Next(300)` at luck zero
     // (`Luck.cs:31-37`), unlike its `Extreme` sibling. The pair are the only wedding a blood moon
@@ -1746,18 +1749,38 @@ pub fn seasonal_night_pick(
             _ => 430, // ArmedZombie
         });
     }
-    // NPC.cs:4771-4816, the chain's fallthrough: the seven plain zombies, one per style. This is
-    // what an ordinary surface night in the game actually ends in, so it answers rather than
-    // handing the draw back to [`pool`].
-    Some(match zombie.style {
-        1 => 132, // BaldZombie
-        2 => 186, // PincushionZombie
-        3 => 187, // SlimedZombie
-        4 => 188, // SwampZombie
-        5 => 189, // TwiggyZombie
-        6 => 200, // FemaleZombie
+    // NPC.cs:4771-4816, the chain's fallthrough: the seven plain zombies, one per style, each with
+    // its own small and big net-id pair. This is what an ordinary surface night in the game
+    // actually ends in, so it answers rather than handing the draw back to [`pool`].
+    //
+    // ```csharp
+    // short type8 = 3; short num54 = -26; short num55 = -27;
+    // switch (zombieStyle) { case 1: type8 = 132; num54 = -28; num55 = -29; break; ... }
+    // if (Main.rand.Next(3) == 0) { type8 = ((Main.rand.Next(2) != 0) ? num55 : num54); }
+    // ```
+    //
+    // One draw in three takes a size variant instead of the plain zombie, and then a coin decides
+    // which. That roll used to be dropped on the stated grounds that "nothing here models NPC
+    // scale" - true when it was written, and no longer: `net_variants.rs` carries every one of
+    // these fourteen ids and `NpcStore::spawn_net_id` applies them.
+    let (plain, small, big): (i16, i16, i16) = match zombie.style {
+        1 => (132, -28, -29), // BaldZombie
+        2 => (186, -30, -31), // PincushionZombie
+        3 => (187, -32, -33), // SlimedZombie
+        4 => (188, -34, -35), // SwampZombie
+        5 => (189, -36, -37), // TwiggyZombie
+        6 => (200, -44, -45), // FemaleZombie
         // `short type8 = 3` is the initialiser and case 0 both, as above.
-        _ => 3, // Zombie
+        _ => (3, -26, -27), // Zombie
+    };
+    Some(if one_in(rng, 3) {
+        if rng.random_range(0..2) != 0 {
+            big
+        } else {
+            small
+        }
+    } else {
+        plain
     })
 }
 
@@ -5636,6 +5659,23 @@ fn pick_bound(
     Some(waiting[rng.random_range(0..waiting.len())])
 }
 
+/// What one spawn attempt produced: a *net* id and where to put it.
+///
+/// A net id and not a type, because vanilla's own spawner picks negative ids in several arms - the
+/// small and big zombies its closing switch swaps to one draw in three, the rain zombies, the six
+/// arms above them - and a negative id names a variant of a positive type rather than a type
+/// (`NPCID.FromNetId`). Everything ordinary is its own positive type here, which is what a net id
+/// is for anything without a variant.
+pub type NetId = i16;
+
+/// An NPC type as a net id. Every type in the game is well under `i16::MAX`, so this is a widening
+/// in practice; it is written as a checked cast rather than an `as` so a table that ever grew past
+/// 32,767 would be a compile-time-visible `0` rather than a silently negative id, which is a
+/// *variant* and would spawn something else entirely.
+fn as_net_id(npc_type: u16) -> NetId {
+    i16::try_from(npc_type).unwrap_or(0)
+}
+
 pub fn try_spawn(
     world: &World,
     npcs: &NpcStore,
@@ -5644,7 +5684,7 @@ pub fn try_spawn(
     journey: &JourneyPowers,
     biomes: &mut BiomeCache,
     rng: &mut SmallRng,
-) -> Vec<(u16, (f32, f32))> {
+) -> Vec<(NetId, (f32, f32))> {
     let active: Vec<&Player> = players
         .iter()
         .flatten()
@@ -5923,7 +5963,7 @@ pub fn try_spawn(
                 let Some(npc_type) = tower_pool(pillar, &alive_count, rng) else {
                     continue;
                 };
-                out.push((npc_type, (x as f32 * 16.0, y as f32 * 16.0)));
+                out.push((as_net_id(npc_type), (x as f32 * 16.0, y as f32 * 16.0)));
                 break;
             }
 
@@ -5990,7 +6030,7 @@ pub fn try_spawn(
                 && rng.random_range(0..BOUND_RARITY) == 0
                 && let Some(bound) = pick_bound(world, npcs, depth, player_biome, y, rng)
             {
-                out.push((bound, (x as f32 * 16.0, y as f32 * 16.0)));
+                out.push((as_net_id(bound), (x as f32 * 16.0, y as f32 * 16.0)));
                 break;
             }
 
@@ -6138,7 +6178,7 @@ pub fn try_spawn(
                         // rather than through [`friendly_pool`], whose underworld entry is empty
                         // for exactly that reason.
                         out.push((
-                            lava_bait_pick(world.day_time, rng),
+                            as_net_id(lava_bait_pick(world.day_time, rng)),
                             (x as f32 * 16.0, y as f32 * 16.0),
                         ));
                         break;
@@ -6152,7 +6192,10 @@ pub fn try_spawn(
                         // friendly surface attempt on a clear meteor-shower night, ahead of the
                         // firefly, the owl and every bird. Without it 484 was in no pool and no
                         // branch.
-                        out.push((ENCHANTED_NIGHTCRAWLER, (x as f32 * 16.0, y as f32 * 16.0)));
+                        out.push((
+                            as_net_id(ENCHANTED_NIGHTCRAWLER),
+                            (x as f32 * 16.0, y as f32 * 16.0),
+                        ));
                         break;
                     } else {
                         // ...and below the graveyard sit vanilla's own friendly chains: the beach,
@@ -6177,7 +6220,7 @@ pub fn try_spawn(
                             if drawn.is_empty() {
                                 continue;
                             }
-                            out.extend(drawn);
+                            out.extend(drawn.into_iter().map(|(ty, at)| (as_net_id(ty), at)));
                             break;
                         }
                         friendly_pool(depth, player_biome, world.day_time)
@@ -6517,7 +6560,10 @@ pub fn try_spawn(
                         &alive_count,
                         rng,
                     );
-                    out.push((npc_type, (x as f32 * 16.0, (y + drop) as f32 * 16.0)));
+                    out.push((
+                        as_net_id(npc_type),
+                        (x as f32 * 16.0, (y + drop) as f32 * 16.0),
+                    ));
                     break;
                 }
                 // Hallowed ground, which has a chain of its own ahead of the hallow pool
@@ -6759,7 +6805,7 @@ pub fn try_spawn(
                         })
                     {
                         out.push((
-                            pal_type(player, conditions.luck, rng),
+                            as_net_id(pal_type(player, conditions.luck, rng)),
                             (x as f32 * 16.0, y as f32 * 16.0),
                         ));
                         break;
@@ -6773,7 +6819,7 @@ pub fn try_spawn(
                                 && world.progress.shadow_orb_smashed
                                 && rng.random_range(0..GOBLIN_SCOUT_ORB_ODDS) == 0))
                     {
-                        out.push((GOBLIN_SCOUT, (x as f32 * 16.0, y as f32 * 16.0)));
+                        out.push((as_net_id(GOBLIN_SCOUT), (x as f32 * 16.0, y as f32 * 16.0)));
                         break;
                     }
                     // ...and immediately below him in that same chain, the four the surface day only
@@ -6786,7 +6832,7 @@ pub fn try_spawn(
                     // second one: the whole of what these arms add to a spawn scan is at most two
                     // wall reads and four rolls, and only on a tile that got past every arm above.
                     if surface_day && world.raining && rng.random_range(0..FLYING_FISH_ODDS) == 0 {
-                        out.push((FLYING_FISH, (x as f32 * 16.0, y as f32 * 16.0)));
+                        out.push((as_net_id(FLYING_FISH), (x as f32 * 16.0, y as f32 * 16.0)));
                         break;
                     }
                     if surface_day
@@ -6794,7 +6840,10 @@ pub fn try_spawn(
                         && world.raining
                         && rng.random_range(0..UMBRELLA_SLIME_ODDS) == 0
                     {
-                        out.push((UMBRELLA_SLIME, (x as f32 * 16.0, y as f32 * 16.0)));
+                        out.push((
+                            as_net_id(UMBRELLA_SLIME),
+                            (x as f32 * 16.0, y as f32 * 16.0),
+                        ));
                         break;
                     }
                     // `isSpawningInWindDirection` (`NPC.cs:1202`):
@@ -6816,7 +6865,7 @@ pub fn try_spawn(
                         && (px - x) as f32 * events.wind_target > 0.0
                         && spawn_wall_type(world, x, y) == 0;
                     if open_sky && rng.random_range(0..WINDY_BALLOON_ODDS) != 0 {
-                        out.push((WINDY_BALLOON, (x as f32 * 16.0, y as f32 * 16.0)));
+                        out.push((as_net_id(WINDY_BALLOON), (x as f32 * 16.0, y as f32 * 16.0)));
                         break;
                     }
                     // Vanilla's last clause here, `Main.tile[spawnTileX, spawnTileY].type ==
@@ -6830,7 +6879,7 @@ pub fn try_spawn(
                         && matches!(ground_block, Some(GRASS | GOLF_GRASS))
                         && rng.random_range(0..DANDELION_ODDS) != 0
                     {
-                        out.push((DANDELION, (x as f32 * 16.0, y as f32 * 16.0)));
+                        out.push((as_net_id(DANDELION), (x as f32 * 16.0, y as f32 * 16.0)));
                         break;
                     }
                     // The surface night has a chain of its own ahead of the pool, and a graveyard
@@ -6888,7 +6937,7 @@ pub fn try_spawn(
                             rng,
                         )
                     {
-                        out.push((npc_type, (x as f32 * 16.0, y as f32 * 16.0)));
+                        out.push((as_net_id(npc_type), (x as f32 * 16.0, y as f32 * 16.0)));
                         break;
                     }
                     // The dungeon's two chains, which sit ahead of its pool exactly as vanilla puts
@@ -6907,7 +6956,10 @@ pub fn try_spawn(
                         if events.hard_mode && events.downed_plantera {
                             match hard_dungeon_pick(style, &alive, rng) {
                                 Some(Some(npc_type)) => {
-                                    out.push((npc_type, (x as f32 * 16.0, y as f32 * 16.0)));
+                                    out.push((
+                                        as_net_id(npc_type),
+                                        (x as f32 * 16.0, y as f32 * 16.0),
+                                    ));
                                     break;
                                 }
                                 // The caster arm fired and its one-at-a-time gate turned it away,
@@ -6922,7 +6974,7 @@ pub fn try_spawn(
                             conditions.luck,
                             rng,
                         ) {
-                            out.push((npc_type, (x as f32 * 16.0, y as f32 * 16.0)));
+                            out.push((as_net_id(npc_type), (x as f32 * 16.0, y as f32 * 16.0)));
                             break;
                         }
                     }
@@ -6976,7 +7028,7 @@ pub fn try_spawn(
                                 (px, py),
                             )
                         {
-                            out.push((npc_type, (bx as f32 * 16.0, by as f32 * 16.0)));
+                            out.push((as_net_id(npc_type), (bx as f32 * 16.0, by as f32 * 16.0)));
                             break;
                         }
                     }
@@ -7044,7 +7096,7 @@ pub fn try_spawn(
             };
 
             // Position is the NPC's top-left, so it stands on the tile below.
-            out.push((npc_type, (x as f32 * 16.0, y as f32 * 16.0)));
+            out.push((as_net_id(npc_type), (x as f32 * 16.0, y as f32 * 16.0)));
             break;
         }
         // `SpawnNPC` (`NPC.cs:291-306`) walks the player list and `break`s the moment
@@ -7366,13 +7418,21 @@ mod tests {
                                                         (seed % 8) as u32,
                                                         &mut rng,
                                                     );
-                                                    set.extend(seasonal_night_pick(
-                                                        at,
-                                                        zombie,
-                                                        ground_block,
-                                                        luck,
-                                                        &mut rng,
-                                                    ));
+                                                    // Resolved back to a base type: the roster
+                                                    // is about which *creatures* are reachable,
+                                                    // and a small zombie is a zombie.
+                                                    set.extend(
+                                                        seasonal_night_pick(
+                                                            at,
+                                                            zombie,
+                                                            ground_block,
+                                                            luck,
+                                                            &mut rng,
+                                                        )
+                                                        .map(
+                                                            terrustia_proto::npc_data::from_net_id,
+                                                        ),
+                                                    );
                                                 }
                                             }
                                         }
@@ -8340,7 +8400,11 @@ mod tests {
                 &mut rng,
             ));
         }
-        seen
+        // `try_spawn` speaks net ids; every test below is about which creature turned up, so a
+        // variant resolves back to the type it rides on.
+        seen.into_iter()
+            .map(|(net_id, at)| (terrustia_proto::npc_data::from_net_id(net_id), at))
+            .collect()
     }
 
     /// A plain forest surface and a place to stand on it.
@@ -8461,7 +8525,7 @@ mod tests {
         let mut biomes = BiomeCache::default();
         let mut seen = std::collections::BTreeSet::new();
         for _ in 0..20_000 {
-            for (npc_type, _) in try_spawn(
+            for (net_id, _) in try_spawn(
                 &world,
                 &npcs,
                 &players,
@@ -8470,7 +8534,7 @@ mod tests {
                 &mut biomes,
                 &mut rng,
             ) {
-                seen.insert(npc_type);
+                seen.insert(terrustia_proto::npc_data::from_net_id(net_id));
             }
         }
         for vermin in GRAVEYARD_VERMIN {
@@ -8571,15 +8635,21 @@ mod tests {
         let mut biomes = BiomeCache::default();
         let mut seen = Vec::new();
         for _ in 0..ticks {
-            seen.extend(try_spawn(
-                world,
-                &npcs,
-                &players,
-                events,
-                &JourneyPowers::default(),
-                &mut biomes,
-                &mut rng,
-            ));
+            seen.extend(
+                try_spawn(
+                    world,
+                    &npcs,
+                    &players,
+                    events,
+                    &JourneyPowers::default(),
+                    &mut biomes,
+                    &mut rng,
+                )
+                .into_iter()
+                // Every test on this harness asks which creature turned up, and a small zombie is
+                // a zombie: the variant resolves back to the type it rides on.
+                .map(|(net_id, at)| (terrustia_proto::npc_data::from_net_id(net_id), at)),
+            );
         }
         seen
     }
@@ -9537,6 +9607,55 @@ mod tests {
         );
     }
 
+    /// One surface-night zombie in three is a size variant of itself.
+    ///
+    /// `if (Main.rand.Next(3) == 0) { type8 = ((Main.rand.Next(2) != 0) ? num55 : num54); }`
+    /// (`NPC.cs:4811-4814`) - a small or a big one, on a coin. Fourteen negative net ids, two per
+    /// zombie style, and every one of them was dropped on the stated grounds that "nothing here
+    /// models NPC scale". `net_variants.rs` does now.
+    #[test]
+    fn one_zombie_in_three_is_a_small_or_a_big_one() {
+        let at = Seasonal::default();
+        let mut rng = SmallRng::seed_from_u64(12);
+        let mut plain = 0;
+        let mut variants = std::collections::BTreeSet::new();
+        let mut variant_count = 0;
+        for _ in 0..60_000 {
+            // Style 0 every time, so the pairs under test are exactly (3, -26, -27).
+            let mut zombie = zombie_settings(true, 1, &mut rng);
+            zombie.style = 0;
+            zombie.armed = false;
+            let Some(net_id) = seasonal_night_pick(at, zombie, 2, 0.0, &mut rng) else {
+                continue;
+            };
+            // The chain has arms above this one - the demon eyes, the seasonal draws - and any
+            // of them can answer first. Only the ones that reached the closing switch are the
+            // subject here, and a Zombie underneath is exactly what identifies them.
+            if terrustia_proto::npc_data::from_net_id(net_id) != 3 {
+                continue;
+            }
+            if net_id > 0 {
+                plain += 1;
+            } else {
+                variant_count += 1;
+                variants.insert(net_id);
+            }
+        }
+        assert_eq!(
+            variants,
+            [-26, -27].into_iter().collect(),
+            "style 0's own pair and nobody else's"
+        );
+        let total = plain + variant_count;
+        assert!(total > 1_000, "the chain has to have answered: {total}");
+        // One in three, loosely: a distribution over tens of thousands of draws.
+        let share = variant_count as f64 / total as f64;
+        assert!(
+            (0.28..0.39).contains(&share),
+            "one draw in three takes a size variant: {share:.3}"
+        );
+    }
+
     /// The Moss Zombie, the last of the three types `docs/spawn-gaps.tsv` carried as unreachable
     /// and the only one of them that was ever going to move.
     ///
@@ -9560,7 +9679,7 @@ mod tests {
             for _ in 0..200_000 {
                 let zombie = zombie_settings(true, 1, &mut rng);
                 // Tile 2 is grass, which is what the other tests of this chain stand on.
-                if seasonal_night_pick(at, zombie, 2, luck, &mut rng) == Some(MOSS_ZOMBIE) {
+                if seasonal_night_pick(at, zombie, 2, luck, &mut rng) == Some(MOSS_ZOMBIE as i16) {
                     seen += 1;
                 }
             }
@@ -11609,7 +11728,7 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(13);
         let mut spawned = 0;
         for _ in 0..3600 {
-            for (npc_type, _) in try_spawn(
+            for (net_id, _) in try_spawn(
                 &world,
                 &npcs,
                 &players,
@@ -11618,6 +11737,7 @@ mod tests {
                 &mut BiomeCache::default(),
                 &mut rng,
             ) {
+                let npc_type = terrustia_proto::npc_data::from_net_id(net_id);
                 spawned += 1;
                 let stats = npc_stats(npc_type).expect("a real type");
                 assert_eq!(
@@ -11686,7 +11806,7 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(3);
         let mut before = 0;
         for _ in 0..40_000 {
-            for (npc_type, _) in try_spawn(
+            for (net_id, _) in try_spawn(
                 &world,
                 &npcs,
                 &players,
@@ -11695,6 +11815,7 @@ mod tests {
                 &mut BiomeCache::default(),
                 &mut rng,
             ) {
+                let npc_type = terrustia_proto::npc_data::from_net_id(net_id);
                 assert_eq!(
                     npc_type, DUNGEON_GUARDIAN,
                     "pre-Skeletron dungeon spawned an ordinary enemy"
@@ -11712,7 +11833,7 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(3);
         let mut after = 0;
         for _ in 0..40_000 {
-            for (npc_type, _) in try_spawn(
+            for (net_id, _) in try_spawn(
                 &world,
                 &npcs,
                 &players,
@@ -11721,6 +11842,7 @@ mod tests {
                 &mut BiomeCache::default(),
                 &mut rng,
             ) {
+                let npc_type = terrustia_proto::npc_data::from_net_id(net_id);
                 assert_ne!(
                     npc_type, DUNGEON_GUARDIAN,
                     "the Guardian should be gone once Skeletron is down"
@@ -11773,7 +11895,7 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(3);
         let mut found = std::collections::BTreeSet::new();
         for _ in 0..40_000 {
-            for (npc_type, _) in try_spawn(
+            for (net_id, _) in try_spawn(
                 &world,
                 &npcs,
                 &players,
@@ -11782,6 +11904,7 @@ mod tests {
                 &mut BiomeCache::default(),
                 &mut rng,
             ) {
+                let npc_type = terrustia_proto::npc_data::from_net_id(net_id);
                 found.insert(npc_type);
             }
         }
@@ -12008,7 +12131,7 @@ mod tests {
             // good for all of them, and fifty thousand full biome scans become one.
             let mut cache = BiomeCache::default();
             for _ in 0..50_000 {
-                for (npc_type, _) in try_spawn(
+                for (net_id, _) in try_spawn(
                     &world,
                     &npcs,
                     &players,
@@ -12017,6 +12140,7 @@ mod tests {
                     &mut cache,
                     &mut rng,
                 ) {
+                    let npc_type = terrustia_proto::npc_data::from_net_id(net_id);
                     *counts.entry(npc_type).or_default() += 1;
                 }
             }
@@ -12060,7 +12184,7 @@ mod tests {
         // Run many ticks so the one-in-600 roll fires repeatedly.
         let mut seen = 0;
         for _ in 0..20_000 {
-            for (npc_type, (px, py)) in try_spawn(
+            for (net_id, (px, py)) in try_spawn(
                 &world,
                 &npcs,
                 &players,
@@ -12069,6 +12193,7 @@ mod tests {
                 &mut BiomeCache::default(),
                 &mut rng,
             ) {
+                let npc_type = terrustia_proto::npc_data::from_net_id(net_id);
                 seen += 1;
                 assert!(
                     terrustia_proto::npc_data::npc_stats(npc_type).is_some(),
@@ -12416,7 +12541,7 @@ mod tests {
             let mut rng = SmallRng::seed_from_u64(seed);
             let mut seen = std::collections::HashSet::new();
             for _ in 0..40_000 {
-                for (npc_type, _) in try_spawn(
+                for (net_id, _) in try_spawn(
                     world,
                     &npcs,
                     &players,
@@ -12425,6 +12550,7 @@ mod tests {
                     &mut BiomeCache::default(),
                     &mut rng,
                 ) {
+                    let npc_type = terrustia_proto::npc_data::from_net_id(net_id);
                     seen.insert(npc_type);
                 }
             }
@@ -12586,7 +12712,7 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(5);
         let mut seen = std::collections::HashSet::new();
         for _ in 0..60_000 {
-            for (npc_type, _) in try_spawn(
+            for (net_id, _) in try_spawn(
                 &world,
                 &npcs,
                 &players,
@@ -12595,6 +12721,7 @@ mod tests {
                 &mut BiomeCache::default(),
                 &mut rng,
             ) {
+                let npc_type = terrustia_proto::npc_data::from_net_id(net_id);
                 seen.insert(npc_type);
             }
         }
@@ -12826,7 +12953,7 @@ mod tests {
                     &mut rng,
                 )
                 .into_iter()
-                .map(|(npc_type, _)| npc_type),
+                .map(|(net_id, _)| terrustia_proto::npc_data::from_net_id(net_id)),
             );
         }
         seen
@@ -12980,7 +13107,7 @@ mod tests {
             let mut sink = 0u32;
             for _ in 0..n {
                 let zombie = zombie_settings(true, 1, &mut rng);
-                sink += u32::from(
+                sink += u32::from(terrustia_proto::npc_data::from_net_id(
                     seasonal_night_pick(
                         std::hint::black_box(at),
                         std::hint::black_box(zombie),
@@ -12989,7 +13116,7 @@ mod tests {
                         &mut rng,
                     )
                     .unwrap_or(0),
-                );
+                ));
             }
             let each = start.elapsed().as_secs_f64() / f64::from(n) * 1e9;
             println!("seasonal_night_pick, {name}: {each:.2} ns/call (sink {sink})");
@@ -13516,7 +13643,7 @@ mod tests {
         let start = std::time::Instant::now();
         let (mut sink, mut scans) = (0usize, 0usize);
         for _ in 0..n {
-            for (npc_type, _) in try_spawn(
+            for (net_id, _) in try_spawn(
                 std::hint::black_box(&dungeon),
                 &npcs,
                 &players,
@@ -13525,6 +13652,7 @@ mod tests {
                 &mut biomes,
                 &mut rng,
             ) {
+                let npc_type = terrustia_proto::npc_data::from_net_id(net_id);
                 sink += 1;
                 // In this world a scan never comes back empty: the shelf spans the whole pocket, so
                 // every candidate's box holds one outside the player's screen box. So a library
@@ -14661,7 +14789,7 @@ mod tests {
                 &mut rng,
             )
             .iter()
-            .filter(|(npc_type, _)| *npc_type == wanted)
+            .filter(|(net_id, _)| terrustia_proto::npc_data::from_net_id(*net_id) == wanted)
             .count();
         }
         seen
@@ -15036,7 +15164,7 @@ mod tests {
                     &mut rng,
                 )
                 .into_iter()
-                .filter(|(ty, _)| *ty == wanted)
+                .filter(|(net_id, _)| terrustia_proto::npc_data::from_net_id(*net_id) == wanted)
                 .count();
             }
             seen
@@ -15131,6 +15259,7 @@ mod tests {
                     &mut biomes,
                     &mut rng,
                 ) {
+                    let ty = terrustia_proto::npc_data::from_net_id(ty);
                     if ty != SPIKE_BALL {
                         continue;
                     }
