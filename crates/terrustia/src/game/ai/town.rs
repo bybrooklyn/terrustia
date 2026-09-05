@@ -570,7 +570,8 @@ fn try_combat<T: TileView>(
 ) -> Option<TownUpdate> {
     let combat = town_combat::town_combat(npc.npc_type)?;
     let hostile = world.hostile.filter(|h| h.alive)?;
-    // The hardmode burst, for the two types whose ladder is behind `if (Main.hardMode)`.
+    // The hardmode burst. One type has one (the Arms Dealer); everybody else's ladder is in
+    // `combat.shots` because vanilla's is unconditional.
     let shots = if world.conditions.hardmode {
         town_combat::hardmode_shots(npc.npc_type).unwrap_or(combat.shots)
     } else {
@@ -934,7 +935,7 @@ mod tests {
     /// `if (localAI[3] > num54) { num54 = <next>; }` walks it to 16, 24, 32, 40 and 48. Because
     /// `localAI[3]` is read before its own increment and the shot fires on `localAI[3] == num54`
     /// after it, each rung is one shot. The module doc used to name this burst as unmodelled by
-    /// name; it was the longest of the four ladders and the only one not behind hardmode.
+    /// name; it is the longest of the four ladders.
     #[test]
     fn a_pirate_fires_a_six_shot_burst_within_one_attack_state() {
         let tiles = flat(0, 400);
@@ -979,7 +980,7 @@ mod tests {
         );
     }
 
-    /// ...and the two ladders that *are* behind hardmode really are: the Arms Dealer fires once in
+    /// ...and the one ladder that *is* behind hardmode really is: the Arms Dealer fires once in
     /// classic and four times in hardmode (`NPC.cs:55129-55147`).
     #[test]
     fn the_arms_dealers_burst_is_hardmode_only() {
@@ -1018,6 +1019,52 @@ mod tests {
             "one shot before the mechanical bosses"
         );
         assert_eq!(shots_in(true), vec![1, 10, 20, 30], "and four after them");
+    }
+
+    /// ...and the Painter's is not, which is the mistake that hid behind that one.
+    ///
+    /// `NPC.cs:55159-55168` is the Painter's ladder and it stands on its own; the
+    /// `if (Main.hardMode)` immediately under it (`:55169-55172`) adds two damage and nothing else.
+    /// The ladder was in `hardmode_shots`, so a Painter defending a town before the mechanical
+    /// bosses fired once where the game fires three times. Both halves are asserted, because only
+    /// the classic one was ever wrong and a test that checked hardmode alone would have passed.
+    #[test]
+    fn the_painters_burst_is_not_hardmode_only() {
+        let shots_in = |hardmode: bool| {
+            let tiles = flat(0, 400);
+            let mut painter = stand_on(227, 200);
+            let mut w = day(&tiles);
+            w.conditions.hardmode = hardmode;
+            w.hostile = Some(crate::game::npc_ai::Target {
+                slot: 5,
+                center: (painter.center().0 + 250.0, painter.center().1),
+                velocity: (0.0, 0.0),
+                alive: true,
+            });
+            let mut r = rng();
+            let mut marks = Vec::new();
+            let mut opened = false;
+            for _ in 0..2_000 {
+                let out = update(&mut painter, &w, None, &mut r);
+                let in_state = painter.local_ai[2] >= 0.0;
+                if in_state {
+                    opened = true;
+                }
+                if out.shot.is_some() {
+                    marks.push(painter.local_ai[2] as i32);
+                }
+                if opened && !in_state {
+                    break;
+                }
+            }
+            marks
+        };
+        assert_eq!(
+            shots_in(false),
+            vec![1, 12, 24],
+            "three shots before the mechanical bosses, not one"
+        );
+        assert_eq!(shots_in(true), vec![1, 12, 24], "and the same three after");
     }
 
     #[test]

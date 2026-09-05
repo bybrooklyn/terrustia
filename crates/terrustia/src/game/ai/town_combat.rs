@@ -10,24 +10,29 @@
 //!
 //! **This is a reimplementation of each class's core behaviour, not a line-by-line port** — the
 //! same standing distinction `npc_ai.rs`'s module doc draws for every other AI style. Specifically
-//! not modelled, for every entry: the multi-frame windup before the shot actually leaves (vanilla
-//! holds `ai[0]` in the attack state for `AttackTime[type]` ticks first; this fires as soon as the
-//! decision is made), the exact probabilistic `AttackAverageChance` gate (approximated below as a
-//! flat `cooldown` of `AttackTime[type] + AttackAverageChance[type]` — exact for Arms Dealer,
-//! close for everything else, since vanilla's own gate is itself a per-tick geometric roll this
-//! project has no equivalent scheduling primitive for), and the vertical aim-tolerance check the
-//! ranged classes use to decide whether to even attempt a shot. None of these change *whether* a
-//! town NPC fights back or *what it hits with* — only the precise cadence.
+//! not modelled, for every entry: the vertical aim-tolerance check the ranged classes use to
+//! decide whether to even attempt a shot, and the hardmode upgrades listed below. Neither changes
+//! *whether* a town NPC fights back or *what it hits with*.
 //!
-//! A handful of NPCs needed a further, per-entry simplification beyond that flat list — each is
-//! called out at its own entry below, not silently folded into the general disclaimer:
-//! - **Hardmode upgrades are never modelled** (Arms Dealer's burst fire, Guide's homing bolt,
+//! Two things this doc used to name as unmodelled are modelled, and it went on saying otherwise
+//! long after they landed. Recorded because a stale disclosure is worse than none: a reader trusts
+//! it and stops looking.
+//! - **The multi-frame windup is real.** A shot leaves on its own `localAI[3]` mark rather than on
+//!   the tick the decision is made (`NPC.cs:55325`), which is the telegraph; [`TownCombat::shots`]
+//!   is those marks, and the four burst ladders are transcribed in full.
+//! - **The attack gate is vanilla's own geometric roll**, `Main.rand.Next(AttackAverageChance) == 0`
+//!   per tick (`NPC.cs:56012`), not the flat `AttackTime + AttackAverageChance` cooldown this doc
+//!   described. See [`TownCombat::average_chance`], whose own doc already said this doc was wrong.
+//!
+//! A handful of NPCs needed a further, per-entry simplification, each called out at its own entry
+//! below rather than silently folded into the general disclaimer:
+//! - **Hardmode upgrades are never modelled** (Guide's Fire Arrow and +6 damage, the
 //!   Steampunker's/Travelling Merchant's/Painter's/Pirate's damage or projectile changes,
-//!   Princess's higher damage) — every entry here uses vanilla's classic-mode values, matching the
-//!   precedent Arms Dealer's own entry already set.
-//! - **Pirate's escalating multi-shot burst and close-range special attack are not modelled** —
-//!   only its base single shot (`NPC.cs`, `type == 229` branch's initial values before the
-//!   `localAI[3] > num54` escalation ladder and the `PrettySafe`-range special case).
+//!   Princess's higher damage): every entry here uses vanilla's classic-mode values. The Arms
+//!   Dealer's burst is the one exception, because it is the one ladder vanilla really does put
+//!   behind `if (Main.hardMode)`; see [`hardmode_shots`].
+//! - **Pirate's close-range special attack is not modelled** (`NPC.cs:55280-55287`, the
+//!   `PrettySafe`-range branch that swaps in projectile 162 at 50 damage). Its six-shot burst is.
 //! - **Cyborg picks one of three random projectiles per shot in vanilla** (`Utils.SelectRandom`
 //!   among rocket/grenade/proximity-mine launchers); this always fires the rocket launcher variant
 //!   (case `135`) rather than modelling the roll.
@@ -88,14 +93,21 @@ pub struct TownCombat {
     pub attack_time: i32,
 }
 
-/// The hardmode-only rungs, for the three types whose burst is behind `if (Main.hardMode)`
-/// (`NPC.cs:55129`, `:55190`): the Arms Dealer, the Cyborg, and nobody else. Everything else's
-/// ladder is unconditional, including the Pirate's - checked one block at a time rather than
-/// assumed from the pattern the first two set.
+/// The hardmode-only rungs. There is exactly one ladder in the game behind `if (Main.hardMode)`,
+/// and it is the Arms Dealer's (`NPC.cs:55129-55147`).
+///
+/// This used to carry a second entry, and the count in the doc beside it read three, two and two in
+/// three different places. All four ladders in `AI_007_TownEntities` were then read one block at a
+/// time: the Arms Dealer's at `:55129-55147` is behind hardmode; the **Painter's** at
+/// `:55159-55168`, the Steampunker's at `:55233-55242` and the Pirate's at `:55253-55279` are not.
+/// The Painter's was here, which cost a classic-mode Painter two thirds of its defence. The
+/// remaining two were already unconditional and stayed right.
+///
+/// The type ids are the trap: 227 is the Painter and 22 is the Guide, and this function's own
+/// comment named them as the Cyborg (209) and cited `:55190`, which is the Guide's block.
 pub fn hardmode_shots(npc_type: u16) -> Option<&'static [i32]> {
     Some(match npc_type {
         19 => &[1, 10, 20, 30],
-        227 => &[1, 12, 24],
         _ => return None,
     })
 }
@@ -336,6 +348,12 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
         // Painter. NPC.cs state-12 block, `type == 227`, non-hardmode: projectile 587, damage 8,
         // speed 10, knockback 1.75. AttackTime[227]=60, AttackAverageChance[227]=30,
         // DangerDetectRange[227]=800.
+        //
+        // Three shots per state, and *not* behind hardmode: the ladder is at `NPC.cs:55159-55168`
+        // and the `if (Main.hardMode)` two lines under it (`:55169-55172`) only adds two damage.
+        // This sat in `hardmode_shots` instead, so a Painter defending a town before the
+        // mechanical bosses - which is most of a Painter's life, since one moves in at eight
+        // townspeople - fired once where the game fires three times.
         227 => TownCombat {
             state: 12.0,
             kind: AttackKind::Ranged {
@@ -346,7 +364,7 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
             },
             range: 800.0,
             average_chance: 30,
-            shots: &[1],
+            shots: &[1, 12, 24],
             attack_time: 60,
         },
         // Travelling Merchant. NPC.cs state-12 block, `type == 368`, non-hardmode: projectile 14,
@@ -413,10 +431,10 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
             shots: &[1, 8, 16],
             attack_time: 24,
         },
-        // Pirate. NPC.cs state-12 block, `type == 229`, base shot only (see module doc — the
-        // escalating burst and close-range special are not modelled): projectile 14, damage 24,
-        // speed 14, knockback 2. AttackTime[229]=60, AttackAverageChance[229]=40,
-        // DangerDetectRange[229]=1000.
+        // Pirate. NPC.cs state-12 block, `type == 229`: projectile 14, damage 24, speed 14,
+        // knockback 2. AttackTime[229]=60, AttackAverageChance[229]=40,
+        // DangerDetectRange[229]=1000. The six-shot ladder is `NPC.cs:55253-55279`; the
+        // close-range special at `:55280-55287` is the part still not modelled.
         229 => TownCombat {
             state: 12.0,
             kind: AttackKind::Ranged {
