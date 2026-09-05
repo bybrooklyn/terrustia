@@ -1974,6 +1974,130 @@ impl GameServer {
     }
 
     /// Move every projectile, and remove the ones that are finished.
+    /// The Empress's rainbow streak drifts and then homes, and her sun dance rides her.
+    ///
+    /// The last two of her five, and both need something a projectile cannot see from inside its
+    /// own tick: `aiStyle == 171` steers at a player, `aiStyle == 180` sits on the boss that made
+    /// it. Everything either of them does is keyed off `timeLeft`, which is why the lifetimes had
+    /// to be right first (see `empress.rs`'s module doc).
+    ///
+    /// **Style 171** (`Projectile.cs:46287-46394`) is two phases with a wobble. Above 140 ticks
+    /// left it *drifts*: it sheds two per cent of its speed a tick and turns by a slow cosine keyed
+    /// to its own index and position, which is what makes a fan of thirteen streaks spread out into
+    /// a curtain rather than a spoke pattern. Between 140 and 30 it *homes*: it eases toward a
+    /// thirty-pixel-a-tick heading at the player, with the easing itself tightening from a
+    /// twentieth to a tenth as the window closes. Under 30 it flies straight and hits or does not.
+    /// Vanilla stores the target in `ai[0]` at launch; this reads the closest player live for the
+    /// same reason the Saucer's missile does, and with the same effect unless one dies mid-flight.
+    ///
+    /// **Style 180** (`:45805-45849`) is not a projectile that goes anywhere at all. It is pinned
+    /// to the Empress's own centre every tick, holds zero velocity, and ends at 180 ticks or the
+    /// moment she is gone - which is the difference between a ring of blades sweeping around her
+    /// and thirteen of them drifting off across the arena.
+    fn tick_empress_projectiles(&mut self) {
+        use terrustia_proto::projectile::ids::{EMPRESS_BLAST, EMPRESS_SUN_DANCE};
+
+        /// `num`/`num2`: the two `timeLeft` thresholds that divide drift, homing and flight.
+        const DRIFT_ABOVE: i32 = 140;
+        const HOME_ABOVE: i32 = 30;
+        /// `num3`, the drift's damping, and the wobble's own rate (`num6 * TAU * 0.125 / 30`).
+        const DRIFT_DAMPING: f32 = 0.98;
+        const WOBBLE_RATE: f32 = std::f32::consts::TAU * 0.125 / 30.0;
+        /// `num4`: what it homes toward, and the `value`/`value2` easing window.
+        const HOME_SPEED: f32 = 30.0;
+        const EASE_FROM: f32 = 0.05;
+        const EASE_TO: f32 = 0.1;
+        /// `localAI[0] >= num` for the sun dance.
+        const SUN_DANCE_LIFE: f32 = 180.0;
+
+        let empress = self
+            .npcs
+            .iter()
+            .find(|(_, npc)| npc.npc_type == terrustia_proto::npc_params::HALLOW_BOSS)
+            .map(|(_, npc)| npc.center());
+
+        let theirs: Vec<(u16, u16, (f32, f32))> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| matches!(p.projectile_type, EMPRESS_BLAST | EMPRESS_SUN_DANCE))
+            .map(|(index, p)| (index, p.projectile_type, p.center()))
+            .collect();
+        let mut spent = Vec::new();
+        for (index, kind, centre) in theirs {
+            if kind == EMPRESS_SUN_DANCE {
+                let Some(at) = empress else {
+                    spent.push(index);
+                    continue;
+                };
+                let Some(dance) = self.projectiles.get_mut(index) else {
+                    continue;
+                };
+                dance.local_ai[0] += 1.0;
+                if dance.local_ai[0] >= SUN_DANCE_LIFE {
+                    spent.push(index);
+                    continue;
+                }
+                dance.velocity = (0.0, 0.0);
+                dance.position = (at.0 - dance.width() / 2.0, at.1 - dance.height() / 2.0);
+                dance.dirty = true;
+                continue;
+            }
+
+            let target = self
+                .closest_player(centre, (0, 0))
+                .and_then(|slot| self.player(slot))
+                .map(|p| {
+                    (
+                        p.position.0 + PLAYER_HALF_WIDTH,
+                        p.position.1 + PLAYER_HEIGHT / 2.0,
+                    )
+                });
+            let Some(streak) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            let left = streak.time_left;
+            if left > DRIFT_ABOVE {
+                // `num6 = cos(whoAmI % 6 / 6 + position.X / 320 + position.Y / 160)`: a per-streak
+                // phase, which is the whole reason a fan of them opens out unevenly.
+                let phase = f32::from(u8::try_from(streak.key.index % 6).unwrap_or(0)) / 6.0
+                    + streak.position.0 / 320.0
+                    + streak.position.1 / 160.0;
+                let turn = phase.cos() * WOBBLE_RATE;
+                streak.velocity.0 *= DRIFT_DAMPING;
+                streak.velocity.1 *= DRIFT_DAMPING;
+                let (sin, cos) = turn.sin_cos();
+                let v = streak.velocity;
+                streak.velocity = (v.0 * cos - v.1 * sin, v.0 * sin + v.1 * cos);
+                streak.dirty = true;
+            } else if left > HOME_ABOVE
+                && let Some(at) = target
+            {
+                let to = (at.0 - centre.0, at.1 - centre.1);
+                let reach = to.0.hypot(to.1);
+                if reach > 0.0 {
+                    let wanted = (to.0 / reach * HOME_SPEED, to.1 / reach * HOME_SPEED);
+                    // `MathHelper.Lerp(value, value2, GetLerpValue(num, 30f, timeLeft))`: the
+                    // easing tightens as the window closes, so a streak that has nearly run out of
+                    // homing turns hardest.
+                    let through = ((DRIFT_ABOVE - left) as f32 / (DRIFT_ABOVE - HOME_ABOVE) as f32)
+                        .clamp(0.0, 1.0);
+                    let amount = EASE_FROM + (EASE_TO - EASE_FROM) * through;
+                    // `Vector2.SmoothStep` is a Hermite ease on the blend itself, not a plain lerp.
+                    let eased = amount * amount * (3.0 - 2.0 * amount);
+                    let v = streak.velocity;
+                    streak.velocity = (
+                        v.0 + (wanted.0 - v.0) * eased,
+                        v.1 + (wanted.1 - v.1) * eased,
+                    );
+                    streak.dirty = true;
+                }
+            }
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
     /// The Dark Mage's healing sigil actually heals, and its summoning circle stops lingering.
     ///
     /// `aiStyle == 133` (`Projectile.cs:37106-37169`). Both are the mage's own spells and neither
@@ -2185,6 +2309,8 @@ impl GameServer {
         // And the Dark Mage's two sigils, which act on the NPCs around them rather than on whatever
         // they touch.
         self.tick_dark_mage_sigils();
+        // And the Empress's last two, which need a player and the boss herself respectively.
+        self.tick_empress_projectiles();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -9514,6 +9640,119 @@ mod wired_mines_and_doors {
             .projectiles
             .iter()
             .any(|(_, p)| p.projectile_type == projectile_type)
+    }
+
+    /// The Empress's rainbow streak drifts wide, then turns onto the player.
+    ///
+    /// `Projectile.cs:46287-46394`. Fired straight *up*, away from a player standing to one side,
+    /// so nothing but the homing phase can bring it round. Both phases are asserted separately
+    /// because the drift is what makes a fan of thirteen open into a curtain and the homing is what
+    /// makes it land: a version with only one of them would look plausible and play wrong.
+    #[test]
+    fn an_empress_streak_drifts_before_it_homes() {
+        use terrustia_proto::projectile::ids::EMPRESS_BLAST;
+
+        let world = crate::world::World::empty(500, 300, "streak probe");
+        let mut server = GameServer::new(Config::default(), world);
+        let (out_tx, _out_rx) = mpsc::channel(256);
+        let mut player = Player::new(0, "127.0.0.1:1".parse().expect("loopback"), out_tx);
+        player.state = ConnState::Playing;
+        player.life = 100;
+        player.position = (2600.0, 2000.0);
+        server.players[0] = Some(player);
+
+        // `time_left: 0` takes the table's 200, which is what divides the phases.
+        let index = server
+            .projectiles
+            .launch(EMPRESS_BLAST, (2000.0, 2000.0), (0.0, -6.0), 50, 0)
+            .expect("the streak is a known type");
+        server
+            .projectiles
+            .get_mut(index)
+            .expect("just launched")
+            .time_left = 200;
+
+        // Drift: above 140 left it sheds speed and must not be aimed at anybody.
+        for _ in 0..30 {
+            server.tick_empress_projectiles();
+            if let Some(p) = server.projectiles.get_mut(index) {
+                p.time_left -= 1;
+            }
+        }
+        let drifting = server.projectiles.get(index).expect("still in the air");
+        let drift_speed = drifting.velocity.0.hypot(drifting.velocity.1);
+        // What separates the two phases is the *speed*, not the heading: the drift's wobble is a
+        // real turn (up to a degree and a half a tick, and here nearly all of it), so asserting
+        // that a drifting streak has not turned would be asserting the wobble away. It sheds two
+        // per cent a tick and never pulls toward the homing speed.
+        assert!(
+            drift_speed < 6.0 && drift_speed > 3.0,
+            "drift sheds speed rather than gaining it: {drift_speed}"
+        );
+
+        // Homing: between 140 and 30 it eases onto the player, who is due east.
+        for _ in 0..100 {
+            server.tick_empress_projectiles();
+            if let Some(p) = server.projectiles.get_mut(index) {
+                p.time_left -= 1;
+            }
+        }
+        let homing = server.projectiles.get(index).expect("still in the air");
+        assert!(
+            homing.velocity.0 > 5.0,
+            "and then turn east onto the player: {:?}",
+            homing.velocity
+        );
+        let home_speed = homing.velocity.0.hypot(homing.velocity.1);
+        assert!(
+            home_speed > drift_speed * 2.0,
+            "having pulled toward thirty rather than continuing to shed: {home_speed} \
+             against {drift_speed}"
+        );
+    }
+
+    /// Her sun dance rides her rather than drifting off, and ends at three seconds.
+    ///
+    /// `Projectile.cs:45805-45849`: pinned to her centre every tick with zero velocity. A ring of
+    /// thirteen that sweeps around her is the attack; thirteen that wander off across the arena is
+    /// not, and that is what a projectile with no arm did with them.
+    #[test]
+    fn an_empress_sun_dance_rides_her_and_expires() {
+        use terrustia_proto::projectile::ids::EMPRESS_SUN_DANCE;
+
+        let world = crate::world::World::empty(500, 300, "sun dance probe");
+        let mut server = GameServer::new(Config::default(), world);
+        let empress = server
+            .npcs
+            .spawn(terrustia_proto::npc_params::HALLOW_BOSS, (2000.0, 2000.0))
+            .expect("the Empress");
+
+        let index = server
+            .projectiles
+            .launch(EMPRESS_SUN_DANCE, (2500.0, 2500.0), (4.0, 4.0), 50, 0)
+            .expect("the sun dance is a known type");
+
+        server.tick_empress_projectiles();
+        let at = server.npcs.get(empress).expect("the Empress").center();
+        let dance = server.projectiles.get(index).expect("still in the air");
+        assert_eq!(
+            dance.velocity,
+            (0.0, 0.0),
+            "it holds no velocity of its own"
+        );
+        assert!(
+            (dance.center().0 - at.0).abs() < 0.01 && (dance.center().1 - at.1).abs() < 0.01,
+            "and sits on her, not where it was launched: {:?} against {at:?}",
+            dance.center()
+        );
+
+        for _ in 0..180 {
+            server.tick_empress_projectiles();
+        }
+        assert!(
+            server.projectiles.get(index).is_none(),
+            "and it ends at three seconds rather than lingering"
+        );
     }
 
     /// The Dark Mage's sigil heals the hurt things around it, and stops after one sweep.

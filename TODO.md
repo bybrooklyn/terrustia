@@ -321,20 +321,23 @@ dance, and **style 171 reads `timeLeft` to decide when to stop drifting and star
 on the clock it would have drifted for 760 ticks and never homed, so no arm could have worked until
 that number was right. Style 179 (the lance holds a full second where it was drawn and then leaves
 at forty - the hold *is* the attack) and style 173 (the lasting rainbow's easing curve) are
-transcribed; **171's homing and 180's anchoring to the boss are not**, because both need something
-outside the projectile's own tick and belong with the missile in `systems.rs`.
+transcribed, and so are **171's two-phase drift-then-home and 180's anchoring**, which went into
+`systems::tick_empress_projectiles` with the Saucer's missile because one steers at a player and the
+other rides the boss. All five of her projectiles now behave: the streaks shed speed and wobble
+apart into a curtain before turning onto you, and the sun dances sweep around her instead of
+drifting off across the arena.
 
 Two of her five ids also carried invented names pointing at the wrong attack (874 is
 `HallowBossDeathAurora`, not the sun dance; 923 is `FairyQueenSunDance`, not an "ethereal lance"
 vanilla has no name for). Every *use* was against the right id, checked site by site, so this was a
 rename rather than a fix - but it is the shape that had Mothron laying Crimson Penguins.
 
-**20 types remain, across eighteen styles**, read against `Projectile.cs` rather than assumed: 45,
-65, 84, 98, 102 (2), 109, 111, 112 (2), 128, 135, 136, 149, 157, 171, 180, 183, 186, 187. Seven steer
-inline and eleven delegate to an `AI_NNN_` method of their own. **None of them falls**: they are
-lasers, deathrays, homing bolts and hovering clouds, so a straight line is a poorer approximation
-than it was of a thrown bone rather than a free one. The next two worth doing are the Empress's
-remaining pair (171, 180), now that their lifetimes are right.
+**18 types remain, across sixteen styles**, read against `Projectile.cs` rather than assumed: 45, 65,
+84, 98, 102 (2), 109, 111, 112 (2), 128, 135, 136, 149, 157, 183, 186, 187. Six steer inline and ten
+delegate to an `AI_NNN_` method of their own. **None of them falls**: they are lasers, deathrays,
+homing bolts and hovering clouds, so a straight line is a poorer approximation than it was of a
+thrown bone rather than a free one. **Coverage is 61 of 79**, up from 36 when the count was first
+taken, and every gravity style and every boss projectile in the roster is closed.
 
 **The explosion is the other half of style 16 and is not modelled.** A bomb reaches the ground and
 expires; `Projectile.Kill`'s own switch widens the hitbox and breaks tiles, so a grenade lands and

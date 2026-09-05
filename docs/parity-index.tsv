@@ -1859,8 +1859,8 @@ crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	3272	43583
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	50299-50302	6583807eb5db	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72072-72079	2a6f4d26e0bc	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72406	6c77495a5649	c5414c9d223d
-crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	5c6ac5a30384
-crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	5c6ac5a30384
+crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	a071d72c9bea
+crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	a071d72c9bea
 crates/terrustia/src/game/server/systems.rs	const STINKY	BuffID.cs	393	0f6008fbeed1	cfaa20a1d46a
 crates/terrustia/src/game/server/systems.rs	fn player_has_buff	MessageBuffer.cs	2456-2477	87cb35363490	c08c9f289848
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	7363-7366	54960e839053	00e47302005c
@@ -1970,6 +1970,8 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage_sigils	Projectile.cs	37106-37169	30e0c14a17a1	0b27f798f588
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage_sigils :: const HEAL_COLOUR	CombatText.cs	20	62671f7b672b	ee87118e9183
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_detonators	Wiring.cs	212-244	5b1abb2df77d	872824d143e1
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_empress_projectiles	Projectile.cs	45805-45849	807627358f83	171ef610dd71
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_empress_projectiles	Projectile.cs	46287-46394	270e43beadb3	171ef610dd71
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_falling_stars	Projectile.cs	24093-24096	28b56f64c3b2	e00246a023eb
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_falling_stars	Projectile.cs	54028-54061	ca61f3a28f72	e00246a023eb
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_items	Player.cs	35212	71fab5d3114c	6469cd08e9c9
@@ -2096,6 +2098,8 @@ crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wi
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wired_cannon_locks_out_every_other_cannon_in_the_world	Wiring.cs	1318	7da6c7163485	fa5703cc044c
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wired_cannon_locks_out_every_other_cannon_in_the_world	Wiring.cs	1335	6d76e87fdcfc	fa5703cc044c
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wired_sundial_and_moondial_jump_the_clock	Wiring.cs	1137-1176	682f27dbf344	9e64cc93229c
+crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn an_empress_streak_drifts_before_it_homes	Projectile.cs	46287-46394	270e43beadb3	01166a1b725c
+crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn an_empress_sun_dance_rides_her_and_expires	Projectile.cs	45805-45849	807627358f83	7148624fa3d7
 crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	Main.cs	6342	7c0c82ce81e0	93319f41ca93
 crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	Main.cs	6343	3c02a1a5b76d	93319f41ca93
 crates/terrustia/src/game/server/tick.rs	impl GameServer :: fn tick	Main.cs	65601	8f010278c79f	93319f41ca93
