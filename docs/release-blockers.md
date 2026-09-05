@@ -129,7 +129,7 @@ game-derived data, and rule 2 in `AGENTS.md` keeps that out of the tree. They li
 Each of these is disclosed in a comment at its own site, which is how they were found. They are listed
 worst first by what a player or operator would actually notice.
 
-1. ~~Cave topology is not vanilla's.~~ **Fixed 2026-09-06, and the recorded diagnosis was half
+1. ~~Cave topology is not vanilla's.~~ **Fixed 2026-09-05, and the recorded diagnosis was half
    wrong.** The entry read: the carver is this project's own wandering-tunnel algorithm producing one
    large interconnected network, and gem/spider cave siting is wrong because of it. Two separate
    defects were tangled together there, and the one that actually caused the symptom was not in the
