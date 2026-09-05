@@ -288,6 +288,11 @@ fn target_triple() -> Option<(&'static str, bool)> {
         ("macos", "x86_64") => Some(("x86_64-apple-darwin", false)),
         ("macos", "aarch64") => Some(("aarch64-apple-darwin", false)),
         ("windows", "x86_64") => Some(("x86_64-pc-windows-msvc", true)),
+        // `release.yml` has published this since Windows ARM64 became a release target, and this
+        // arm did not exist, so the one machine class that had a binary waiting for it was told
+        // there was no build for its platform. Found by `a_target_triple_exists_for_this_machine`
+        // the first time this suite ran on that machine, which is the drift that test is for.
+        ("windows", "aarch64") => Some(("aarch64-pc-windows-msvc", true)),
         _ => None,
     }
 }

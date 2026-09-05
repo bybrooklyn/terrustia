@@ -95,7 +95,18 @@ fn spawn_server(home: &std::path::Path, listen: &str, panel_listen: Option<&str>
         ),
     )
     .expect("write config");
-    Command::new(env!("CARGO_BIN_EXE_terrustia"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_terrustia"));
+    // Windows has no `kill -TERM`; a graceful stop has to arrive as a console control event, and
+    // `GenerateConsoleCtrlEvent` can only address a process group, so the child needs one of its
+    // own. `CREATE_NEW_PROCESS_GROUP` is 0x0000_0200. See the send site below for why `Child::kill`
+    // cannot stand in: it is `TerminateProcess`, which is exactly the ungraceful stop this whole
+    // file exists to prove the server does *not* need.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        command.creation_flags(0x0000_0200);
+    }
+    command
         .current_dir(home)
         .env_remove("TERRUSTIA_LOG")
         // No test may depend on the network. Both of these are `tokio::spawn`ed at boot, so left
@@ -138,7 +149,24 @@ fn sigterm_stops_the_server_and_saves_within_a_bounded_window() {
             .args(["-TERM", &child.id().to_string()])
             .status();
     }
-    #[cfg(not(unix))]
+    // Windows' own equivalent of the `SIGTERM` above: a real Ctrl+Break to the child's own process
+    // group, which `stop_signal` listens for beside the close and shutdown events. `Child::kill`
+    // is `TerminateProcess`, which runs no handler and skips the save, so using it here would make
+    // this file assert that an ungraceful kill saves the world, which is the opposite of its point.
+    #[cfg(windows)]
+    {
+        // SAFETY: `GenerateConsoleCtrlEvent` takes an event id and a process group id and touches
+        // nothing else. The group id is the child's own pid, which is what
+        // `CREATE_NEW_PROCESS_GROUP` at spawn made it. `CTRL_BREAK_EVENT` is 1.
+        #[allow(unsafe_code)]
+        unsafe {
+            unsafe extern "system" {
+                fn GenerateConsoleCtrlEvent(event: u32, group: u32) -> i32;
+            }
+            GenerateConsoleCtrlEvent(1, child.id());
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = child.kill();
     }
@@ -234,7 +262,24 @@ fn panel_enabled_sigterm_still_stops_the_server_and_saves_within_a_bounded_windo
             .args(["-TERM", &child.id().to_string()])
             .status();
     }
-    #[cfg(not(unix))]
+    // Windows' own equivalent of the `SIGTERM` above: a real Ctrl+Break to the child's own process
+    // group, which `stop_signal` listens for beside the close and shutdown events. `Child::kill`
+    // is `TerminateProcess`, which runs no handler and skips the save, so using it here would make
+    // this file assert that an ungraceful kill saves the world, which is the opposite of its point.
+    #[cfg(windows)]
+    {
+        // SAFETY: `GenerateConsoleCtrlEvent` takes an event id and a process group id and touches
+        // nothing else. The group id is the child's own pid, which is what
+        // `CREATE_NEW_PROCESS_GROUP` at spawn made it. `CTRL_BREAK_EVENT` is 1.
+        #[allow(unsafe_code)]
+        unsafe {
+            unsafe extern "system" {
+                fn GenerateConsoleCtrlEvent(event: u32, group: u32) -> i32;
+            }
+            GenerateConsoleCtrlEvent(1, child.id());
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = child.kill();
     }
