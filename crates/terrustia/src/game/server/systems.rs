@@ -2191,7 +2191,12 @@ impl GameServer {
             let struck = self
                 .projectiles
                 .iter()
-                .find(|(_, p)| p.stats.hostile && p.damage > 0 && p.overlaps(box_at, box_size))
+                .find(|(_, p)| {
+                    p.stats.hostile
+                        && p.damage > 0
+                        && p.can_damage()
+                        && p.overlaps(box_at, box_size)
+                })
                 .map(|(index, p)| (index, p.damage, p.center().0, p.projectile_type));
             if let Some((index, base_damage, from_x, projectile_type)) = struck {
                 // A hostile shot delivers `base * hostileDamageScaling(difficulty) * 2`, and the game

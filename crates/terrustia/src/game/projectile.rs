@@ -5,7 +5,11 @@
 //! decided to shoot has been emitting its aim and cadence for a while; this is what makes those
 //! decisions land.
 //!
-//! A handful of behaviours cover everything the roster and the world's traps fire:
+//! Nine behaviours are transcribed. That is **not** everything the roster and the world's traps
+//! fire, and this file said it was until the count was actually taken: of the 79 projectile types
+//! something here can put in the air, 43 reach no arm of their own and fly straight because that is
+//! what the fallthrough does. Most are harmless as straight lines (a caster's bolt is one), but the
+//! gravity styles are not, and the worst of them is written down at the bottom of this list.
 //!
 //! * **Style 1**, the arc: it flies straight for a quarter of a second and then starts falling, a
 //!   tenth of a pixel a tick, capped at sixteen. Feathers, stingers, snowballs, skulls and darts.
@@ -17,10 +21,22 @@
 //!   *accelerates* by six per cent a tick — which is why a demon's scythe is harmless when it
 //!   leaves and lethal by the time it reaches you.
 //! * **Style 23**, the flame: straight, and never alight for more than a second.
+//! * **Style 25**, the boulder: it falls, hops off a hard landing, and then rolls away from
+//!   whichever side of it has a wall, working up to seven pixels a tick until it meets one head on
+//!   and breaks. It is also harmless for its first seven ticks, which is the only reason standing
+//!   next to a Boulder Statue you have just wired is survivable.
 //! * **Style 37**, the spear: it grows out of its trap to three hundred pixels or until it hits
 //!   something, then pulls back and dies when it is home.
 //! * **Style 38**, the flamethrower: it does no damage itself. Every sixth tick it emits a flame,
 //!   which is the thing that burns.
+//! * **Style 126**, the geyser: it rises out of its vent until the way ahead is clear, then hangs
+//!   there for a second. If it never gets clear it dies inside the wall.
+//!
+//! Style 25 is the one that was doing real harm by its absence. A Boulder Statue launches its
+//! boulder *at rest*, so with no arm to give it gravity it never moved at all: a wired statue put a
+//! stationary thirty-one-pixel hostile box under itself for a full minute and then took it away
+//! again. The trap that is meant to chase you down a corridor was a damage aura around its own
+//! pedestal.
 
 use terrustia_proto::projectile::{MAX_PROJECTILES, ProjectileKey, SERVER_OWNER};
 use terrustia_proto::projectile_data::{ProjectileStats, projectile_stats};
@@ -54,8 +70,10 @@ pub struct Projectile {
     /// Working state a routine keeps to itself.
     ///
     /// The game splits these from `ai` because they are never synced: they are what a projectile
-    /// needs to remember, not what a client needs to be told. A spear's anchor lives here.
-    pub local_ai: [f32; 2],
+    /// needs to remember, not what a client needs to be told. A spear's anchor lives here, and so
+    /// does a boulder's age. Four wide because vanilla's is (`Projectile.localAI`), and slot 2 is
+    /// the one the boulder's own damage gate reads.
+    pub local_ai: [f32; 4],
     pub rotation: f32,
     pub time_left: i32,
     /// How many more things it can hit. -1 means no limit.
@@ -87,6 +105,20 @@ impl Projectile {
             && self.position.0 + self.width() > position.0
             && self.position.1 < position.1 + size.1
             && self.position.1 + self.height() > position.1
+    }
+
+    /// Whether it can hurt anything *this* tick, as against whether it is hostile at all.
+    ///
+    /// `Projectile.CanDamage` (`Projectile.cs:12491-12494`) is a chain of per-type exemptions and
+    /// only one of them reaches a projectile this server launches: a boulder is harmless for its
+    /// first seven ticks. That grace is the whole reason a Boulder Statue is survivable, because
+    /// the boulder appears twenty-eight pixels below the statue's own base, which is inside the
+    /// hitbox of anybody standing next to it triggering the thing.
+    pub fn can_damage(&self) -> bool {
+        let excused = self.stats.ai_style == BOULDER_STYLE
+            && !matches!(self.projectile_type, 1005 | 1014 | 1021 | 1047)
+            && self.local_ai[2] <= BOULDER_GRACE;
+        !excused
     }
 }
 
@@ -193,6 +225,21 @@ const FLAME_EVERY: f32 = 6.0;
 const FLAME: u16 = 188;
 /// How much of its speed a rolling ball keeps when it bounces.
 const BOUNCE: f32 = -0.9;
+/// A boulder: `Projectile.cs:26596-26746` for the flight, `:19056-19099` for what it does to the
+/// wall it meets, and `:12491-12494` for the seven ticks before it can hurt anybody.
+const BOULDER_STYLE: i32 = 25;
+const BOULDER_GRACE: f32 = 7.0;
+/// How fast it rolls off the mark, and the ceiling it works up to.
+const BOULDER_NUDGE: f32 = 0.5;
+const BOULDER_TOP_SPEED: f32 = 7.0;
+const BOULDER_ACCEL: f32 = 0.05;
+/// Rolling only picks up speed while it is not really falling.
+const BOULDER_ROLLING_FALL: f32 = 6.0;
+const BOULDER_GRAVITY: f32 = 0.3;
+/// A landing harder than this hops rather than settling, at a fifth of the speed it arrived with.
+const BOULDER_HOP_FROM: f32 = 5.0;
+const BOULDER_HOP: f32 = -0.2;
+const BOULDER_SPIN: f32 = 0.06;
 
 /// Walk a box from `from` towards `to` in sub-tile increments, stopping at the first solid tile.
 ///
@@ -301,6 +348,7 @@ pub fn step(
                     });
                 }
             }
+            BOULDER_STYLE => boulder(projectile, tiles),
             126 => {
                 // A geyser: it rises out of its vent until the way ahead is clear, then stops
                 // and hangs there. If it never gets clear it dies inside the wall.
@@ -364,6 +412,51 @@ pub fn step(
                 } else {
                     projectile.position = next;
                 }
+            } else if projectile.stats.ai_style == BOULDER_STYLE {
+                // A boulder slides rather than dying: `Collision.TileCollision` zeroes whichever
+                // axis is blocked, and only then does the reaction at `Projectile.cs:19056-19099`
+                // read which one moved. A hard landing hops at a fifth of the speed it arrived
+                // with, and a boulder that was going sideways and is not any more has hit a wall,
+                // which kills it. Falling straight onto a floor leaves `velocity.X` unchanged at
+                // zero, so it is not a wall and the boulder lives to roll.
+                let last = projectile.velocity;
+                let (moved, blocked_x, blocked_y) = if !hits_terrain(tiles, next, size) {
+                    (next, false, false)
+                } else {
+                    let across = !hits_terrain(tiles, (next.0, projectile.position.1), size);
+                    let down = !hits_terrain(tiles, (projectile.position.0, next.1), size);
+                    match (across, down) {
+                        (true, false) => ((next.0, projectile.position.1), false, true),
+                        (false, true) => ((projectile.position.0, next.1), true, false),
+                        // Neither axis is free, or both are free alone but not together: a corner.
+                        // Disclosed narrowing, shared with the rolling ball above: vanilla's
+                        // `Collision.TileCollision` sweeps the box and clips whichever axis really
+                        // intersects, so a diagonal clip of an inside corner takes one axis there
+                        // and both here. For a boulder that means it can break on a corner vanilla
+                        // would have let it round. Closing it wants the real swept collision rather
+                        // than a per-axis probe, which is a change to every style, not this one.
+                        _ => (projectile.position, true, true),
+                    }
+                };
+                projectile.position = moved;
+                if blocked_y {
+                    projectile.velocity.1 = if last.1 > BOULDER_HOP_FROM {
+                        last.1 * BOULDER_HOP
+                    } else {
+                        0.0
+                    };
+                }
+                if blocked_x {
+                    projectile.velocity.0 = 0.0;
+                    // `if (velocity.X != lastVelocity.X)` and nothing more: a boulder that was not
+                    // travelling sideways cannot have had its sideways travel stopped, so vanilla
+                    // never reaches the kill for one. That matters at the moment of release, when a
+                    // statue drops its boulder overlapping the floor it is standing on and both
+                    // axes read as blocked.
+                    if last.0 != 0.0 {
+                        return Outcome::Spent;
+                    }
+                }
             } else {
                 // Everything else dies on what it hits. Swept so a fast pass cannot skip a wall.
                 let (moved, hit) = advance(projectile.position, next, size, tiles);
@@ -387,6 +480,66 @@ pub fn step(
 
     projectile.dirty = true;
     Outcome::Flying
+}
+
+/// A boulder: it falls, and once it has landed it rolls away from whichever side has a wall.
+///
+/// `Projectile.cs:26596-26746`. The arm serves seven boulders in the game and this transcribes the
+/// shared body: the per-type branches belong to the Shimmer boulder (1055), the Moon boulder (1021)
+/// and four cosmetic ones, none of which anything here launches.
+///
+/// The ledge probe is the whole character of the thing. A boulder that has come to rest with no
+/// sideways speed looks eight pixels left and eight right, at its own top row and the one below;
+/// whichever side has a wall is the side it rolls *away* from, so a boulder dropped into a corridor
+/// runs down it rather than sitting there. Failing that it looks again a tile further out, then two,
+/// and if nothing is walled at any reach the boulder's own column decides, which stops two boulders
+/// released side by side from always going the same way.
+fn boulder(p: &mut Projectile, tiles: &impl TileView) {
+    // `localAI[2]++` (`Projectile.cs:26361`), which is only bookkeeping in vanilla until
+    // `CanDamage` reads it. See [`Projectile::can_damage`].
+    p.local_ai[2] += 1.0;
+
+    if p.ai[0] != 0.0 && p.velocity.1 <= 0.0 && p.velocity.0 == 0.0 {
+        let row = (p.position.1 / TILE) as i32;
+        let walled = |x: i32| blocking(tiles, x, row) || blocking(tiles, x, row + 1);
+        let mut rolled = false;
+        for reach in [0.0, TILE, TILE * 2.0] {
+            let left = ((p.position.0 - 8.0 - reach) / TILE) as i32;
+            let right = ((p.position.0 + p.width() + 8.0 + reach) / TILE) as i32;
+            if walled(left) {
+                p.velocity.0 = BOULDER_NUDGE;
+            } else if walled(right) {
+                p.velocity.0 = -BOULDER_NUDGE;
+            } else {
+                continue;
+            }
+            rolled = true;
+            break;
+        }
+        if !rolled {
+            // `if ((int)(base.Center.X / 16f) % 2 == 0)` at the widest reach only.
+            p.velocity.0 = if (p.center().0 / TILE) as i32 % 2 == 0 {
+                BOULDER_NUDGE
+            } else {
+                -BOULDER_NUDGE
+            };
+        }
+    }
+
+    p.rotation += p.velocity.0 * BOULDER_SPIN;
+    // Set unconditionally at the end of every tick, so the probe above never runs on the first one:
+    // a boulder is falling out of a statue then, not resting on anything.
+    p.ai[0] = 1.0;
+    p.velocity.1 = p.velocity.1.min(TERMINAL);
+    if p.velocity.1 <= BOULDER_ROLLING_FALL {
+        if p.velocity.0 > 0.0 && p.velocity.0 < BOULDER_TOP_SPEED {
+            p.velocity.0 += BOULDER_ACCEL;
+        }
+        if p.velocity.0 < 0.0 && p.velocity.0 > -BOULDER_TOP_SPEED {
+            p.velocity.0 -= BOULDER_ACCEL;
+        }
+    }
+    p.velocity.1 += BOULDER_GRAVITY;
 }
 
 /// A spear growing out of its trap: it reaches, then pulls back, then dies at home.
@@ -508,7 +661,7 @@ impl ProjectileStore {
             damage,
             knockback: stats.knockback,
             ai: [0.0; 3],
-            local_ai: [0.0; 2],
+            local_ai: [0.0; 4],
             rotation: 0.0,
             time_left: if time_left > 0 {
                 time_left
@@ -860,6 +1013,183 @@ mod tests {
             ball.position.1 < 64.0 * 16.0,
             "and stayed on top of the floor, not fallen through to {}",
             ball.position.1
+        );
+    }
+
+    /// Put a boulder at rest at a tile position, the way a Boulder Statue and a broken Boulder
+    /// tile both release one: no velocity at all, and gravity is the only thing that moves it.
+    fn dropped_boulder(store: &mut ProjectileStore, tile_x: f32, tile_y: f32) -> u16 {
+        let half = 31.0 / 2.0;
+        store
+            .launch(
+                99,
+                (tile_x * TILE + half, tile_y * TILE + half),
+                (0.0, 0.0),
+                70,
+                0,
+            )
+            .expect("the boulder is a known type")
+    }
+
+    /// A Boulder Statue drops a boulder that *falls*, and once it lands it rolls.
+    ///
+    /// This is the whole trap and none of it happened: vanilla launches the boulder at rest and the
+    /// arm gives it gravity, so with no arm at all a wired statue used to put a stationary hostile
+    /// box under itself for a full minute. `Projectile.cs:26596-26746`.
+    #[test]
+    fn a_boulder_falls_and_then_rolls_away_from_the_wall_beside_it() {
+        let mut tiles = Air::default();
+        for x in 55..90 {
+            tiles.0.insert((x, 64), Tile::block(1));
+        }
+        // A wall on its left, so it must roll east.
+        for y in 50..64 {
+            tiles.0.insert((61, y), Tile::block(1));
+        }
+        let mut store = ProjectileStore::new();
+        let index = dropped_boulder(&mut store, 62.0, 56.0);
+        let start = *store.get(index).unwrap();
+        assert_eq!(start.velocity, (0.0, 0.0), "it is released at rest");
+
+        let mut boulder = start;
+        for _ in 0..200 {
+            if step(&mut boulder, &tiles, &mut Vec::new()) == Outcome::Spent {
+                break;
+            }
+        }
+        assert!(
+            boulder.position.1 > start.position.1 + 100.0,
+            "it should have fallen to the floor, not hung at {}",
+            boulder.position.1
+        );
+        assert!(
+            boulder.velocity.0 > 1.0,
+            "and rolled east away from the wall on its left, not sat at {}",
+            boulder.velocity.0
+        );
+        assert!(
+            boulder.position.0 > start.position.0 + 50.0,
+            "which means actually travelling: {} pixels",
+            boulder.position.0 - start.position.0
+        );
+    }
+
+    /// It works up to seven pixels a tick and no further (`Projectile.cs:26715-26724`).
+    ///
+    /// The gate is `velocity.X < 7f` and the step is `+= 0.05f`, so the last step it is allowed to
+    /// take can carry it a hair past seven and leave it there. That overshoot is the game's own and
+    /// is transcribed rather than clamped; the tolerance below is what makes room for it.
+    #[test]
+    fn a_rolling_boulder_stops_gaining_speed_at_seven() {
+        let mut tiles = Air::default();
+        for x in 0..4000 {
+            tiles.0.insert((x, 64), Tile::block(1));
+        }
+        for y in 50..64 {
+            tiles.0.insert((61, y), Tile::block(1));
+        }
+        let mut store = ProjectileStore::new();
+        let index = dropped_boulder(&mut store, 62.0, 62.0);
+        let mut boulder = *store.get(index).unwrap();
+        for _ in 0..1000 {
+            if step(&mut boulder, &tiles, &mut Vec::new()) == Outcome::Spent {
+                break;
+            }
+            assert!(
+                boulder.velocity.0 <= BOULDER_TOP_SPEED + BOULDER_ACCEL,
+                "a boulder should never pass seven by more than one step: {}",
+                boulder.velocity.0
+            );
+        }
+        assert!(
+            boulder.velocity.0 > 6.0,
+            "but it should get there: {}",
+            boulder.velocity.0
+        );
+    }
+
+    /// A boulder that meets a wall head on breaks; one that merely lands on a floor does not.
+    ///
+    /// `Projectile.cs:19084-19098`: the kill is on the *horizontal* axis changing, which is why
+    /// falling straight down onto the ground leaves it alive to roll. Getting that the wrong way
+    /// round would end the trap on the first tile it touched.
+    #[test]
+    fn a_boulder_breaks_on_a_wall_but_not_on_the_floor() {
+        let mut tiles = Air::default();
+        for x in 55..70 {
+            tiles.0.insert((x, 64), Tile::block(1));
+        }
+        let mut store = ProjectileStore::new();
+
+        let index = dropped_boulder(&mut store, 60.0, 56.0);
+        let mut lands = *store.get(index).unwrap();
+        for _ in 0..40 {
+            assert_eq!(
+                step(&mut lands, &tiles, &mut Vec::new()),
+                Outcome::Flying,
+                "landing on a floor must not break it"
+            );
+        }
+
+        // And released *overlapping* the ground, which a statue flush against a floor will do. Both
+        // axes read as blocked on that first tick, and the only thing telling it apart from a
+        // boulder that has run into a wall is that this one was never moving sideways. Exactly one
+        // tick is asserted because that is the whole contract: once it picks a direction, a boulder
+        // embedded in rock has genuinely hit a wall and is supposed to break.
+        let index = dropped_boulder(&mut store, 60.0, 63.0);
+        let mut embedded = *store.get(index).unwrap();
+        embedded.position.1 = 64.0 * TILE - 8.0;
+        assert_eq!(
+            step(&mut embedded, &tiles, &mut Vec::new()),
+            Outcome::Flying,
+            "a boulder released touching the ground broke before it had moved at all"
+        );
+
+        for y in 50..64 {
+            tiles.0.insert((66, y), Tile::block(1));
+        }
+        let index = dropped_boulder(&mut store, 60.0, 63.0);
+        let mut hits = *store.get(index).unwrap();
+        hits.velocity = (6.0, 0.0);
+        let mut broke = false;
+        for _ in 0..40 {
+            if step(&mut hits, &tiles, &mut Vec::new()) == Outcome::Spent {
+                broke = true;
+                break;
+            }
+        }
+        assert!(
+            broke,
+            "it rolled into a wall and lived: {:?}",
+            hits.position
+        );
+    }
+
+    /// Seven ticks of grace, because the boulder appears inside whoever pulled the lever.
+    ///
+    /// `Projectile.CanDamage` (`Projectile.cs:12491-12494`). A Boulder Statue puts its boulder
+    /// twenty-eight pixels below its own base, which is well inside the hitbox of anybody standing
+    /// beside it, so without this the trap hits its own operator before it has moved at all.
+    #[test]
+    fn a_boulder_cannot_hurt_anybody_for_its_first_seven_ticks() {
+        let tiles = Air::default();
+        let mut store = ProjectileStore::new();
+        let index = dropped_boulder(&mut store, 60.0, 20.0);
+        let mut boulder = *store.get(index).unwrap();
+        assert!(!boulder.can_damage(), "not on the tick it is released");
+        for tick in 1..=7 {
+            step(&mut boulder, &tiles, &mut Vec::new());
+            assert!(
+                !boulder.can_damage(),
+                "still harmless on tick {tick}, local_ai[2] = {}",
+                boulder.local_ai[2]
+            );
+        }
+        step(&mut boulder, &tiles, &mut Vec::new());
+        assert!(
+            boulder.can_damage(),
+            "and dangerous from the eighth: local_ai[2] = {}",
+            boulder.local_ai[2]
         );
     }
 

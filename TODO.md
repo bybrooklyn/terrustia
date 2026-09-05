@@ -266,6 +266,37 @@ because it concerns what the server claims about itself.
 CI; the live differential against a real `TerrariaServer` remains a Phase 2 qualification step, since
 decompiled or installed game material can never ship to hosted CI.
 
+**C6, projectile AI styles, counted rather than estimated (2026-09-05).** `projectile.rs`'s module
+doc claimed "a handful of behaviours cover everything the roster and the world's traps fire". The
+count says otherwise: of the **79 projectile types something in this server can put in the air, 43
+reach no arm of their own** and fly straight because that is what the fallthrough does. The doc is
+corrected and the count is now in it.
+
+Most of the 43 are harmless as straight lines. These are not, worst first:
+
+- **Style 25, the boulder (fixed 2026-09-05).** Vanilla launches a boulder *at rest* and the arm is
+  what gives it gravity, so with no arm a wired Boulder Statue put a stationary 31-pixel hostile box
+  under itself for a full minute. Transcribed with its ledge probe, its speed ceiling, its hard-
+  landing hop, its sideways kill and its seven-tick damage grace.
+- **Style 2, the thrown arc (7 types).** `Bone`, `ThrowingKnife`, `FrostDaggerfish`,
+  `NurseSyringeHurt`, `SantaBombs`, `SnowBallFriendly`, `CannonballHostile`: twenty ticks of free
+  flight and then `velocity.Y += 0.4; velocity.X *= 0.97` (`Projectile.cs:23907-23928`). They fly
+  dead flat here, so a wired cannon's ball never falls.
+- **Style 8 (3 types), including the Golem's fireball (258).** Bouncing off the temple floor is a
+  signature of that fight.
+- **Style 16 (3 types).** `Grenade`, `ProximityMineI`, `PartyGirlGrenade` never detonate.
+- **Style 5**, the Fallen Star, which only started existing here on 2026-09-05.
+
+**Boulder *tiles* release nothing when mined, and the blocker is not the projectile.**
+`WorldGen.KillTile`'s own switch (`WorldGen.cs:49177-49212`) is eleven cases, ten of them the
+boulder family this generator already scatters into trap chambers, and mining one gives back the
+item and no boulder. The hook has nowhere correct to sit yet: vanilla finds the object's anchor from
+`frameX/18`, and this generator places a boulder as **one unframed tile** rather than a framed 2x2
+(`traps.rs:621` passes `-1, -1`), because there is no `TileObjectData`-driven placement and no
+`Check2x2`/`SquareTileFrame` anywhere in this server. Building the hook on that would fire a
+projectile per reported tile from an anchor that does not exist. The prerequisite is multi-tile
+framing, which `dispatch.rs`'s own `frame_important` arm already names as absent.
+
 ### Lane D: protocol classification, zero unknown IDs (done)
 
 One authoritative, machine-readable per-ID table for the full 0..=162 surface (direction,
