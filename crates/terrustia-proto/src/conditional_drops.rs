@@ -53,6 +53,19 @@ pub struct Conditions {
     /// all" and "a frost moon is running instead" alike, since `PumpkinMoonDropGatingChance` only
     /// ever applies to the pumpkin moon's own NPCs, which cannot be alive during the other event.
     pub pumpkin_moon_wave: Option<i32>,
+    /// The frost moon's current wave, the same way, for `FrostMoonDropGatingChance` and
+    /// `FrostMoonDropGateForTrophies` (`Terraria.GameContent.ItemDropRules/Conditions.cs:55-89`, `:127-166`).
+    ///
+    /// A sibling field rather than one shared `moon_wave`, because the two gates are separate
+    /// classes with separate constants (28 against 24, `-2` against `-1`) and because each checks
+    /// its *own* moon first: a Frost Moon NPC alive during a Pumpkin Moon would be gated by
+    /// neither, and collapsing them into one number would silently gate it by whichever moon
+    /// happened to be up.
+    ///
+    /// Every Frost Moon boss drop used to be flattened to unconditional for want of this, which
+    /// made wave-1 loot roughly ten times likelier than the game allows and the whole event's wave
+    /// progression pointless. Six places read it now.
+    pub frost_moon_wave: Option<i32>,
     /// `NPC.RedHatSkeletronAdjustmentsEnabled()` for *this* Skeletron (`NPC.cs:67435-67446`) —
     /// per-instance state, not a fact about npc_type 35 in general: the ordinary boss and the
     /// Clothier's repeatable vanity re-fight share a type and are told apart only by `ai[3]`. The
@@ -240,7 +253,26 @@ pub fn conditional(npc_type: u16, at: Conditions) -> Vec<Conditional> {
         out.push(always(bag));
     }
     if let Some(trophy) = trophy(npc_type) {
-        out.push(sometimes(trophy, 10));
+        // The Frost Moon's three are the one exception to the flat 1-in-10 every other boss's
+        // trophy uses, and the exception is two rolls rather than one: `rule.OnSuccess(
+        // ByCondition(FrostMoonDropGateForTrophies, item))` where `rule` is itself
+        // `RegisterToNPC(npc, new LeadingConditionRule(FrostMoonDropGatingChance))`
+        // (`ItemDropDatabase.cs:372`, `:378`, `:384`). Two independent gates multiply, exactly as
+        // Pumpking's own trophy and medallion already do here.
+        //
+        // Below wave 15 the trophy gate cannot pass at all, so these three are genuinely
+        // unobtainable early in the event - which the old flat 1-in-10 made them obtainable from
+        // wave 1, a documented over-give this replaces.
+        if matches!(npc_type, 344..=346) {
+            if let Some(wave) = at.frost_moon_wave
+                && let Some(trophy_gate) = moon_trophy_gate_denominator(wave)
+            {
+                let outer = frost_moon_gate_denominator(wave, at.expert);
+                out.push(sometimes(trophy, outer * trophy_gate));
+            }
+        } else {
+            out.push(sometimes(trophy, 10));
+        }
     }
 
     // Master mode's own relics, pets and mounts. `ItemDropRule.MasterModeCommonDrop` and
@@ -641,10 +673,10 @@ pub fn conditional(npc_type: u16, at: Conditions) -> Vec<Conditional> {
     // Pumpking's and Mourning Wood's own trophies: `rule.OnSuccess(ByCondition(
     // PumpkinMoonDropGateForTrophies, item))` (`ItemDropDatabase.cs:350`/`360`) — a genuinely
     // separate roll from the weapon pool in `chance_pools`, both hanging off the same shared
-    // `LeadingConditionRule(PumpkinMoonDropGatingChance)`; see `pumpkin_moon_trophy_gate_denominator`'s
+    // `LeadingConditionRule(PumpkinMoonDropGatingChance)`; see `moon_trophy_gate_denominator`'s
     // own doc for the formula and its one disclosed simplification.
     if let Some(wave) = at.pumpkin_moon_wave
-        && let Some(gate) = pumpkin_moon_trophy_gate_denominator(wave)
+        && let Some(gate) = moon_trophy_gate_denominator(wave)
     {
         match npc_type {
             325 => out.push(sometimes(1855, gate)), // Pumpking (ItemID names these swapped)
@@ -655,15 +687,21 @@ pub fn conditional(npc_type: u16, at: Conditions) -> Vec<Conditional> {
 
     // Santa-NK1's Reindeer Bells: `rule2.OnSuccess(ItemDropRule.ByCondition(
     // Conditions.FromCertainWaveAndAbove(15), 1914, 15))` (`ItemDropDatabase.cs:376`) — its own
-    // 1-in-15 roll, further gated on `NPC.waveNumber >= 15` and on the same outer
-    // `LeadingConditionRule(FrostMoonDropGatingChance)` every other Frost Moon boss item shares.
-    // Neither gate is modelled, for the same reason `trophy`'s and `one_from`'s own Frost Moon
-    // entries are not: both need the live wave number, which has nowhere to reach this module
-    // without a new `Conditions` field, and that would break every existing caller outside this
-    // lane's files. Modelled at its own bare 1-in-15 rate, unconditionally — previously entirely
-    // absent, so a Santa-NK1 kill could not drop this item at all regardless of wave.
-    if npc_type == 345 {
-        out.push(sometimes(1914, 15));
+    // 1-in-15 roll, gated on `NPC.waveNumber >= 15` (`Conditions.cs`'s
+    // `FromCertainWaveAndAbove`, a bare `NPC.waveNumber >= _wave` and nothing else) and on the
+    // same outer `LeadingConditionRule(FrostMoonDropGatingChance)` every other Frost Moon boss
+    // item shares. All three, now that the wave is here: two independent rolls multiplied and one
+    // hard threshold.
+    //
+    // Wave 15 is over half way through a Frost Moon, and a mount is worth reaching. The old flat
+    // 1-in-15 from wave 1 was a documented over-give in both directions at once: reachable when
+    // it should not be, and no likelier at wave 20 than at wave 1.
+    if npc_type == 345
+        && let Some(wave) = at.frost_moon_wave
+        && wave >= 15
+    {
+        let gate = frost_moon_gate_denominator(wave, at.expert);
+        out.push(sometimes(1914, gate * 15));
     }
 
     out.extend(by_mode(npc_type, at));
@@ -694,25 +732,12 @@ pub fn one_from(npc_type: u16, at: Conditions) -> &'static [&'static [u16]] {
             &[&[49, 50, 53, 54, 5011, 975]]
         };
     }
-    // Ice Queen (346): `RegisterToNPC(346, new LeadingConditionRule(condition)).OnSuccess(
-    // ItemDropRule.OneFromOptions(1, 1910, 1929))` (`ItemDropDatabase.cs:384-385`) — a guaranteed
-    // (bare `1` denominator) pick between ElfMelter and ChainGun. `treasure_bag` has no case for
-    // 346 (Frost Moon minibosses have no expert-mode bag at all), and nothing in
-    // `RegisterBoss_FrostMoon` wraps this in a `NotExpert` guard the way real bosses' loot is, so
-    // — same reasoning as npc 85 just above — it must be checked ahead of the expert-mode return
-    // below rather than be silently emptied by it in expert/master worlds.
-    //
-    // The outer `LeadingConditionRule(FrostMoonDropGatingChance)` — a further wave/luck-based
-    // gate on top of this guaranteed pick — is not modelled, for the same reason `trophy`'s own
-    // Frost Moon entries cannot be: it needs a live wave number this module has nowhere to reach
-    // without a new `Conditions` field, which would break every existing caller outside this
-    // lane's files. Modelled as unconditionally available once the boss is dead, which is what
-    // this project's outer-gate simplifications already do elsewhere (the Headless Horseman's own
-    // medallion is the one place that gate *is* modelled, because `Conditions` already happens to
-    // carry `pumpkin_moon_wave` for it).
-    if npc_type == 346 {
-        return &[&[1910, 1929]];
-    }
+    // Ice Queen (346) used to be here, as a guaranteed pick. Its pick *is* guaranteed - a bare
+    // `1` denominator on the `OneFromOptions` - but the whole rule sits inside
+    // `RegisterToNPC(346, new LeadingConditionRule(FrostMoonDropGatingChance))`
+    // (`ItemDropDatabase.cs:383-385`), which is not, and this function's pools have no gate. It
+    // has moved to `chance_pools`, whose pools do, now that `Conditions` carries the frost moon's
+    // wave. See its arm there.
     if at.expert {
         // Expert replaces the lot with a treasure bag.
         return &[];
@@ -848,11 +873,35 @@ fn pumpkin_moon_gate_denominator(wave: i32, expert: bool) -> u32 {
     (denominator as i64).max(1) as u32
 }
 
-/// `Conditions.PumpkinMoonDropGateForTrophies.CanDrop` (`Conditions.cs:179-217`) — Pumpking's and
-/// Mourning Wood's own trophies (`ItemID.MourningWoodTrophy`/`PumpkingTrophy`, the constant names
-/// swapped from what they actually drop, the same way the Frost Moon's own three are — see
-/// `trophy`'s own doc comment). Unreachable before wave 15; the denominator then steps
-/// 4 (waves 15-16) -> 3 (17-18) -> 2 (19+).
+/// The same shape with the Frost Moon's own two constants: `(28 - wave - expertBump) / 2.5`, minus
+/// *two* more in expert rather than one, floored at `1` — `Conditions.FrostMoonDropGatingChance.
+/// CanDrop` (`Terraria.GameContent.ItemDropRules/Conditions.cs:57-78`). Shared by every Frost Moon boss drop, which is all of them:
+/// `RegisterBoss_FrostMoon` wraps npc 344, 345 and 346's whole rule trees in one
+/// `LeadingConditionRule(FrostMoonDropGatingChance)` (`ItemDropDatabase.cs:371`, `:377`, `:383`).
+///
+/// The Frost Moon runs to wave 20 and the Pumpkin Moon to 15, which is why the constants differ:
+/// both reach a guaranteed drop a few waves before their own last one. Non-expert this is 1-in-10
+/// at wave 1 and 1-in-1 from wave 26, so the flattening this replaces was a tenfold over-give at
+/// the bottom of the event and correct only at the very top of it.
+fn frost_moon_gate_denominator(wave: i32, expert: bool) -> u32 {
+    let adjusted = wave + if expert { 5 } else { 0 };
+    let mut denominator = f64::from(28 - adjusted) / 2.5;
+    if expert {
+        denominator -= 2.0;
+    }
+    (denominator as i64).max(1) as u32
+}
+
+/// `Conditions.PumpkinMoonDropGateForTrophies.CanDrop` (`Conditions.cs:179-217`) and
+/// `FrostMoonDropGateForTrophies.CanDrop` (`Conditions.cs:127-166`), which are the same function
+/// twice: identical bodies apart from which moon each checks is up, so one helper serves both and
+/// the caller supplies the wave for whichever moon it is asking about.
+///
+/// Pumpking's and Mourning Wood's own trophies (`ItemID.MourningWoodTrophy`/`PumpkingTrophy`, the
+/// constant names swapped from what they actually drop, the same way the Frost Moon's own three
+/// are — see `trophy`'s own doc comment), and the Frost Moon's Everscream, Santa-NK1 and Ice
+/// Queen. Unreachable before wave 15; the denominator then steps 4 (waves 15-16) -> 3 (17-18) ->
+/// 2 (19+).
 ///
 /// Expert mode's own further reduction (`if (Main.expertMode && Main.rand.Next(3) == 0) num--;`)
 /// is a *second*, independent, un-seeded roll — not even on `info.rng`, the RNG every other gate
@@ -861,7 +910,7 @@ fn pumpkin_moon_gate_denominator(wave: i32, expert: bool) -> u32 {
 /// at the wave-only denominator in every mode, a documented under-roll in expert specifically (a
 /// smaller true chance there, never a larger one), the same direction this module's other luck/
 /// expert simplifications already take.
-fn pumpkin_moon_trophy_gate_denominator(wave: i32) -> Option<u32> {
+fn moon_trophy_gate_denominator(wave: i32) -> Option<u32> {
     if wave < 15 {
         return None;
     }
@@ -887,8 +936,29 @@ pub fn chance_pools(npc_type: u16, at: Conditions) -> Vec<ChancePool> {
         // The whole hornet family (`npcNetIds8`, `ItemDropDatabase.cs:1051-1052`): Hornet, Man
         // Eater, and the five hardmode Honey Comb hornets. A Hive Pack piece.
         42 | 43 | 231 | 232 | 233 | 234 | 235 => vec![pool(100, &[960, 961, 962])],
-        // Zombie Elf trio, the Frost Moon's own (`ItemDropDatabase.cs:389`).
+        // Zombie Elf trio, the Frost Moon's own (`ItemDropDatabase.cs:389`). Registered directly
+        // rather than under the event's `LeadingConditionRule`, so its 1-in-200 is the whole gate
+        // and it needs no wave: `RegisterToMultipleNPCs(ItemDropRule.OneFromOptions(200, ...))`.
         338..=340 => vec![pool(200, &[1943, 1944, 1945])],
+        // Ice Queen (346): `RegisterToNPC(346, new LeadingConditionRule(condition)).OnSuccess(
+        // ItemDropRule.OneFromOptions(1, 1910, 1929))` (`ItemDropDatabase.cs:383-385`) — the
+        // *pick* between ElfMelter and ChainGun is guaranteed (a bare `1` denominator), and the
+        // rule reaching that pick at all is not: the outer `FrostMoonDropGatingChance` is the
+        // pool's whole gate, and one-in-that is exactly what a `ChancePool` says.
+        //
+        // This lived in `one_from` as a guaranteed pick for want of the wave number, which made
+        // an Ice Queen kill at wave 1 in a classic world hand over one of the two every time
+        // rather than one time in ten. `treasure_bag` has no case for 346 (Frost Moon minibosses
+        // have no expert-mode bag at all) and `RegisterBoss_FrostMoon` never wraps this in a
+        // `NotExpert` guard, so it stands in every mode - `chance_pools` has no expert-mode
+        // return to be caught by, unlike `one_from`, so the guard it needed there is gone too.
+        346 => match at.frost_moon_wave {
+            Some(wave) => vec![pool(
+                frost_moon_gate_denominator(wave, at.expert),
+                &[1910, 1929],
+            )],
+            None => vec![],
+        },
         // Nailhead's Nail Gun, once Plantera is down (`ItemDropDatabase.cs:266-270`): a
         // `LeadingConditionRule(DownedPlantera)` over a 1-in-25 `Common(3107)` whose own
         // `OnSuccess` hands over 100-200 Nails. A one-option pool rather than an entry in
@@ -1113,7 +1183,25 @@ fn classic_only(npc_type: u16) -> Vec<Conditional> {
 /// One fallback chain among the classic-only rolls: tried in order, stopping at the first link
 /// that lands — the same shape [`crate::npc_drops::DropChain`] already gives the flat table, kept
 /// separate here rather than folded into it.
-pub type ConditionalChain = Vec<Conditional>;
+///
+/// `one_in` is the *outer* gate: vanilla writes several of these as
+/// `RegisterToNPC(npc, new LeadingConditionRule(cond)).OnSuccess(chain)`, where the whole chain is
+/// only reached at all when the condition passes. `1` means no outer gate, which is every chain
+/// but the Frost Moon's two. Folding such a gate into the links' own denominators is not possible
+/// with integers: the Frost Moon chain's four links are exactly 15, 3, 2, 1 at gate 1, and at
+/// gate 10 the second would have to be 447/14.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConditionalChain {
+    /// The outer `LeadingConditionRule`'s denominator: the chain is run one time in this.
+    pub one_in: u32,
+    /// The links, tried in order until one lands.
+    pub links: Vec<Conditional>,
+}
+
+/// A chain with no outer gate, which is all but two of them.
+fn chain(links: Vec<Conditional>) -> ConditionalChain {
+    ConditionalChain { one_in: 1, links }
+}
 
 /// The classic-only rolls the game writes as an explicit `OnFailedRoll` chain rather than a set of
 /// independent rules — `Common(a, N).OnFailedRoll(Common(b, M))` tries `b` only when `a`'s own
@@ -1144,29 +1232,34 @@ pub fn conditional_chains(npc_type: u16, at: Conditions) -> Vec<ConditionalChain
     // primary did not claim — checked: 1/15 + (14/15)(1/3) + (14/15)(2/3)(1/2) +
     // (14/15)(2/3)(1/2) each equal 1/15, 14/45, 14/45, 14/45, summing to 1.
     //
-    // The outer `LeadingConditionRule(FrostMoonDropGatingChance)` wrapping both whole chains — a
-    // further wave/luck-based gate — is not modelled, for the same reason `trophy`'s and
-    // `one_from`'s own Frost Moon entries are not: it needs a live wave number this module has
-    // nowhere to reach without a new `Conditions` field, which would break every existing caller
-    // outside this lane's files. Modelled as unconditionally reachable once the boss is dead.
-    match npc_type {
-        344 => {
-            return vec![vec![
-                a_few(1871, 15, 1, 1), // FestiveWings
-                a_few(1916, 3, 1, 1),  // ChristmasHook
-                a_few(1928, 2, 1, 1),  // ChristmasTreeSword
-                always(1930),          // Razorpine
-            ]];
-        }
-        345 => {
-            return vec![vec![
-                a_few(1959, 15, 1, 1), // BabyGrinchMischiefWhistle
-                a_few(1931, 3, 1, 1),  // BlizzardStaff
-                a_few(1946, 2, 1, 1),  // SnowmanCannon
-                always(1947),          // NorthPole
-            ]];
-        }
-        _ => {}
+    // The outer `LeadingConditionRule(FrostMoonDropGatingChance)` wrapping both whole chains is
+    // `ConditionalChain::one_in`, which exists for exactly this: the chain is reached one kill in
+    // `frost_moon_gate_denominator`, so at wave 1 in a classic world the whole tree fires on one
+    // kill in ten rather than on every one. Without the wave the chain is unreachable, which is
+    // right - both NPCs only exist during a Frost Moon, and a caller that does not know the wave
+    // does not know the event is up either.
+    if let Some(chain_links) = match npc_type {
+        344 => Some(vec![
+            a_few(1871, 15, 1, 1), // FestiveWings
+            a_few(1916, 3, 1, 1),  // ChristmasHook
+            a_few(1928, 2, 1, 1),  // ChristmasTreeSword
+            always(1930),          // Razorpine
+        ]),
+        345 => Some(vec![
+            a_few(1959, 15, 1, 1), // BabyGrinchMischiefWhistle
+            a_few(1931, 3, 1, 1),  // BlizzardStaff
+            a_few(1946, 2, 1, 1),  // SnowmanCannon
+            always(1947),          // NorthPole
+        ]),
+        _ => None,
+    } {
+        return match at.frost_moon_wave {
+            Some(wave) => vec![ConditionalChain {
+                one_in: frost_moon_gate_denominator(wave, at.expert),
+                links: chain_links,
+            }],
+            None => Vec::new(),
+        };
     }
     if at.expert {
         return Vec::new();
@@ -1186,12 +1279,12 @@ pub fn conditional_chains(npc_type: u16, at: Conditions) -> Vec<ConditionalChain
         // then 1/5 of what remains, then 1/4 of what remains after that. Checked: 1/3 (wand) +
         // 1/9*3 (armor) + 1/3 (nothing) sums to 1, and 1/6, then (5/6)*(1/5)=1/6, then
         // (4/6)*(1/4)=1/6 reproduces the real 1/9 per piece exactly.
-        222 => vec![vec![
+        222 => vec![chain(vec![
             a_few(1129, 3, 1, 1),
             a_few(842, 6, 1, 1),
             a_few(843, 5, 1, 1),
             a_few(844, 4, 1, 1),
-        ]],
+        ])],
         // Skeletron: `ByCondition(condition, 1281, 7).OnFailedRoll(Common(1273,
         // 7)).OnFailedRoll(Common(1313, 7))` (`ItemDropDatabase.cs:563`) — at most one of
         // Skeletron Hand, Bone Sword and Muramasa per kill, never independently.
@@ -1200,15 +1293,15 @@ pub fn conditional_chains(npc_type: u16, at: Conditions) -> Vec<ConditionalChain
         // unconditional roll per item, not part of this fallback chain — see `conditional`'s own
         // `at.red_hat_skeletron` arm, now that `Conditions` carries the per-instance state it
         // needs.
-        35 | 36 => vec![vec![
+        35 | 36 => vec![chain(vec![
             a_few(1281, 7, 1, 1),
             a_few(1273, 7, 1, 1),
             a_few(1313, 7, 1, 1),
-        ]],
+        ])],
         // King Slime: `NotScalingWithLuck(2585, 3).OnFailedRoll(Common(2610))`
         // (`ItemDropDatabase.cs:404`) — 1/3 chance of the Slime Hook, else the Slime Gun
         // guaranteed. Item 2610 previously appeared as a drop nowhere in this project.
-        50 => vec![vec![a_few(2585, 3, 1, 1), always(2610)]],
+        50 => vec![chain(vec![a_few(2585, 3, 1, 1), always(2610)])],
         _ => Vec::new(),
     }
 }
@@ -1337,6 +1430,15 @@ mod tests {
 
     fn plain() -> Conditions {
         Conditions::default()
+    }
+
+    /// A classic world with a Frost Moon running at `wave`, which is what every Frost Moon boss
+    /// drop needs before it exists at all.
+    fn frost_wave(wave: i32) -> Conditions {
+        Conditions {
+            frost_moon_wave: Some(wave),
+            ..Conditions::default()
+        }
     }
 
     /// A boss drops a bag in expert and not otherwise.
@@ -1800,6 +1902,7 @@ mod tests {
             eclipse: true,
             downed_mech_any: true,
             downed_all_mech_bosses: true,
+            frost_moon_wave: Some(20),
             pumpkin_moon_wave: Some(1),
             red_hat_skeletron: true,
             empress_genuinely_enraged: true,
@@ -2003,8 +2106,12 @@ mod tests {
         assert_eq!(chains.len(), 1, "one chain, not several: {chains:?}");
         let chain = &chains[0];
         assert_eq!(
-            chain,
-            &vec![
+            chain.one_in, 1,
+            "no outer gate on this one: Queen Bee's chain is registered directly"
+        );
+        assert_eq!(
+            chain.links,
+            vec![
                 a_few(1129, 3, 1, 1),
                 a_few(842, 6, 1, 1),
                 a_few(843, 5, 1, 1),
@@ -2050,7 +2157,7 @@ mod tests {
             let chains = conditional_chains(skeletron, plain());
             assert_eq!(chains.len(), 1, "npc {skeletron}: {chains:?}");
             assert_eq!(
-                chains[0],
+                chains[0].links,
                 vec![
                     a_few(1281, 7, 1, 1),
                     a_few(1273, 7, 1, 1),
@@ -2112,7 +2219,7 @@ mod tests {
         let chains = conditional_chains(KING_SLIME, plain());
         assert_eq!(chains.len(), 1);
         assert_eq!(
-            chains[0],
+            chains[0].links,
             vec![a_few(2585, 3, 1, 1), always(2610)],
             "1/3 Slime Hook, else the Slime Gun guaranteed"
         );
@@ -2372,16 +2479,20 @@ mod tests {
     /// `None`.
     #[test]
     fn everscream_drops_its_frost_moon_loot() {
-        let chains = conditional_chains(344, plain());
-        let items: Vec<u16> = chains.iter().flatten().map(|c| c.item).collect();
+        let chains = conditional_chains(344, frost_wave(20));
+        let items: Vec<u16> = chains
+            .iter()
+            .flat_map(|c| &c.links)
+            .map(|c| c.item)
+            .collect();
         assert!(items.contains(&1871), "FestiveWings");
         assert!(items.contains(&1916), "ChristmasHook");
         assert!(items.contains(&1928), "ChristmasTreeSword");
         assert!(items.contains(&1930), "Razorpine");
         // Razorpine is the chain's guaranteed last link — the fight that never dropped nothing
         // must never miss it either.
-        assert_eq!(chains[0].last().map(|c| c.item), Some(1930));
-        assert_eq!(chains[0].last().map(|c| c.one_in), Some(1));
+        assert_eq!(chains[0].links.last().map(|c| c.item), Some(1930));
+        assert_eq!(chains[0].links.last().map(|c| c.one_in), Some(1));
 
         assert_eq!(trophy(344), Some(1962), "EverscreamTrophy");
 
@@ -2391,7 +2502,7 @@ mod tests {
             344,
             Conditions {
                 expert: true,
-                ..plain()
+                ..frost_wave(20)
             },
         );
         assert!(
@@ -2405,38 +2516,206 @@ mod tests {
     /// `trophy`'s own doc for why. Fails on the pre-fix code the same way Everscream's test does.
     #[test]
     fn santa_nk1_drops_its_frost_moon_loot() {
-        let chains = conditional_chains(345, plain());
-        let items: Vec<u16> = chains.iter().flatten().map(|c| c.item).collect();
+        let chains = conditional_chains(345, frost_wave(20));
+        let items: Vec<u16> = chains
+            .iter()
+            .flat_map(|c| &c.links)
+            .map(|c| c.item)
+            .collect();
         assert!(items.contains(&1959), "BabyGrinchMischiefWhistle");
         assert!(items.contains(&1931), "BlizzardStaff");
         assert!(items.contains(&1946), "SnowmanCannon");
         assert!(items.contains(&1947), "NorthPole");
-        assert_eq!(chains[0].last().map(|c| c.item), Some(1947));
+        assert_eq!(chains[0].links.last().map(|c| c.item), Some(1947));
 
         assert!(
-            conditional(345, plain()).iter().any(|d| d.item == 1914),
+            conditional(345, frost_wave(20))
+                .iter()
+                .any(|d| d.item == 1914),
             "ReindeerBells"
         );
         assert_eq!(trophy(345), Some(1960));
     }
 
-    /// Ice Queen (346): its own guaranteed `OneFromOptions(1, 1910, 1929)` pool
-    /// (`one_from`), and its own trophy — real vanilla's `SantaNK1Trophy` (1961), not
-    /// `IceQueenTrophy`; see `trophy`'s own doc for why.
+    /// `Conditions.FrostMoonDropGatingChance.CanDrop` (`Terraria.GameContent.ItemDropRules/Conditions.cs:57-78`), read straight off
+    /// source: `(28 - wave - expertBump) / 2.5`, the `(int)` cast truncating toward zero, minus two
+    /// more in expert, floored at 1.
+    ///
+    /// Every Frost Moon boss drop used to ignore this entirely and fire unconditionally, which at
+    /// wave 1 is ten times the rate the game allows and made the event's whole wave progression
+    /// pointless: there was no reason to push past wave 1 for loot.
+    #[test]
+    fn the_frost_moon_wave_gate_matches_the_games_own_formula() {
+        // Classic: (28 - wave) / 2.5, truncated.
+        for (wave, expected) in [
+            (1, 10), // 27 / 2.5 = 10.8 -> 10
+            (5, 9),  // 23 / 2.5 = 9.2  -> 9
+            (10, 7), // 18 / 2.5 = 7.2  -> 7
+            (15, 5), // 13 / 2.5 = 5.2  -> 5
+            (20, 3), // 8  / 2.5 = 3.2  -> 3
+            (26, 1), // 2  / 2.5 = 0.8  -> 0, floored to 1
+            (40, 1), // negative, floored to 1
+        ] {
+            assert_eq!(
+                frost_moon_gate_denominator(wave, false),
+                expected,
+                "classic wave {wave}"
+            );
+        }
+        // Expert: five waves' worth of head start, then two off the denominator.
+        for (wave, expected) in [
+            (1, 6),  // (28-6)/2.5 = 8.8 -> 8, minus 2 -> 6
+            (10, 3), // (28-15)/2.5 = 5.2 -> 5, minus 2 -> 3
+            (15, 1), // (28-20)/2.5 = 3.2 -> 3, minus 2 -> 1
+            (20, 1), // floored
+        ] {
+            assert_eq!(
+                frost_moon_gate_denominator(wave, true),
+                expected,
+                "expert wave {wave}"
+            );
+        }
+        // It is the Frost Moon's own formula and not the Pumpkin Moon's: 28 against 24, and two
+        // off in expert against one. Sharing one helper would be wrong in both directions.
+        assert_ne!(
+            frost_moon_gate_denominator(1, false),
+            pumpkin_moon_gate_denominator(1, false)
+        );
+    }
+
+    /// The gate tightens the loot as the wave falls, on every one of the six places that read it.
+    /// A wave-1 kill must be strictly worse than a wave-20 kill everywhere, which is the whole
+    /// point of a wave-based event.
+    #[test]
+    fn a_late_wave_is_better_than_an_early_one_everywhere() {
+        // The two chains: the outer gate is the chain's own `one_in`.
+        for npc in [344u16, 345] {
+            let early = conditional_chains(npc, frost_wave(1));
+            let late = conditional_chains(npc, frost_wave(20));
+            assert_eq!(early[0].one_in, 10, "npc {npc} at wave 1");
+            assert_eq!(late[0].one_in, 3, "npc {npc} at wave 20");
+            assert_eq!(
+                early[0].links, late[0].links,
+                "npc {npc}: the wave changes how often the chain is reached, never what is in it"
+            );
+        }
+
+        // The Ice Queen's pool.
+        assert_eq!(chance_pools(346, frost_wave(1))[0].one_in, 10);
+        assert_eq!(chance_pools(346, frost_wave(20))[0].one_in, 3);
+
+        // Santa-NK1's Reindeer Bells: unreachable below wave 15, then the gate times its own 15.
+        let bells = |wave| {
+            conditional(345, frost_wave(wave))
+                .into_iter()
+                .find(|d| d.item == 1914)
+                .map(|d| d.one_in)
+        };
+        assert_eq!(
+            bells(14),
+            None,
+            "`FromCertainWaveAndAbove(15)` is a hard floor"
+        );
+        assert_eq!(bells(15), Some(5 * 15));
+        assert_eq!(bells(20), Some(3 * 15));
+
+        // The three trophies: the outer gate times the trophy gate, and nothing at all before 15.
+        let trophy_rate = |npc: u16, wave| {
+            let want = trophy(npc).expect("these three have trophies");
+            conditional(npc, frost_wave(wave))
+                .into_iter()
+                .find(|d| d.item == want)
+                .map(|d| d.one_in)
+        };
+        for npc in [344u16, 345, 346] {
+            assert_eq!(trophy_rate(npc, 14), None, "npc {npc} before wave 15");
+            assert_eq!(trophy_rate(npc, 15), Some(5 * 4), "npc {npc} at wave 15");
+            assert_eq!(trophy_rate(npc, 18), Some(4 * 3), "npc {npc} at wave 18");
+            assert_eq!(trophy_rate(npc, 20), Some(3 * 2), "npc {npc} at wave 20");
+        }
+    }
+
+    /// A Frost Moon boss that somehow dies with no Frost Moon running drops none of its event
+    /// loot, which is what vanilla's own `if (!Main.snowMoon) return false;` says. It is not a
+    /// hypothetical: the same three NPCs can be spawned from a statue or by a console command.
+    #[test]
+    fn no_frost_moon_means_no_frost_moon_loot() {
+        for npc in [344u16, 345, 346] {
+            assert!(
+                conditional_chains(npc, plain()).is_empty(),
+                "npc {npc}: no chain without the event"
+            );
+            assert!(
+                chance_pools(npc, plain()).is_empty(),
+                "npc {npc}: no pool without the event"
+            );
+            let want = trophy(npc).expect("a trophy");
+            assert!(
+                !conditional(npc, plain()).iter().any(|d| d.item == want),
+                "npc {npc}: no trophy without the event"
+            );
+        }
+        assert!(
+            !conditional(345, plain()).iter().any(|d| d.item == 1914),
+            "and no Reindeer Bells"
+        );
+        // A *pumpkin* moon is not a frost moon: the two gates each check their own.
+        let pumpkin = Conditions {
+            pumpkin_moon_wave: Some(20),
+            ..plain()
+        };
+        assert!(
+            conditional_chains(344, pumpkin).is_empty(),
+            "the wrong moon must not open the other one's gate"
+        );
+    }
+
+    /// The trophy gate is `PumpkinMoonDropGateForTrophies` and `FrostMoonDropGateForTrophies`
+    /// sharing one helper, which is only right because the two are the same function twice
+    /// (`Conditions.cs:127-166` and `:179-217`, identical apart from which moon each checks).
+    /// If either ever diverges this is where it shows.
+    #[test]
+    fn both_moons_use_the_same_trophy_step() {
+        assert_eq!(moon_trophy_gate_denominator(14), None);
+        for (wave, expected) in [
+            (15, 4),
+            (16, 4),
+            (17, 3),
+            (18, 3),
+            (19, 2),
+            (20, 2),
+            (40, 2),
+        ] {
+            assert_eq!(
+                moon_trophy_gate_denominator(wave),
+                Some(expected),
+                "wave {wave}"
+            );
+        }
+    }
+
+    /// Ice Queen (346): its `OneFromOptions(1, 1910, 1929)` pool, which is a guaranteed *pick*
+    /// behind a wave *gate* and so lives in `chance_pools` rather than `one_from`, and its own
+    /// trophy — real vanilla's `SantaNK1Trophy` (1961), not `IceQueenTrophy`; see `trophy`'s own
+    /// doc for why.
     #[test]
     fn ice_queen_drops_its_frost_moon_loot() {
-        let pools = one_from(346, plain());
+        let pools = chance_pools(346, frost_wave(20));
         assert_eq!(pools.len(), 1);
-        assert!(pools[0].contains(&1910), "ElfMelter");
-        assert!(pools[0].contains(&1929), "ChainGun");
+        assert!(pools[0].options.contains(&1910), "ElfMelter");
+        assert!(pools[0].options.contains(&1929), "ChainGun");
         assert_eq!(trophy(346), Some(1961));
+        assert!(
+            one_from(346, frost_wave(20)).is_empty(),
+            "the guaranteed-pool table must not also carry it, or it drops twice"
+        );
 
         // No treasure bag for this npc either, so expert must not empty the pool.
-        let expert = one_from(
+        let expert = chance_pools(
             346,
             Conditions {
                 expert: true,
-                ..plain()
+                ..frost_wave(20)
             },
         );
         assert_eq!(expert.len(), 1, "must survive expert mode: {expert:?}");

@@ -193,8 +193,15 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   (`crates/terrustia/src/game/ai/boss/moon_lord.rs:299,505`).
 - ~~Old One's Army has no client-visible progress bar.~~ **Fixed 2026-09-05**: it rides packet 78
   with its own icon 3 and its wave number, as `DD2Event.cs:185`/`:191` do.
-- **Frost and Pumpkin Moon wave-gated drops** are flattened to guaranteed picks rather than gated on
-  the live wave number (`crates/terrustia-proto/src/conditional_drops.rs:706-758,1148`).
+- ~~**Frost and Pumpkin Moon wave-gated drops** are flattened to guaranteed picks rather than gated on
+  the live wave number.~~ **Fixed 2026-09-05.** The Pumpkin Moon half was already gated; the Frost
+  Moon half was flattened for want of a `frost_moon_wave` field on `Conditions`, which is now there.
+  Six places read it: both minibosses' fallback chains (through a new outer gate on
+  `ConditionalChain`, since `LeadingConditionRule(cond).OnSuccess(chain)` cannot be folded into the
+  links' own integer denominators), the Ice Queen's pool, Santa-NK1's Reindeer Bells and their wave-15
+  floor, and all three trophies. It was not a small divergence: at wave 1 in a classic world every one
+  of those fired about ten times too often, which left the event's whole wave progression with nothing
+  to offer.
 - **Town-NPC attack windups** are skipped and the Pirate's escalating burst is unmodeled
   (`crates/terrustia/src/game/ai/town_combat.rs:13-28`).
 - **Slime Rain** collapses its per-type flags to one case and does not announce start and stop

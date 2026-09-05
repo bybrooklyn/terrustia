@@ -48,77 +48,88 @@ crates/terrustia-proto/src/conditional_drops.rs	fn bundled_with	ItemDropDatabase
 crates/terrustia-proto/src/conditional_drops.rs	fn bundled_with	ItemDropDatabase.cs	654-656	8ce5a44a643b	9f5b2dff409f
 crates/terrustia-proto/src/conditional_drops.rs	fn by_mode	ItemDropDatabase.cs	1170	1eac08736b06	b4fa079008d3
 crates/terrustia-proto/src/conditional_drops.rs	fn by_mode	ItemDropDatabase.cs	501-503	4c33e6203671	b4fa079008d3
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1005	27a9d348337f	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1031	dba2fc7af3c6	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1050	d830ffbd7184	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1051-1052	2022041e6ba7	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1112	49b23a158e23	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1137	0906dd3e50db	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1148	b84c0de53bd5	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	266-270	9f3d4a37deed	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	341-345	596292f5376e	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	347-349	6da9e61b6e19	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	354-359	07ca99ab130e	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	389	8d58869d02fc	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	751-763	9269cb80c0a7	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	767-777	dfd46be46e44	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	935	2b1a978e69c4	9b05a353249d
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	Conditions.cs	1498-1503	1b04bcdacb7e	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	1034-1035	0da5be83ba87	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	1130-1133	828ee979d354	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	1157	c97add5af5a6	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	1162-1164	17e9025f5a76	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	1172-1173	390221e4d1f0	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	168-170	248df6ac3b68	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	179	52458fe0919b	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	179-182	27aaa2f6260d	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	185-236	be25a5015faa	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	201-203	e44874380868	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	203	0c5882540b7b	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	207-215	b49bf444f9a2	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	228-229	001bbd1d1355	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	238	b177f4ee3b0b	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	258-274	1fcaaa0ee7a8	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	333-334	22f35fa93ef8	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	342	026322687e23	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	350	38832ace73c9	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	351	9cd2c5f14189	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	376	8dd32687cae7	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	565-569	997a754be665	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	608-629	147998a98b4c	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	743	6a9eca13424c	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	745-777	06212965ccb1	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	75	04b27bea8b11	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	787-788	e7a89f804776	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	939-940	e782dea8ab46	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	941-944	78802590135d	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	945-946	11fc409f9eba	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	959	355d31fba5ce	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	971-972	cb96acb97125	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropRule.cs	20	32b2efbf9728	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropRule.cs	25-32	cb898690f3cb	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional	NPC.cs	67435-67446	1925e3c571e4	33b097ceed92
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional_chains	ItemDropDatabase.cs	373-374,381-382	c76c171dad8b	b29f822bb873
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional_chains	ItemDropDatabase.cs	404	7632c769a5a3	b29f822bb873
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional_chains	ItemDropDatabase.cs	550	18eb604eedc5	b29f822bb873
-crates/terrustia-proto/src/conditional_drops.rs	fn conditional_chains	ItemDropDatabase.cs	563	296c940d8418	b29f822bb873
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1005	27a9d348337f	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1031	dba2fc7af3c6	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1050	d830ffbd7184	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1051-1052	2022041e6ba7	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1112	49b23a158e23	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1137	0906dd3e50db	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	1148	b84c0de53bd5	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	266-270	9f3d4a37deed	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	341-345	596292f5376e	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	347-349	6da9e61b6e19	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	354-359	07ca99ab130e	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	383-385	3c382144ce88	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	389	8d58869d02fc	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	751-763	9269cb80c0a7	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	767-777	dfd46be46e44	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn chance_pools	ItemDropDatabase.cs	935	2b1a978e69c4	09fe1ba6691d
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	Conditions.cs	1498-1503	1b04bcdacb7e	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	1034-1035	0da5be83ba87	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	1130-1133	828ee979d354	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	1157	c97add5af5a6	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	1162-1164	17e9025f5a76	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	1172-1173	390221e4d1f0	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	168-170	248df6ac3b68	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	179	52458fe0919b	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	179-182	27aaa2f6260d	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	185-236	be25a5015faa	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	201-203	e44874380868	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	203	0c5882540b7b	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	207-215	b49bf444f9a2	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	228-229	001bbd1d1355	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	238	b177f4ee3b0b	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	258-274	1fcaaa0ee7a8	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	333-334	22f35fa93ef8	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	342	026322687e23	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	350	38832ace73c9	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	351	9cd2c5f14189	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	372	fd58d558eaf0	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	376	8dd32687cae7	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	378	92703659b91a	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	384	538cd3bf5613	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	565-569	997a754be665	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	608-629	147998a98b4c	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	743	6a9eca13424c	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	745-777	06212965ccb1	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	75	04b27bea8b11	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	787-788	e7a89f804776	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	939-940	e782dea8ab46	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	941-944	78802590135d	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	945-946	11fc409f9eba	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	959	355d31fba5ce	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropDatabase.cs	971-972	cb96acb97125	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropRule.cs	20	32b2efbf9728	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	ItemDropRule.cs	25-32	cb898690f3cb	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional	NPC.cs	67435-67446	1925e3c571e4	57b57f869148
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional_chains	ItemDropDatabase.cs	373-374,381-382	c76c171dad8b	154867d78bdf
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional_chains	ItemDropDatabase.cs	404	7632c769a5a3	154867d78bdf
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional_chains	ItemDropDatabase.cs	550	18eb604eedc5	154867d78bdf
+crates/terrustia-proto/src/conditional_drops.rs	fn conditional_chains	ItemDropDatabase.cs	563	296c940d8418	154867d78bdf
+crates/terrustia-proto/src/conditional_drops.rs	fn frost_moon_gate_denominator	Conditions.cs	57-78	f2b3572ff710	0bf5f59f301b
+crates/terrustia-proto/src/conditional_drops.rs	fn frost_moon_gate_denominator	ItemDropDatabase.cs	371	802975a21f9d	0bf5f59f301b
+crates/terrustia-proto/src/conditional_drops.rs	fn frost_moon_gate_denominator	ItemDropDatabase.cs	377	7e90e96d6ed8	0bf5f59f301b
+crates/terrustia-proto/src/conditional_drops.rs	fn frost_moon_gate_denominator	ItemDropDatabase.cs	383	7a56c04c747f	0bf5f59f301b
 crates/terrustia-proto/src/conditional_drops.rs	fn lunar_fragment	ItemDropDatabase.cs	626-629	d1196eab221c	d6c6f85f403d
 crates/terrustia-proto/src/conditional_drops.rs	fn moon_lord_weapons	ItemDropDatabase.cs	605	e74eb827b5d8	d7cfa85352cd
-crates/terrustia-proto/src/conditional_drops.rs	fn one_from	Conditions.cs	1264	8f63fccb6021	c3deb18b160d
-crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	1146	eef298ea9ed4	c3deb18b160d
-crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	225	a8af9748dd09	c3deb18b160d
-crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	227	3b2ebbce6732	c3deb18b160d
-crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	384-385	972132fd9087	c3deb18b160d
-crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	545	01bc161484b6	c3deb18b160d
-crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	866	f2ee3adf1811	c3deb18b160d
-crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	987-989	520be48aaf59	c3deb18b160d
+crates/terrustia-proto/src/conditional_drops.rs	fn moon_trophy_gate_denominator	Conditions.cs	127-166	ccec12f884e7	8af1153434a0
+crates/terrustia-proto/src/conditional_drops.rs	fn moon_trophy_gate_denominator	Conditions.cs	179-217	0c47ee8e1fe6	8af1153434a0
+crates/terrustia-proto/src/conditional_drops.rs	fn one_from	Conditions.cs	1264	8f63fccb6021	b7c2b96d1972
+crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	1146	eef298ea9ed4	b7c2b96d1972
+crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	225	a8af9748dd09	b7c2b96d1972
+crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	227	3b2ebbce6732	b7c2b96d1972
+crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	383-385	3c382144ce88	b7c2b96d1972
+crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	545	01bc161484b6	b7c2b96d1972
+crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	866	f2ee3adf1811	b7c2b96d1972
+crates/terrustia-proto/src/conditional_drops.rs	fn one_from	ItemDropDatabase.cs	987-989	520be48aaf59	b7c2b96d1972
 crates/terrustia-proto/src/conditional_drops.rs	fn pumpkin_moon_gate_denominator	ItemDropDatabase.cs	91-113	ac079582643f	81d7ca86ad38
-crates/terrustia-proto/src/conditional_drops.rs	fn pumpkin_moon_trophy_gate_denominator	Conditions.cs	179-217	0c47ee8e1fe6	33a39a3374a7
 crates/terrustia-proto/src/conditional_drops.rs	fn treasure_bag	ItemDropDatabase.cs	632-636	34fad0de0d33	b7923c5e5aa9
 crates/terrustia-proto/src/conditional_drops.rs	fn trophy	Conditions.cs	127-166	ccec12f884e7	a79fd1a79866
 crates/terrustia-proto/src/conditional_drops.rs	fn trophy	ItemDropDatabase.cs	363-387	823bd799ea83	a79fd1a79866
 crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn black_recluses_web_is_mode_branched_not_a_flat_rate_in_every_mode	ItemDropDatabase.cs	959	355d31fba5ce	ecd79bf708b2
-crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn everscream_drops_its_frost_moon_loot	ItemDropDatabase.cs	363-375	e6469829acf9	ea962be777f7
+crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn both_moons_use_the_same_trophy_step	Conditions.cs	127-166	ccec12f884e7	1b4afc3f843d
+crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn both_moons_use_the_same_trophy_step	Conditions.cs	179-217	0c47ee8e1fe6	1b4afc3f843d
+crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn everscream_drops_its_frost_moon_loot	ItemDropDatabase.cs	363-375	e6469829acf9	23842bfe4448
 crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn hornet_stinger_is_two_in_three_in_classic_not_one_in_three	ItemDropDatabase.cs	1170	1eac08736b06	bdaca904ece3
 crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn mothron_only_drops_the_broken_hero_sword_after_all_three_mechs	ItemDropDatabase.cs	201-203	e44874380868	1df1ef25a169
 crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn mourning_wood_drops_its_own_pool_and_trophy	ItemDropDatabase.cs	354-362	b5eb5ffcb91f	d5ecda63f58f
@@ -129,13 +140,16 @@ crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn red_hat_skeletro
 crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn the_creepers_tissue_sample_and_crimtane_rolls_are_two_in_three_or_one_in_two_not_one_in_three_or_one_in_four	ItemDropDatabase.cs	502-503	2d1cd4a01b65	6d2b79b739d6
 crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn the_cultist_drops_the_ancient_manipulator	ItemDropDatabase.cs	590	442f43d555da	e08035c9137c
 crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn the_cultist_drops_the_ancient_manipulator	ItemDropDatabase.cs	591	c499b06b5ab3	e08035c9137c
+crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn the_frost_moon_wave_gate_matches_the_games_own_formula	Conditions.cs	57-78	f2b3572ff710	edf3aaf640f1
 crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn the_progression_chain_rates_match_vanilla	ItemDropDatabase.cs	492	04b27bea8b11	b99c6e3675b8
 crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn the_progression_chain_rates_match_vanilla	ItemDropDatabase.cs	512	6cbd780ead53	b99c6e3675b8
 crates/terrustia-proto/src/conditional_drops.rs	mod tests :: fn the_pumpkin_moon_wave_gate_matches_the_games_own_formula	ItemDropDatabase.cs	91-113	ac079582643f	fa13046fc7af
-crates/terrustia-proto/src/conditional_drops.rs	struct Conditions	NPC.cs	46321-46328	a5fb2565d2ea	47ead857abee
-crates/terrustia-proto/src/conditional_drops.rs	struct Conditions	NPC.cs	46472-46475	4cbb0f63fd5d	47ead857abee
-crates/terrustia-proto/src/conditional_drops.rs	struct Conditions	NPC.cs	46565-46568	f7b2a86db736	47ead857abee
-crates/terrustia-proto/src/conditional_drops.rs	struct Conditions	NPC.cs	67435-67446	1925e3c571e4	47ead857abee
+crates/terrustia-proto/src/conditional_drops.rs	struct Conditions	Conditions.cs	127-166	ccec12f884e7	395c200f94d9
+crates/terrustia-proto/src/conditional_drops.rs	struct Conditions	Conditions.cs	55-89	9763e4aaba84	395c200f94d9
+crates/terrustia-proto/src/conditional_drops.rs	struct Conditions	NPC.cs	46321-46328	a5fb2565d2ea	395c200f94d9
+crates/terrustia-proto/src/conditional_drops.rs	struct Conditions	NPC.cs	46472-46475	4cbb0f63fd5d	395c200f94d9
+crates/terrustia-proto/src/conditional_drops.rs	struct Conditions	NPC.cs	46565-46568	f7b2a86db736	395c200f94d9
+crates/terrustia-proto/src/conditional_drops.rs	struct Conditions	NPC.cs	67435-67446	1925e3c571e4	395c200f94d9
 crates/terrustia-proto/src/convert.rs	fn block	WorldGen.cs	77049	61d987e8617e	b06662ebeb00
 crates/terrustia-proto/src/difficulty.rs	fn debuff_time_multiplier	GameDifficultyData.cs	75	f47247588435	b07def321469
 crates/terrustia-proto/src/difficulty.rs	fn debuff_time_multiplier	Player.cs	5426-5429	f8458ca82284	b07def321469
@@ -1675,8 +1689,8 @@ crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	3272	43583
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	50299-50302	6583807eb5db	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72072-72079	2a6f4d26e0bc	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72406	6c77495a5649	c5414c9d223d
-crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	a9b692ddf7aa
-crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	a9b692ddf7aa
+crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	8b098fa910cf
+crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	8b098fa910cf
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	7363-7366	54960e839053	00e47302005c
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	92802	e2d0076d5fcd	00e47302005c
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn apply_army	DD2Event.cs	1041-1091	3c3d8d6ca2b3	d73480a22bee
@@ -1698,7 +1712,7 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn closest_player
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn convert_critters_under_a_blood_moon	NPC.cs	93033-93048	32c2b1c8eafc	0090fddba484
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn drop_coins	NPC.cs	80436-80567	a0cc5eb7359c	5145fc26fcc9
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn drop_instanced_bag	WorldItem.cs	326	cd7de95a0912	857319b9b313
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn drop_loot	ItemDropDatabase.cs	654-656	8ce5a44a643b	8e8bdb2219f3
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn drop_loot	ItemDropDatabase.cs	654-656	8ce5a44a643b	4aa4d0bcaf65
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn fire_boulder_statue	Wiring.cs	1998-2017	4d8907ffa0f3	586c833539fb
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn fire_cannon	Wiring.cs	1306-1342	78c1f70cc1de	0ddc2a9e6005
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn fire_cannon	WorldGen.cs	51041-51156	0ac69aff3d13	0ddc2a9e6005

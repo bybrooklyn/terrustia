@@ -251,6 +251,7 @@ fn in_the_tables(link: &Link) -> bool {
         downed_mech_any: true,
         downed_all_mech_bosses: true,
         pumpkin_moon_wave: None,
+        frost_moon_wave: None,
     };
     let wanted = |item: i32| {
         conditional(link.boss, at)

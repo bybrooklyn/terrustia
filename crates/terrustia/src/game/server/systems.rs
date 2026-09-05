@@ -2912,6 +2912,8 @@ impl GameServer {
             downed_all_mech_bosses: p.downed_mech1 && p.downed_mech2 && p.downed_mech3,
             pumpkin_moon_wave: matches!(self.moon.moon, Some(crate::game::moons::Moon::Pumpkin))
                 .then_some(self.moon.wave),
+            frost_moon_wave: matches!(self.moon.moon, Some(crate::game::moons::Moon::Frost))
+                .then_some(self.moon.wave),
             red_hat_skeletron,
             empress_genuinely_enraged,
         };
@@ -2984,7 +2986,15 @@ impl GameServer {
         // these three cannot live in the flat table itself, which has no notion of expert/classic
         // mode at all (see `conditional_chains`'s own doc for why).
         for chain in terrustia_proto::conditional_drops::conditional_chains(npc_type, at) {
-            for rule in chain {
+            // The outer `LeadingConditionRule` some of these hang under: the whole chain is
+            // reached one kill in `one_in`, and `1` (every chain but the Frost Moon's two) reaches
+            // it every kill. Rolled before the links rather than folded into the first one,
+            // because it gates the *chain* - failing it means no link is tried, not that the
+            // chain falls through to its second link.
+            if chain.one_in > 1 && !rand::Rng::random_ratio(&mut self.rng, 1, chain.one_in) {
+                continue;
+            }
+            for rule in chain.links {
                 if rule.one_in > 1
                     && !rand::Rng::random_ratio(&mut self.rng, rule.numerator, rule.one_in)
                 {
