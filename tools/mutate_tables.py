@@ -116,16 +116,6 @@ BUDGET: dict[tuple[str, str], tuple[float, str]] = {
         "survive for that reason alone. Closing it means teaching the checker to substitute a "
         "helper's arguments into its body - worth doing, not done here.",
     ),
-    ("placed_items.rs", "check_placed_items.py"): (
-        0.12,
-        "check_placed_items.py reads three sources - the `Item.SetDefaults` inversion, the two "
-        "dozen `GetItemDrop_*` methods, and `WorldGen.cs`'s own tile-91 banner chain - and holds "
-        "every pair any of them defines. 237 of the 2962 mutation sites (8.0%) are pairs none of "
-        "them define and nothing therefore checks: paintings (tiles 240/242/245/246, 101 of them) "
-        "have their drops written into their own worldgen arms, and the rest is a long tail of "
-        "statues, campfires and one-off objects. Measured, not assumed: every survivor of a run "
-        "has been confirmed to be in that class. It was 58.9% when only the inversion was read.",
-    ),
     ("conditional_drops.rs", "check_drops.py"): (
         0.10,
         "check_drops.py compares game-minus-ours and reports ours-minus-game separately without "

@@ -10,13 +10,15 @@
 //! * **The inversion.** `Item.SetDefaults` says which tile and style each item *places*, and
 //!   turning that round gives the drop for free. 2,129 pairs.
 //! * **`GetItemDrop_*`.** Two dozen methods in `WorldGen.cs`, one per furniture family, saying what
-//!   breaking one gives. 1,518 pairs, and where they disagree with the inversion they win, because
-//!   they are what `KillTile_GetItemDrops` and the `Check*` validators actually call.
-//! * **The tile-91 arm** (`WorldGen.cs:46572`), which is banners' whole drop table. 316 pairs.
+//!   breaking one gives, and where they disagree with the inversion they win, because they are what
+//!   `KillTile_GetItemDrops` and the `Check*` validators actually call.
+//! * **Six arms written inline** in those same validators: banners (`WorldGen.cs:46572`) and the
+//!   five painting sizes. Together with the methods above, 2,080 pairs.
 //!
-//! The three overlap on 1,176 pairs and disagree on three, all resolved in the drop side's favour:
-//! bottle styles 1 and 2, where the items that place them are not the items that come back, and
-//! bench style 23, which two different items both declare they place.
+//! The sources overlap on 1,759 pairs and disagree on five, all resolved in the drop side's
+//! favour: bottle styles 1 and 2, whose placing item is not their drop; bench style 23, which two
+//! different items both declare they place; chest styles 38 and 39; and painting style 0 on tile
+//! 246, where the arm gives `1479 + style` and the inversion finds the style-21 item.
 //!
 //! A style with no entry drops nothing, which is what happens today for all of them.
 //!
@@ -26,18 +28,24 @@
 //! which would tell a reader either to leave a wrong number alone or to expect a regeneration that
 //! never comes.
 //!
-//! **`just check-placed-items` is what stands in for one.** Written 2026-09-05, and it has found
-//! 70 pairs wrong or missing on its first pass, 145 more once it followed the placement *helpers*
-//! (889 items place through `DefaultToPlaceableTile` rather than by assigning the fields), 256 more
-//! once it read the `GetItemDrop_*` methods, and 161 more once it read the banner chain. 632 of
-//! this table's 3,026 entries were absent or wrong, and every one of them was an object that gave
-//! nothing, or the wrong thing, when a player mined it.
+//! **`just check-placed-items` is what stands in for one.** Written 2026-09-05, and every time it
+//! learned to read more of its source it found more:
 //!
-//! **237 of 2,962 entries (8.0%) are still checked by nothing**, measured rather than guessed:
-//! `just check-mutants` corrupts them one at a time and they survive. They are the pairs no source
-//! above defines - paintings (tiles 240, 242, 245 and 246) carry their drops in their own worldgen
-//! arms, and the rest is a tail of statues, campfires and one-offs. Recorded in
-//! `tools/mutate_tables.py`'s `BUDGET`. It was 58.9% before the last two sources were read.
+//! | it learned to read | it found |
+//! |---|---|
+//! | the literal `createTile = N; placeStyle = N;` assignments | 70 |
+//! | the placement helpers (889 items place through one, and all 101 music boxes were absent) | 151 |
+//! | the `GetItemDrop_*` methods | 256 |
+//! | the six inline drop arms (banners and the five painting sizes) | 204 |
+//! | assignments *computed* from `type` (`placeStyle = 1 + type - 3046;`, ~120 of them) | 55 |
+//!
+//! **736 of this table's 3,129 entries were absent or wrong**, and every one of them was an object
+//! that gave nothing, or the wrong thing, when a player mined it.
+//!
+//! **Nothing in it is unchecked any more.** Every pair is defined by one of the sources above, and
+//! `just check-mutants` kills 100% of the mutants it makes here - from 43% when only the literal
+//! assignments were read. Each of those four widenings was found by that suite rather than by
+//! reading the checker, which is the argument for keeping the suite.
 //!
 //! **This is not the same question as "what does mining give".** Grass seeds place grass; mining
 //! grass gives dirt. Of 241 plain blocks in both this and [`crate::tile_drops`], 223 agree and 18
@@ -70,6 +78,7 @@ pub fn placed_item(block: u16, style: i32) -> Option<i32> {
             (14, 3045),
             (15, 3114),
             (16, 4383),
+            (17, 4384),
             (18, 4385),
             (19, 4386),
             (20, 4387),
@@ -1605,7 +1614,7 @@ pub fn placed_item(block: u16, style: i32) -> Option<i32> {
             (64, 6113),
         ],
         102 => &[(0, 355)],
-        103 => &[(0, 356), (1, 2235)],
+        103 => &[(0, 356), (1, 2235), (2, 2242), (3, 2243)],
         104 => &[
             (0, 359),
             (1, 2237),
@@ -2044,6 +2053,9 @@ pub fn placed_item(block: u16, style: i32) -> Option<i32> {
             (27, 1497),
             (28, 1498),
             (29, 1499),
+            (30, 1538),
+            (31, 1539),
+            (32, 1540),
             (33, 1574),
             (34, 1575),
             (35, 1576),
@@ -2052,6 +2064,19 @@ pub fn placed_item(block: u16, style: i32) -> Option<i32> {
             (38, 1960),
             (39, 1961),
             (40, 1962),
+            (41, 2114),
+            (42, 2115),
+            (43, 2116),
+            (44, 2117),
+            (45, 2118),
+            (46, 2442),
+            (47, 2443),
+            (48, 2444),
+            (49, 2445),
+            (50, 2446),
+            (51, 2447),
+            (52, 2448),
+            (53, 2449),
             (54, 2489),
             (55, 2589),
             (56, 3357),
@@ -2115,12 +2140,18 @@ pub fn placed_item(block: u16, style: i32) -> Option<i32> {
             (10, 1437),
             (11, 1438),
             (12, 1439),
+            (13, 1500),
+            (14, 1501),
+            (15, 1502),
             (16, 1573),
             (17, 1846),
             (18, 1847),
             (19, 1848),
             (20, 1849),
             (21, 1850),
+            (22, 2281),
+            (23, 2282),
+            (24, 2283),
             (25, 2495),
             (26, 2497),
             (27, 2865),
@@ -2191,6 +2222,9 @@ pub fn placed_item(block: u16, style: i32) -> Option<i32> {
             (13, 5086),
             (14, 5246),
             (15, 5247),
+            (16, 5247),
+            (17, 5247),
+            (18, 5247),
             (19, 5248),
             (20, 5249),
             (21, 5250),
@@ -2206,7 +2240,24 @@ pub fn placed_item(block: u16, style: i32) -> Option<i32> {
             (31, 5634),
         ],
         246 => &[
-            (0, 5258),
+            (0, 1479),
+            (1, 1480),
+            (2, 1481),
+            (3, 1482),
+            (4, 1483),
+            (5, 1484),
+            (6, 1485),
+            (7, 1486),
+            (8, 1487),
+            (9, 1488),
+            (10, 1489),
+            (11, 1490),
+            (12, 1491),
+            (13, 1492),
+            (14, 1493),
+            (15, 1494),
+            (16, 1541),
+            (17, 1542),
             (18, 1908),
             (19, 4661),
             (20, 4729),
@@ -2983,7 +3034,44 @@ pub fn placed_item(block: u16, style: i32) -> Option<i32> {
         329 => &[(0, 2697)],
         335 => &[(0, 2700)],
         336 => &[(0, 2701)],
-        337 => &[(0, 2702)],
+        337 => &[
+            (0, 2702),
+            (1, 2703),
+            (2, 2704),
+            (3, 2705),
+            (4, 2706),
+            (5, 2707),
+            (6, 2708),
+            (7, 2709),
+            (8, 2710),
+            (9, 2711),
+            (10, 2712),
+            (11, 2713),
+            (12, 2714),
+            (13, 2715),
+            (14, 2716),
+            (15, 2717),
+            (16, 2718),
+            (17, 2719),
+            (18, 2720),
+            (19, 2721),
+            (20, 2722),
+            (21, 2723),
+            (22, 2724),
+            (23, 2725),
+            (24, 2726),
+            (25, 2727),
+            (26, 2728),
+            (27, 2729),
+            (28, 2730),
+            (29, 2731),
+            (30, 2732),
+            (31, 2733),
+            (32, 2734),
+            (33, 2735),
+            (34, 2736),
+            (35, 2737),
+        ],
         338 => &[(0, 2738)],
         339 => &[(0, 2741)],
         345 => &[(0, 2787)],
@@ -3131,7 +3219,17 @@ pub fn placed_item(block: u16, style: i32) -> Option<i32> {
         720 => &[(0, 5598)],
         721 => &[(0, 5599)],
         723 => &[(0, 4367)],
-        724 => &[(0, 261)],
+        724 => &[
+            (0, 261),
+            (1, 1994),
+            (2, 1995),
+            (3, 1996),
+            (4, 1997),
+            (5, 1998),
+            (6, 1999),
+            (7, 2000),
+            (8, 2001),
+        ],
         725 => &[(0, 5655)],
         727 => &[(0, 5674)],
         728 => &[(0, 5675)],
@@ -3140,6 +3238,17 @@ pub fn placed_item(block: u16, style: i32) -> Option<i32> {
         731 => &[(0, 5678)],
         732 => &[(0, 5679)],
         733 => &[(0, 5113)],
+        324 => &[(0, 2625), (3, 2626), (6, 4072), (9, 4073), (12, 4071)],
+        309 => &[(0, 2206)],
+        310 => &[(0, 2207)],
+        311 => &[(0, 2260)],
+        312 => &[(0, 2261)],
+        313 => &[(0, 2262)],
+        340 => &[(0, 2751)],
+        341 => &[(0, 2752)],
+        342 => &[(0, 2753)],
+        343 => &[(0, 2754)],
+        344 => &[(0, 2755)],
         _ => return None,
     };
     table

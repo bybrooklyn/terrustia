@@ -595,7 +595,7 @@ crates/terrustia-proto/src/packets.rs	mod tests :: fn player_controls_round_trip
 crates/terrustia-proto/src/packets.rs	mod tests :: fn player_controls_round_trips_every_optional_block_at_once	MessageBuffer.cs	994-997	f3f444fac2cd	15110e4efc61
 crates/terrustia-proto/src/packets.rs	struct HealPlayer	MessageBuffer.cs	3038-3056	b2d93c73cbc4	a0dfa0244409
 crates/terrustia-proto/src/packets.rs	struct HealPlayer	Projectile.cs	28951	74482d8b1271	a0dfa0244409
-crates/terrustia-proto/src/placed_items.rs	fn placed_item	WorldGen.cs	46572	79546442dfc1	f045f620d0ca
+crates/terrustia-proto/src/placed_items.rs	fn placed_item	WorldGen.cs	46572	79546442dfc1	2dd1ac660085
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65569-65639	d3f3ee060b89	3dc8d66fdd69
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65640-65719	0f1bf334c965	3dc8d66fdd69
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65720-65779	395ea9816079	3dc8d66fdd69
