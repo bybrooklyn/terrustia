@@ -415,6 +415,13 @@ impl WorldFlags {
         let (byte, bit) = flag.position();
         self.set(byte, bit, on);
     }
+
+    /// Read one flag back, which is what lets a test assert on what a client will actually be
+    /// told rather than on the server-side field the bit was derived from.
+    pub fn has_flag(&self, flag: WorldFlag) -> bool {
+        let (byte, bit) = flag.position();
+        self.0[byte] & (1 << bit) != 0
+    }
 }
 
 /// The world flags of packet `7`, in the order the client unpacks them.

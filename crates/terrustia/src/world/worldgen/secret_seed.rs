@@ -167,6 +167,40 @@ impl SecretSeeds {
         flags
     }
 
+    /// The flags left after dropping the ones whose whole meaning is a world *shape* this
+    /// generator does not produce. Returns them and the names of whatever was dropped.
+    ///
+    /// A secret-seed flag is not a label. `remixWorld` is sent to every connecting client
+    /// (`World::world_data`, `F::RemixWorld`) and a real client draws and measures depth by it:
+    /// the underworld background goes at the surface, the surface background goes at the bottom,
+    /// and the depth readout inverts. Setting it on a world whose tiles are ordinary does not give
+    /// a player a Remix world. It gives them an ordinary world drawn upside down, which is worse
+    /// than not offering the seed at all - and it also writes the claim into the `.wld`, so real
+    /// Terraria would believe it too.
+    ///
+    /// `remixWorld` is 85 call sites in vanilla and zero of them are consumed here; nothing mirrors
+    /// the world. `zenithWorld` goes with it because zenith *is* the combination, remix included,
+    /// and a world file claiming zenith without remix is a state neither game can make. The other
+    /// six flags "get fixed boi" turns on are unaffected: each of those is a difference in what
+    /// generates or how something behaves, partly modelled and disclosed at its own site, not a
+    /// claim about which way up the world is.
+    ///
+    /// **A `.wld` that real Terraria generated keeps its flag**, because there the tiles really are
+    /// mirrored and the client is right to be told. This only governs what this generator claims
+    /// about worlds it made itself.
+    pub fn honoured_by_this_generator(mut self) -> (Self, Vec<&'static str>) {
+        let mut dropped = Vec::new();
+        if self.remix {
+            self.remix = false;
+            dropped.push("remix");
+        }
+        if self.everything {
+            self.everything = false;
+            dropped.push("get fixed boi");
+        }
+        (self, dropped)
+    }
+
     /// Every active flag's own display name, for logging and the startup panel — real vanilla's
     /// own seed name where the seed has one commonly-known name, the internal flag name otherwise.
     /// Empty for an ordinary world.

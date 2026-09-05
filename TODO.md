@@ -247,20 +247,26 @@ parity one.** An audit lane counted the sites rather than estimating them:
   implemented (the Wall of Flesh pace, the lunar pillar surface clamp, `DESTROYER_SEGMENTS_GOOD`),
   five more are explicitly disclosed as absent at their sites, and **roughly 71 are silently
   absent**, including all eleven of the Eye of Cthulhu's and all nine of the Twins'.
-- **`Main.remixWorld`: 85 sites, zero consumed by AI.** The seed is detected, persisted, and
-  **advertised to clients** (`world.rs:788`, `F::RemixWorld`), and worldgen consumes it in at least
-  one place (`hardmode.rs::can_chlorophyte_grow` switches town-NPC happiness off for a remix world),
-  but no AI reads it. `world/hardmode.rs:602-608`'s own comment was fixed to say this correctly; the
-  radii/caps `can_chlorophyte_grow` itself computes still do not adjust for a remix seed, which is
-  the real gap left at that site.
+- ~~**`Main.remixWorld`: 85 sites, zero consumed by AI**, and yet **advertised to clients**.~~
+  **The false claim is closed, 2026-09-05.** `SecretSeeds::honoured_by_this_generator` drops `remix`
+  (and `everything`, since zenith *is* the combination) from any world this generator makes, so the
+  flag is never set on tiles that are not mirrored - not on the wire and not in the `.wld` either. A
+  client told `F::RemixWorld` draws the underworld background at the surface and inverts its depth
+  readout, so an ordinary world announced as a Remix one was not a partial feature but a wrong one.
+  A `.wld` real Terraria generated keeps its flag, because there the tiles really are that shape.
+  The six behaviour flags "get fixed boi" also turns on are untouched.
+  The parity gap itself is unchanged and now scoped to worlds this server did not generate: no AI
+  reads the seed, and `can_chlorophyte_grow`'s own radii and caps still do not adjust for it.
 - **`WorldGen.Skyblock.lowTiles`: about 20 sites, zero consumed.** Detected and persisted, unread.
+  Never a false claim to a client, unlike remix: this project's own `WorldFlags` model has no bit
+  for Skyblock or NoTraps, so neither is on the wire at all and neither can mislead a client. The
+  parity gap stands; the disclosure one never existed.
 
-The parity gap is ordinary deferred work. The **disclosure** gap is not: the server currently tells a
-client it is running a remix world and then does not behave like one, and a stale comment tells a
-reader the seed does not exist when it does. Under this project's own rules a narrowing is disclosed
-at its site, so either these seeds are wired up or their absence is stated where a reader will meet
-it, and the advertisement to clients is reconsidered. That is a v0.0.1 decision, not a v0.0.2 one,
-because it concerns what the server claims about itself.
+The parity gap is ordinary deferred work. **The disclosure gap was not, and it is closed:** the
+server told a client it was running a remix world and then did not behave like one. It no longer
+makes the claim for a world it generated. What is left here is ordinary parity - `getGoodWorld`'s
+~71 silently absent sites are the largest of it, and are the reason the seed is still listed rather
+than ticked off.
 
 **C4 (done)**: expanded the golden/deterministic vanilla-derived tests that CAN run per-commit in
 CI; the live differential against a real `TerrariaServer` remains a Phase 2 qualification step, since

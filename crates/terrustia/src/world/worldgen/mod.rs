@@ -299,7 +299,18 @@ pub fn build_with_secret_seed(
     secret: SecretSeeds,
 ) -> (World, Built) {
     let mut world = World::empty(width, height, name);
-    world.secret_seeds = secret;
+    // What this generator actually made, not what was asked for. See
+    // [`SecretSeeds::honoured_by_this_generator`]: a flag that describes the world's shape is a
+    // claim the tiles have to back up, because a client is told it and draws by it.
+    let (honoured, dropped) = secret.honoured_by_this_generator();
+    if !dropped.is_empty() {
+        tracing::warn!(
+            seeds = dropped.join(", "),
+            "this server cannot generate that world shape; \
+             an ordinary world was made and the flag is not claimed"
+        );
+    }
+    world.secret_seeds = honoured;
     // The same generator the parity work uses, so a seed means the same thing in both.
     let mut rand = UnifiedRandom::new(seed as i32);
 
@@ -710,9 +721,43 @@ mod tests {
     fn build_from_text_keeps_the_real_typed_text() {
         let (world, built) = build_from_text(1600, 700, "text", "  getfixedboi  ");
         assert_eq!(world.seed_text, "getfixedboi");
-        assert!(built.secret_seeds.everything);
-        assert!(built.secret_seeds.remix);
         assert!(built.secret_seeds.no_traps);
+        assert!(built.secret_seeds.get_good);
+        assert!(built.secret_seeds.not_the_bees);
+    }
+
+    /// A world this generator made never claims a shape it did not make.
+    ///
+    /// `remixWorld` mirrors the whole world in vanilla and nothing here mirrors anything, but the
+    /// flag was still detected, persisted, and sent to every client as `F::RemixWorld` - which a
+    /// real client honours by drawing the underworld at the surface. An ordinary world announced as
+    /// a Remix one is not a partial feature, it is a wrong one, and it went into the `.wld` too.
+    ///
+    /// The six flags that describe *behaviour* rather than shape are untouched, so "get fixed boi"
+    /// still gets everything this server can actually do.
+    #[test]
+    fn a_generated_world_does_not_claim_a_shape_it_does_not_have() {
+        for text in ["dontdigup", "getfixedboi"] {
+            let (world, _) = build_from_text(1600, 700, "text", text);
+            assert!(
+                !world.secret_seeds.remix,
+                "{text}: an ordinary world must not be announced as a Remix one"
+            );
+            assert!(
+                !world.secret_seeds.everything,
+                "{text}: and zenith is the combination, remix included"
+            );
+            let flags = world.world_data().flags;
+            assert!(
+                !flags.has_flag(terrustia_proto::packets::WorldFlag::RemixWorld),
+                "{text}: and the wire must not carry the claim either"
+            );
+        }
+        // What "get fixed boi" can still honestly turn on.
+        let (world, _) = build_from_text(1600, 700, "text", "getfixedboi");
+        assert!(world.secret_seeds.no_traps);
+        assert!(world.secret_seeds.drunk);
+        assert!(world.secret_seeds.dont_starve);
     }
 
     /// `World::secret_seeds` — not just `Built`'s own copy — carries the detected flags too, since
