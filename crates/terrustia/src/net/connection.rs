@@ -94,6 +94,103 @@ pub fn outbound_queue(max_players: usize) -> usize {
     OUTBOUND_BASE + max_players * OUTBOUND_PER_PLAYER
 }
 
+/// The most memory every outbound queue on the server may hold between them, in bytes.
+///
+/// The depth above bounds one connection; nothing bounded the *sum*, and that is what the
+/// 255-player soak kept running into. `queue_peak` reports only the deepest single connection, so
+/// it under-reported the total: run 2 of the qualification soak reached 1536 MiB against a 1 GiB
+/// ceiling with its backlog spread across many connections rather than piled on one, and
+/// 255 slots times `outbound_queue(255)` frames is a theoretical ceiling in the tens of gigabytes.
+///
+/// Bounding the sum is the fix rather than shrinking the depth, because the depth is doing a real
+/// job: `OUTBOUND_PER_PLAYER`'s own comment records that a transient backlog on a descheduled game
+/// loop drains again afterwards, and that a shallower queue turns that recoverable case into
+/// dropped players. So depth still covers the transient, and this covers the aggregate.
+///
+/// 256 MiB against the soak's own 1 GiB ceiling: a quarter of the budget for backlog, leaving the
+/// world, the NPC and tile state and every other allocation the rest. A server that reaches this is
+/// already in trouble - it means a quarter of a gigabyte of frames nobody has read - so the
+/// response is to shed the connection holding the most of it, which is the same answer
+/// `send_bytes` already gives a single connection whose own queue fills.
+pub const OUTBOUND_TOTAL_BUDGET: usize = 256 * 1024 * 1024;
+
+/// One connection's share of [`OUTBOUND_TOTAL_BUDGET`], and the whole server's, counted together.
+///
+/// Two counters rather than one because the two questions have different costs. "Are we over
+/// budget?" is asked on every single send, so it has to be one atomic load; "who is holding it?" is
+/// asked only when the answer to the first is yes, and can afford to walk the players.
+///
+/// [`Default`] gives a counter that shares its total with nobody, which is what a
+/// [`crate::game::player::Player`] built outside a listener wants: it counts its own queue
+/// correctly and cannot make an unrelated server look over budget.
+#[derive(Clone, Debug, Default)]
+pub struct QueuedBytes {
+    mine: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    total: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl QueuedBytes {
+    /// A fresh per-connection counter sharing `total` with every other connection.
+    pub fn new(total: std::sync::Arc<std::sync::atomic::AtomicUsize>) -> Self {
+        Self {
+            mine: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            total,
+        }
+    }
+
+    /// Charge `bytes` to this connection and to the server.
+    pub fn reserve(&self, bytes: usize) {
+        use std::sync::atomic::Ordering::Relaxed;
+        self.mine.fetch_add(bytes, Relaxed);
+        self.total.fetch_add(bytes, Relaxed);
+    }
+
+    /// Give `bytes` back, once they have actually been written.
+    ///
+    /// Only what this connection was genuinely still holding comes off the *server's* total, which
+    /// is why the two counters are not decremented by the same number. They differ in one case and
+    /// it is a real one: [`Self::abandon`] zeroes `mine` for a connection being removed while its
+    /// `write_loop` is mid-pop on a frame it took a moment earlier. Subtracting `bytes` from the
+    /// total in both places would charge that frame back twice, leaving the shared counter below
+    /// the true sum of every live connection's queue - permanently, and further below it after
+    /// every disconnect, until a server genuinely over budget no longer sheds anything at all.
+    pub fn release(&self, bytes: usize) {
+        use std::sync::atomic::Ordering::Relaxed;
+        let mut removed = 0;
+        // The closure re-runs on contention, so `removed` ends up holding whatever the *winning*
+        // attempt took off, which is the amount the total owes back.
+        let _ = self.mine.fetch_update(Relaxed, Relaxed, |n| {
+            removed = n.min(bytes);
+            Some(n - removed)
+        });
+        if removed > 0 {
+            let _ = self
+                .total
+                .fetch_update(Relaxed, Relaxed, |n| Some(n.saturating_sub(removed)));
+        }
+    }
+
+    /// What this one connection is holding.
+    pub fn mine(&self) -> usize {
+        self.mine.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// What every connection is holding between them.
+    pub fn total(&self) -> usize {
+        self.total.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Hand back everything this connection was holding, for a player being removed: whatever is
+    /// still queued for it will never be written now, so it must stop counting against the server.
+    pub fn abandon(&self) {
+        use std::sync::atomic::Ordering::Relaxed;
+        let held = self.mine.swap(0, Relaxed);
+        let _ = self
+            .total
+            .fetch_update(Relaxed, Relaxed, |n| Some(n.saturating_sub(held)));
+    }
+}
+
 /// How the game task ends a connection without waiting for its outbound queue to drain.
 ///
 /// Dropping a [`crate::game::player::Player`] drops the last `mpsc::Sender` for its queue, and that
@@ -137,7 +234,9 @@ const HANDSHAKE_FRAMES: u32 = 64;
 ///
 /// Grouped because they travel together and are set once from the config; passing them
 /// individually made `serve` a list of bare `Duration`s that were easy to swap by accident.
-#[derive(Debug, Clone, Copy)]
+// Not `Copy`: `queued_total` is a shared handle, and a type that silently copies one reads as
+// though each copy got its own counter.
+#[derive(Debug, Clone)]
 pub struct Limits {
     /// How long a single read may block before the connection is considered idle.
     pub idle: Duration,
@@ -145,6 +244,12 @@ pub struct Limits {
     pub handshake: Duration,
     /// Capacity of this connection's outbound queue.
     pub outbound_queue: usize,
+    /// The whole server's outbound backlog, in bytes, shared by every connection.
+    ///
+    /// Lives here rather than being made inside `serve` because it is precisely the thing that has
+    /// to be *shared*: one counter per connection would bound each of them again, which
+    /// `outbound_queue` already does, and would leave the sum as unbounded as it was.
+    pub queued_total: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
 pub async fn serve(
@@ -165,6 +270,7 @@ pub async fn serve(
         debug!(%addr, error = %e, "could not disable Nagle");
     }
 
+    let queued = QueuedBytes::new(limits.queued_total.clone());
     let (out_tx, out_rx) = mpsc::channel::<Bytes>(outbound_queue);
     let (slot_tx, slot_rx) = oneshot::channel();
     // See [`Closer`]: the game task's way of ending this connection now rather than at the far end
@@ -177,6 +283,7 @@ pub async fn serve(
             out: out_tx,
             close: close_tx,
             slot: slot_tx,
+            queued: queued.clone(),
         })
         .await
         .is_err()
@@ -209,6 +316,7 @@ pub async fn serve(
         write_half,
         slot,
         recorder.clone(),
+        queued,
     ));
     let reason = read_loop(
         &mut read_half,
@@ -247,6 +355,7 @@ async fn write_loop(
     mut sink: tokio::net::tcp::OwnedWriteHalf,
     slot: u8,
     recorder: Option<record::Recorder>,
+    queued: QueuedBytes,
 ) {
     let mut batch: Vec<u8> = Vec::with_capacity(WRITE_BATCH);
     // The last frame this connection is owed, if the game task named one when it closed us.
@@ -284,11 +393,15 @@ async fn write_loop(
         };
         batch.clear();
         batch.extend_from_slice(&frame);
+        queued.release(frame.len());
         // Everything else already queued goes out in the same write. `try_recv` never waits, so
         // this only ever gathers what the game task has *already* produced.
         while batch.len() < WRITE_BATCH {
             match out.try_recv() {
-                Ok(next) => batch.extend_from_slice(&next),
+                Ok(next) => {
+                    batch.extend_from_slice(&next);
+                    queued.release(next.len());
+                }
                 Err(_) => break,
             }
         }
@@ -407,6 +520,38 @@ mod tests {
     use super::*;
     use tokio::net::TcpListener;
 
+    /// A disconnect and its own `write_loop` racing over the same frame: the game task abandons
+    /// the connection's whole queue while the writer, having popped a frame a moment earlier,
+    /// releases it. The frame must come off the shared total once, not twice - the second
+    /// subtraction would be taken out of a *different* connection's share, and the drift is one
+    /// way, so a long-lived server would gradually stop believing anything was queued at all.
+    #[test]
+    fn releasing_after_abandoning_does_not_charge_the_frame_back_twice() {
+        let total = std::sync::Arc::<std::sync::atomic::AtomicUsize>::default();
+        let leaving = QueuedBytes::new(total.clone());
+        let staying = QueuedBytes::new(total.clone());
+
+        leaving.reserve(100);
+        staying.reserve(100);
+        assert_eq!(leaving.total(), 200);
+
+        leaving.abandon();
+        assert_eq!(
+            leaving.total(),
+            100,
+            "abandoning must return exactly what the leaving connection held"
+        );
+
+        // Its writer, which had already taken that frame off the channel, now says so.
+        leaving.release(100);
+        assert_eq!(
+            leaving.total(),
+            100,
+            "the connection that is still here is still holding its 100 bytes"
+        );
+        assert_eq!(staying.mine(), 100, "and it never gave them up");
+    }
+
     /// One kilobyte of filler. Static so a test can queue thousands of them for nothing.
     static FILLER: [u8; 1024] = [7; 1024];
     /// Stands in for a kick notice: the one frame a closed connection is still owed.
@@ -467,7 +612,14 @@ mod tests {
 
         let (close_tx, close_rx) = oneshot::channel();
         close_tx.send(None).expect("the write task is still there");
-        tokio::spawn(write_loop(out_rx, close_rx, sink, 0, None));
+        tokio::spawn(write_loop(
+            out_rx,
+            close_rx,
+            sink,
+            0,
+            None,
+            QueuedBytes::new(std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0))),
+        ));
 
         assert!(
             read_to_end(&mut client).await.is_empty(),
@@ -491,7 +643,14 @@ mod tests {
         close_tx
             .send(Some(Bytes::from_static(&NOTICE)))
             .expect("the write task is still there");
-        tokio::spawn(write_loop(out_rx, close_rx, sink, 0, None));
+        tokio::spawn(write_loop(
+            out_rx,
+            close_rx,
+            sink,
+            0,
+            None,
+            QueuedBytes::new(std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0))),
+        ));
 
         // Length first, so a regression reports a number rather than printing four megabytes of
         // filler at whoever ran the suite.
@@ -519,7 +678,14 @@ mod tests {
         drop(out_tx);
 
         let (close_tx, close_rx) = oneshot::channel();
-        tokio::spawn(write_loop(out_rx, close_rx, sink, 0, None));
+        tokio::spawn(write_loop(
+            out_rx,
+            close_rx,
+            sink,
+            0,
+            None,
+            QueuedBytes::new(std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0))),
+        ));
 
         // Read once first: the writer cannot have got this far without being under way, so the
         // close below lands on a loop that is already in the middle of the backlog.
@@ -556,7 +722,14 @@ mod tests {
 
         let (close_tx, close_rx) = oneshot::channel::<Option<Bytes>>();
         drop(close_tx);
-        tokio::spawn(write_loop(out_rx, close_rx, sink, 0, None));
+        tokio::spawn(write_loop(
+            out_rx,
+            close_rx,
+            sink,
+            0,
+            None,
+            QueuedBytes::new(std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0))),
+        ));
 
         assert_eq!(
             read_to_end(&mut client).await.len(),

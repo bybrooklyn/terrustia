@@ -735,6 +735,9 @@ pub enum ServerEvent {
         /// Ends this connection without waiting for `out` to drain: see
         /// [`crate::net::connection::Closer`], and [`GameServer::disconnect`] for who fires it.
         close: crate::net::connection::Closer,
+        /// This connection's share of the server-wide outbound byte budget: see
+        /// [`crate::net::connection::OUTBOUND_TOTAL_BUDGET`].
+        queued: crate::net::connection::QueuedBytes,
         /// Receives the assigned `(slot, epoch)`, or `None` when the server is full.
         ///
         /// `epoch` is [`GameServer::allocate_slot`]'s per-connection generation counter (see
@@ -2486,8 +2489,9 @@ impl GameServer {
                 out,
                 close,
                 slot,
+                queued,
             } => {
-                let assigned = self.allocate_slot(addr, out, close);
+                let assigned = self.allocate_slot(addr, out, close, queued);
                 let _ = slot.send(assigned);
             }
             ServerEvent::Packet { slot, epoch, frame } => {
@@ -2818,10 +2822,12 @@ impl GameServer {
         addr: SocketAddr,
         out: mpsc::Sender<Bytes>,
         close: crate::net::connection::Closer,
+        queued: crate::net::connection::QueuedBytes,
     ) -> Option<(u8, u32)> {
         let slot = self.players.iter().position(Option::is_none)?;
         let slot = u8::try_from(slot).ok()?;
         let mut player = Player::new(slot, addr, out);
+        player.queued = queued;
         player.close = Some(close);
         self.players[slot as usize] = Some(player);
         // Wrapping, not saturating: a slot would need to cycle through u32::MAX connections
@@ -2900,6 +2906,11 @@ impl GameServer {
         let Some(mut player) = self.players.get_mut(slot as usize).and_then(Option::take) else {
             return;
         };
+        // Whatever is still queued for this connection will never be written now, so it must stop
+        // counting against the server's budget. Without this, every shed leaks its own backlog into
+        // the total for the life of the process and the budget ratchets shut: the second shed comes
+        // sooner than the first, and eventually a healthy server sheds on its first frame.
+        player.queued.abandon();
         // Fired here, with the player already out of the slot, so that nothing this function goes
         // on to broadcast can be queued for a connection that is no longer taking any.
         if let Some(close) = player.close.take() {
@@ -2944,9 +2955,11 @@ impl GameServer {
     }
 
     fn send_bytes(&mut self, slot: u8, frame: Bytes) {
-        let Some(out) = self.player(slot).map(|p| p.out.clone()) else {
+        let Some((out, queued)) = self.player(slot).map(|p| (p.out.clone(), p.queued.clone()))
+        else {
             return;
         };
+        let size = frame.len();
         // A client that cannot keep up would otherwise grow the queue without bound. Dropping it is
         // the same call vanilla makes, and the read task notices the closed channel.
         //
@@ -2956,13 +2969,17 @@ impl GameServer {
         // Calling that "dropping connection" at warning level sends an operator looking for a
         // network problem that is not there.
         let id = frame.get(2).copied().unwrap_or(255);
+        queued.reserve(size);
         match out.try_send(frame) {
             Ok(()) => {}
             Err(mpsc::error::TrySendError::Closed(_)) => {
+                queued.release(size);
                 debug!(slot, "sending to a connection that has already gone");
                 self.remove_player(slot);
+                return;
             }
             Err(mpsc::error::TrySendError::Full(_)) => {
+                queued.release(size);
                 warn!(
                     slot,
                     packet = id,
@@ -2970,11 +2987,55 @@ impl GameServer {
                     "outbound queue full; dropping a client that cannot keep up"
                 );
                 self.remove_player(slot);
+                return;
             }
+        }
+        // One connection's own queue filling is the case above. This is the other one, which
+        // nothing bounded until now: every queue individually inside its depth, and the *sum* of
+        // them past what the server can afford to hold. One atomic load on the common path.
+        if queued.total() > crate::net::connection::OUTBOUND_TOTAL_BUDGET {
+            self.shed_the_deepest_queue();
         }
     }
 
-    /// Send to every player who is in the world, optionally skipping one.
+    /// Drop whichever connection is holding the most unread outbound bytes.
+    ///
+    /// Reached only when the server-wide backlog is over
+    /// [`crate::net::connection::OUTBOUND_TOTAL_BUDGET`], so walking the players is affordable
+    /// here in a way it would not be on every send.
+    ///
+    /// The deepest queue rather than the connection that happened to trigger the check: the two are
+    /// usually not the same, and shedding the trigger would punish whichever player the game task
+    /// spoke to next rather than the one actually holding the memory. This is the aggregate
+    /// counterpart of the per-connection shed above, and it answers the same way, because a
+    /// connection sitting on a large share of a quarter-gigabyte backlog is by definition one that
+    /// is not reading.
+    fn shed_the_deepest_queue(&mut self) {
+        let Some((slot, held)) = self
+            .players
+            .iter()
+            .flatten()
+            .map(|p| (p.slot, p.queued.mine()))
+            .max_by_key(|(_, held)| *held)
+        else {
+            return;
+        };
+        warn!(
+            slot,
+            held_bytes = held,
+            total_bytes = self
+                .players
+                .iter()
+                .flatten()
+                .map(|p| p.queued.mine())
+                .sum::<usize>(),
+            budget_bytes = crate::net::connection::OUTBOUND_TOTAL_BUDGET,
+            "the server's outbound queues are over budget between them; dropping the connection \
+             holding the most of it"
+        );
+        self.remove_player(slot);
+    }
+
     /// Broadcast a tile square to the clients that actually hold the ground it covers.
     ///
     /// Vanilla gates packet 20 and nothing else this way (`NetMessage.cs:1721-1731`): its case 20
@@ -3041,6 +3102,7 @@ impl GameServer {
             })
     }
 
+    /// Send to every player who is in the world, optionally skipping one.
     fn broadcast(&mut self, frame: Vec<u8>, except: Option<u8>) {
         let bytes = Bytes::from(frame);
         // Collect first: sending can remove a player, which would invalidate an in-flight iterator.
@@ -3399,6 +3461,69 @@ mod ghost_connection_epoch {
     /// three reach `remove_player` without the connection itself having ended), a newcomer is
     /// handed the same slot number, and only then does the ghost's stale `Leave` arrive. Before
     /// the epoch check this evicted the newcomer; the newcomer's own connection never sent it.
+    /// Two connections sharing one budget, one of them holding nearly all of it. A frame sent to
+    /// the *other* one takes the total past the ceiling, and the server must shed the holder
+    /// rather than the sender: they are usually not the same connection, and shedding the sender
+    /// would drop whichever player the game task happened to speak to next.
+    ///
+    /// The bytes here are counted, not allocated - `reserve` moves two atomics - so a test can
+    /// stand at the edge of a quarter-gigabyte ceiling for free.
+    #[tokio::test]
+    async fn the_aggregate_budget_sheds_the_deepest_queue_not_the_sender() {
+        use crate::net::connection::{OUTBOUND_TOTAL_BUDGET, QueuedBytes};
+
+        let mut server = GameServer::new(Config::default(), tiny_world("aggregate budget"));
+        let total = std::sync::Arc::<std::sync::atomic::AtomicUsize>::default();
+
+        let (tx_hog, _rx_hog) = mpsc::channel(16);
+        let (hog, _) = server
+            .allocate_slot(
+                "127.0.0.1:6200".parse().expect("a literal"),
+                tx_hog,
+                oneshot::channel().0,
+                QueuedBytes::new(total.clone()),
+            )
+            .expect("a free slot");
+        let (tx_quiet, _rx_quiet) = mpsc::channel(16);
+        let (quiet, _) = server
+            .allocate_slot(
+                "127.0.0.1:6201".parse().expect("a literal"),
+                tx_quiet,
+                oneshot::channel().0,
+                QueuedBytes::new(total.clone()),
+            )
+            .expect("a second free slot");
+
+        // The hog is sitting on the whole budget bar a byte: still inside it, so nothing has
+        // fired yet, and its own queue is nowhere near its depth limit.
+        server
+            .player(hog)
+            .expect("the hog is seated")
+            .queued
+            .reserve(OUTBOUND_TOTAL_BUDGET - 1);
+        assert!(
+            server.player(hog).is_some() && server.player(quiet).is_some(),
+            "at the ceiling and not over it, nobody may be shed"
+        );
+
+        server.send_bytes(quiet, Bytes::from_static(&[0, 0, 0, 0]));
+
+        assert!(
+            server.player(hog).is_none(),
+            "the connection holding the backlog is the one that must go"
+        );
+        assert!(
+            server.player(quiet).is_some(),
+            "the connection that merely happened to be sent to must survive"
+        );
+        assert_eq!(
+            total.load(std::sync::atomic::Ordering::Relaxed),
+            4,
+            "shedding must hand the shed connection's bytes back, leaving only the frame that is \
+             genuinely still queued; a shed that leaks its own backlog ratchets the budget shut"
+        );
+    }
+
     #[tokio::test]
     async fn a_ghost_leave_does_not_evict_the_slots_new_occupant() {
         let mut server = GameServer::new(Config::default(), tiny_world("ghost leave probe"));
@@ -3409,6 +3534,7 @@ mod ghost_connection_epoch {
                 "127.0.0.1:6000".parse().expect("a literal"),
                 tx1,
                 oneshot::channel().0,
+                crate::net::connection::QueuedBytes::default(),
             )
             .expect("a free slot");
         // Stands in for `/kick`, the handshake reaper, or a full outbound queue: the player is
@@ -3421,6 +3547,7 @@ mod ghost_connection_epoch {
                 "127.0.0.1:6001".parse().expect("a literal"),
                 tx2,
                 oneshot::channel().0,
+                crate::net::connection::QueuedBytes::default(),
             )
             .expect("the freed slot must be available again");
         assert_eq!(
@@ -3468,6 +3595,7 @@ mod ghost_connection_epoch {
                 "127.0.0.1:6100".parse().expect("a literal"),
                 tx1,
                 oneshot::channel().0,
+                crate::net::connection::QueuedBytes::default(),
             )
             .expect("a free slot");
         server.remove_player(old_slot);
@@ -3478,6 +3606,7 @@ mod ghost_connection_epoch {
                 "127.0.0.1:6101".parse().expect("a literal"),
                 tx2,
                 oneshot::channel().0,
+                crate::net::connection::QueuedBytes::default(),
             )
             .expect("the freed slot must be available again");
         assert_eq!(old_slot, new_slot);

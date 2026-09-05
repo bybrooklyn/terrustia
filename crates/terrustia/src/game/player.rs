@@ -31,6 +31,12 @@ pub struct Player {
     pub slot: u8,
     pub addr: SocketAddr,
     pub out: mpsc::Sender<Bytes>,
+    /// This connection's share of the server-wide outbound byte budget.
+    ///
+    /// Defaulted to a counter of its own by [`Player::new`] and replaced with the connection's real
+    /// one by `allocate_slot`, the same shape `close` uses: a `Player` built in a test has no
+    /// connection behind it and must not have to invent one to exist.
+    pub queued: crate::net::connection::QueuedBytes,
     /// Ends this player's connection now, instead of at the far end of whatever `out` still holds.
     ///
     /// See [`crate::net::connection::Closer`] for why the queue running dry is the wrong signal.
@@ -211,6 +217,9 @@ impl Player {
             slot,
             addr,
             out,
+            queued: crate::net::connection::QueuedBytes::new(std::sync::Arc::new(
+                std::sync::atomic::AtomicUsize::new(0),
+            )),
             close: None,
             state: ConnState::Greeting,
             name: format!("Player {slot}"),

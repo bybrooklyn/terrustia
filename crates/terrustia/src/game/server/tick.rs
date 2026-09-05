@@ -835,6 +835,7 @@ mod handshake_reaper {
                 "127.0.0.1:5000".parse().expect("a literal"),
                 tx,
                 tokio::sync::oneshot::channel().0,
+                crate::net::connection::QueuedBytes::default(),
             )
             .expect("a free slot");
         server.player_mut(slot).expect("the slot just taken").state = state;
@@ -973,6 +974,7 @@ mod handshake_reaper {
                     "127.0.0.1:5001".parse().expect("a literal"),
                     tx,
                     tokio::sync::oneshot::channel().0,
+                    crate::net::connection::QueuedBytes::default(),
                 )
                 .is_none(),
             "the one-slot server should be full while the stalled connection holds it"
@@ -988,6 +990,7 @@ mod handshake_reaper {
                     "127.0.0.1:5001".parse().expect("a literal"),
                     tx,
                     tokio::sync::oneshot::channel().0,
+                    crate::net::connection::QueuedBytes::default(),
                 )
                 .is_some(),
             "a real player must be able to have the slot back"

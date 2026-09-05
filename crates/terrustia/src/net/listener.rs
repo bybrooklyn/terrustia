@@ -207,6 +207,9 @@ pub async fn run(
         idle: Duration::from_secs(config.idle_timeout_secs),
         handshake: Duration::from_secs(config.handshake_timeout_secs),
         outbound_queue: connection::outbound_queue(config.max_players),
+        // One counter for the whole listener, cloned into every connection it serves. This is the
+        // handle that makes the sum bounded rather than each queue bounded separately.
+        queued_total: std::sync::Arc::default(),
     };
     let open = Arc::new(Mutex::new(OpenConnections::default()));
     match listener.local_addr() {
@@ -243,7 +246,7 @@ pub async fn run(
                     stream,
                     addr,
                     events,
-                    limits,
+                    limits.clone(),
                     recorder.clone(),
                     slot,
                 ));
