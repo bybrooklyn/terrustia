@@ -31,6 +31,32 @@
 //! comment in `crates/terrustia/src/panel/mod.rs` for the actual fix (an abort-on-drop guard around
 //! `supervise`'s local handle, which makes the real inner task structurally unable to outlive
 //! `supervise` itself regardless of how or why its own future stops).
+//!
+//! # The flake this file used to be, and why
+//!
+//! `TODO.md` and `docs/release-blockers.md` carried "the flaky-test root cause is still
+//! undiagnosed" against this file for weeks, at roughly one run in five. It was three things
+//! compounding, and the third is what made it look random:
+//!
+//! 1. **A failing assertion leaked the server.** `std::process::Child` does not kill on drop, and
+//!    every assertion between spawning and the final `wait_timeout_or_kill` could panic past a
+//!    live child. [`Server`] below is the fix: an owned handle that kills on drop, so no exit path
+//!    leaves one running.
+//! 2. **The ports were constants.** A leaked server holds 17796 (or 17798/17799) until someone
+//!    kills it by hand, so *one* genuine failure made every later run on that machine fail too.
+//!    Measured directly: run 9 of a 20-run loop timed out for real, and runs 10 through 20 then
+//!    failed in 0.38s each against its leftover. That is the "one in five": a poisoned machine,
+//!    not a racy test. The ports are asked of the OS now, via `support::free_addr`.
+//! 3. **The failure named the wrong thing.** The server printed `127.0.0.1:17796 is already in
+//!    use` and exited, and the test - which pipes stdout and stderr and reads neither on failure -
+//!    reported "the server should have reached its main loop by now". Every assertion here now
+//!    carries what the server actually said.
+//!
+//! The first two are `tests/support/mod.rs`, because `world_switch.rs`, `resume_world_cli.rs` and
+//! `setup_wizard_cli.rs` have the same shape. The third is [`Server`] here: the transcript is
+//! worth the machinery on the file whose whole subject is what a server prints on its way down.
+
+mod support;
 
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -49,39 +75,90 @@ fn scratch_home() -> PathBuf {
     ))
 }
 
-fn stream_stdout_lines(stdout: std::process::ChildStdout) -> mpsc::Receiver<String> {
-    let (tx, rx) = mpsc::channel();
+/// A spawned server that is killed when it goes out of scope.
+///
+/// `std::process::Child` deliberately does not kill on drop, which is right for a library and
+/// wrong for a test: a panicking assertion between the spawn and the last `wait` left a real
+/// server running and holding its port for the rest of the machine's life. Every exit path from a
+/// test here now goes through this drop.
+struct Server {
+    child: Child,
+    lines: mpsc::Receiver<String>,
+    /// Everything the server has printed, kept so a failure can say what it actually said.
+    seen: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    stderr: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    home: PathBuf,
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        // The scratch home used to be removed only on the way out of a passing test, so a failing
+        // one left a world and a config behind for good. 27 of them had piled up in `$TMPDIR` by
+        // the time anyone looked.
+        let _ = std::fs::remove_dir_all(&self.home);
+    }
+}
+
+impl Server {
+    fn id(&self) -> u32 {
+        self.child.id()
+    }
+
+    /// Wait for a line containing `needle`, or return everything printed so far as an error.
+    fn wait_for(&self, needle: &str, timeout: Duration) -> Result<(), String> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                return Err(self.transcript(format!("timed out after {timeout:?}")));
+            }
+            match self.lines.recv_timeout(remaining) {
+                Ok(line) if line.contains(needle) => return Ok(()),
+                Ok(_) => {}
+                // The sender is gone, which means the server's stdout closed: it exited rather
+                // than being slow. Saying so is the whole point - this is what "address already in
+                // use" looked like for the weeks nobody could explain the flake.
+                Err(_) => return Err(self.transcript("the server exited".to_string())),
+            }
+        }
+    }
+
+    fn transcript(&self, why: String) -> String {
+        let out = self.seen.lock().map(|s| s.join("\n")).unwrap_or_default();
+        let err = self.stderr.lock().map(|s| s.join("\n")).unwrap_or_default();
+        format!("{why}.\n--- server stdout ---\n{out}\n--- server stderr ---\n{err}")
+    }
+}
+
+/// Drain a pipe into a shared buffer, and optionally onto a channel.
+fn drain(
+    pipe: impl std::io::Read + Send + 'static,
+    kept: &std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    tx: Option<mpsc::Sender<String>>,
+) {
+    let kept = std::sync::Arc::clone(kept);
     std::thread::spawn(move || {
-        let reader = BufReader::new(stdout);
+        let reader = BufReader::new(pipe);
         for line in reader.lines().map_while(Result::ok) {
-            if tx.send(line).is_err() {
+            if let Ok(mut kept) = kept.lock() {
+                kept.push(line.clone());
+            }
+            if let Some(tx) = &tx
+                && tx.send(line).is_err()
+            {
                 break;
             }
         }
     });
-    rx
-}
-
-fn wait_for_line(rx: &mpsc::Receiver<String>, needle: &str, timeout: Duration) -> bool {
-    let deadline = std::time::Instant::now() + timeout;
-    loop {
-        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        if remaining.is_zero() {
-            return false;
-        }
-        match rx.recv_timeout(remaining) {
-            Ok(line) if line.contains(needle) => return true,
-            Ok(_) => {}
-            Err(_) => return false,
-        }
-    }
 }
 
 /// `panel_listen`, when given, turns the web admin panel on for this run — the specific
 /// configuration that triggers the second, separate SIGTERM bug `panel_enabled_sigterm_still_stops_
 /// the_server_and_saves_within_a_bounded_window` below pins: the ordinary (panel-off) case above
 /// never spawns the panel's own inner task at all, so it could not have caught that bug either way.
-fn spawn_server(home: &std::path::Path, listen: &str, panel_listen: Option<&str>) -> Child {
+fn spawn_server(home: &std::path::Path, listen: &str, panel_listen: Option<&str>) -> Server {
     let save_file = home.join("ShutdownSignalTest.wld");
     let panel_config = match panel_listen {
         Some(addr) => format!("panel_enabled = true\npanel_listen = \"{addr}\"\n"),
@@ -117,9 +194,22 @@ fn spawn_server(home: &std::path::Path, listen: &str, panel_listen: Option<&str>
         .env("TERRUSTIA_UPNP_ENABLED", "false")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn terrustia")
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().expect("spawn terrustia");
+    let (tx, lines) = mpsc::channel();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    drain(child.stdout.take().expect("piped stdout"), &seen, Some(tx));
+    // Read rather than merely piped: an unread pipe fills and blocks the writer, and a server that
+    // cannot print is a second way to make this file hang for reasons of its own making.
+    drain(child.stderr.take().expect("piped stderr"), &stderr, None);
+    Server {
+        child,
+        lines,
+        seen,
+        stderr,
+        home: home.to_path_buf(),
+    }
 }
 
 /// A 300-second `autosave_secs` (the real default) means the world file can only ever land on
@@ -131,22 +221,16 @@ fn sigterm_stops_the_server_and_saves_within_a_bounded_window() {
     let home = scratch_home();
     std::fs::create_dir_all(&home).expect("scratch home");
 
-    let mut child = spawn_server(&home, "127.0.0.1:17796", None);
-    let stdout_lines = stream_stdout_lines(child.stdout.take().expect("piped stdout"));
+    let mut server = spawn_server(&home, &support::free_addr(), None);
 
-    assert!(
-        wait_for_line(
-            &stdout_lines,
-            "accepting connections",
-            Duration::from_secs(30)
-        ),
-        "the server should have reached its main loop by now"
-    );
+    if let Err(why) = server.wait_for("accepting connections", Duration::from_secs(30)) {
+        panic!("the server should have reached its main loop by now: {why}");
+    }
 
     #[cfg(unix)]
     {
         let _ = Command::new("kill")
-            .args(["-TERM", &child.id().to_string()])
+            .args(["-TERM", &server.id().to_string()])
             .status();
     }
     // Windows' own equivalent of the `SIGTERM` above: a real Ctrl+Break to the child's own process
@@ -163,27 +247,27 @@ fn sigterm_stops_the_server_and_saves_within_a_bounded_window() {
             unsafe extern "system" {
                 fn GenerateConsoleCtrlEvent(event: u32, group: u32) -> i32;
             }
-            GenerateConsoleCtrlEvent(1, child.id());
+            GenerateConsoleCtrlEvent(1, server.id());
         }
     }
     #[cfg(not(any(unix, windows)))]
     {
-        let _ = child.kill();
+        let _ = server.child.kill();
     }
 
     // The unfixed code hung here indefinitely — this timeout is generous next to the sub-second
     // shutdown actually measured by hand (~150ms from "shutting down" to "game loop stopped"),
     // not a guess at how long a fixed version might reasonably take.
     #[cfg(unix)]
-    {
-        assert!(
-            wait_for_line(&stdout_lines, "game loop stopped", Duration::from_secs(15)),
+    if let Err(why) = server.wait_for("game loop stopped", Duration::from_secs(15)) {
+        panic!(
             "the server must actually stop after SIGTERM, not just log \"shutting down\" and \
-             keep running"
+             keep running: {why}"
         );
     }
 
-    let status = child
+    let status = server
+        .child
         .wait_timeout_or_kill(Duration::from_secs(10))
         .expect("the process must exit on its own after a graceful SIGTERM shutdown");
     assert!(
@@ -204,8 +288,6 @@ fn sigterm_stops_the_server_and_saves_within_a_bounded_window() {
         std::fs::metadata(&save_file).is_ok_and(|m| m.len() > 0),
         "the saved world file should not be empty"
     );
-
-    let _ = std::fs::remove_dir_all(&home);
 }
 
 /// The same bug the test above pins, but for the specific configuration that the fix above
@@ -229,37 +311,26 @@ fn panel_enabled_sigterm_still_stops_the_server_and_saves_within_a_bounded_windo
     let home = scratch_home();
     std::fs::create_dir_all(&home).expect("scratch home");
 
-    let mut child = spawn_server(&home, "127.0.0.1:17798", Some("127.0.0.1:17799"));
-    let stdout_lines = stream_stdout_lines(child.stdout.take().expect("piped stdout"));
+    let mut server = spawn_server(&home, &support::free_addr(), Some(&support::free_addr()));
 
     // Waited for in the order the server actually prints them, not the order that reads
     // naturally: `main` binds and starts the panel (`panel::run`, opt-in, `?`-propagated on
-    // failure) *before* the accept loop's own "accepting connections" line — `wait_for_line`
+    // failure) *before* the accept loop's own "accepting connections" line — `Server::wait_for`
     // discards whatever it scans past while searching, so asking for "accepting connections"
     // first would silently eat the earlier "web panel listening" line before the second wait ever
     // got a chance to see it. This file's own module doc points at `plan.md`'s "Tile action log"
     // Done row for another test in this codebase that hit exactly this ordering trap.
-    assert!(
-        wait_for_line(
-            &stdout_lines,
-            "web panel listening",
-            Duration::from_secs(30)
-        ),
-        "the panel should have finished binding by now"
-    );
-    assert!(
-        wait_for_line(
-            &stdout_lines,
-            "accepting connections",
-            Duration::from_secs(30)
-        ),
-        "the server should have reached its main loop by now"
-    );
+    if let Err(why) = server.wait_for("web panel listening", Duration::from_secs(30)) {
+        panic!("the panel should have finished binding by now: {why}");
+    }
+    if let Err(why) = server.wait_for("accepting connections", Duration::from_secs(30)) {
+        panic!("the server should have reached its main loop by now: {why}");
+    }
 
     #[cfg(unix)]
     {
         let _ = Command::new("kill")
-            .args(["-TERM", &child.id().to_string()])
+            .args(["-TERM", &server.id().to_string()])
             .status();
     }
     // Windows' own equivalent of the `SIGTERM` above: a real Ctrl+Break to the child's own process
@@ -276,12 +347,12 @@ fn panel_enabled_sigterm_still_stops_the_server_and_saves_within_a_bounded_windo
             unsafe extern "system" {
                 fn GenerateConsoleCtrlEvent(event: u32, group: u32) -> i32;
             }
-            GenerateConsoleCtrlEvent(1, child.id());
+            GenerateConsoleCtrlEvent(1, server.id());
         }
     }
     #[cfg(not(any(unix, windows)))]
     {
-        let _ = child.kill();
+        let _ = server.child.kill();
     }
 
     // On the unfixed code this hangs indefinitely — the panel's leaked inner task keeps the game
@@ -289,18 +360,20 @@ fn panel_enabled_sigterm_still_stops_the_server_and_saves_within_a_bounded_windo
     // never prints at all. This timeout is generous next to the sub-second shutdown the fixed code
     // actually measures, not a guess at how long a correct version might reasonably take.
     #[cfg(unix)]
-    {
-        assert!(
-            wait_for_line(&stdout_lines, "game loop stopped", Duration::from_secs(15)),
+    if let Err(why) = server.wait_for("game loop stopped", Duration::from_secs(15)) {
+        panic!(
             "the server must actually stop after SIGTERM even with the web panel running, not \
-             just log \"shutting down\" and keep the panel's leaked task running forever"
+             just log \"shutting down\" and keep the panel's leaked task running forever: {why}"
         );
     }
 
-    let status = child.wait_timeout_or_kill(Duration::from_secs(10)).expect(
-        "the process must exit on its own after a graceful SIGTERM shutdown, even with the \
+    let status = server
+        .child
+        .wait_timeout_or_kill(Duration::from_secs(10))
+        .expect(
+            "the process must exit on its own after a graceful SIGTERM shutdown, even with the \
              panel enabled",
-    );
+        );
     assert!(
         status.success(),
         "a graceful SIGTERM shutdown should exit 0, got {status:?}"
@@ -318,8 +391,6 @@ fn panel_enabled_sigterm_still_stops_the_server_and_saves_within_a_bounded_windo
         std::fs::metadata(&save_file).is_ok_and(|m| m.len() > 0),
         "the saved world file should not be empty"
     );
-
-    let _ = std::fs::remove_dir_all(&home);
 }
 
 /// `std::process::Child` has no built-in bounded wait — this is the small, hand-rolled

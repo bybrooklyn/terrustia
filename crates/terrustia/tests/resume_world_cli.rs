@@ -25,6 +25,8 @@
 //! not ask for. A load preserves the name in the file; generation takes `config.world_name`. The
 //! two cannot agree by accident, whatever the seed does.
 
+mod support;
+
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -77,7 +79,7 @@ fn stream_stdout_lines(stdout: std::process::ChildStdout) -> mpsc::Receiver<Stri
 /// disk. `autosave_secs = 300` in the config below means that save is the only write in this
 /// window, which keeps "what reached disk" unambiguous.
 fn boot_and_save(config: &Path, world: &Path) -> String {
-    let mut child: Child = Command::new(env!("CARGO_BIN_EXE_terrustia"))
+    let child: Child = Command::new(env!("CARGO_BIN_EXE_terrustia"))
         .args(["-c", config.to_str().expect("a utf-8 config path")])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -90,6 +92,8 @@ fn boot_and_save(config: &Path, world: &Path) -> String {
         .env("TERRUSTIA_UPNP_ENABLED", "false")
         .spawn()
         .expect("spawn terrustia");
+    // Killed on drop, so a failing assertion below cannot leave it holding its port.
+    let mut child = support::Reaper(child);
     let lines = stream_stdout_lines(child.stdout.take().expect("piped stdout"));
     assert!(
         wait_for_line(&lines, "accepting connections", Duration::from_secs(60)),
@@ -143,12 +147,13 @@ fn a_restart_serves_the_saved_world_instead_of_regenerating_over_it() {
 
     // `world_name` here is what a generated world would be called, and it is not `PLANTED`. That
     // disagreement is the whole test: only a load can leave the planted name on disk.
+    let listen = support::free_addr();
     std::fs::write(
         &config,
         format!(
             "world_name = \"Regenerated Over The Save\"\n\
              save_file = {world_path:?}\n\
-             listen = \"127.0.0.1:17801\"\n\
+             listen = \"{listen}\"\n\
              world_width = 400\n\
              world_height = 300\n\
              autosave_secs = 300\n\

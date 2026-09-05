@@ -11,6 +11,8 @@
 
 #![cfg(unix)]
 
+mod support;
+
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -230,18 +232,18 @@ async fn switching_worlds_from_the_panel_restarts_the_real_process_into_the_new_
     std::fs::create_dir_all(&home).expect("scratch home");
 
     // Two real worlds, generated up front — the switch has to find both on disk.
-    generate_world(&home, "World Alpha", "127.0.0.1:17910");
-    generate_world(&home, "World Beta", "127.0.0.1:17911");
+    generate_world(&home, "World Alpha", &support::free_addr());
+    generate_world(&home, "World Beta", &support::free_addr());
 
-    let game_addr = "127.0.0.1:17912";
-    let panel_addr = "127.0.0.1:17913";
+    let game_addr = &support::free_addr();
+    let panel_addr = &support::free_addr();
     std::fs::write(
         home.join("terrustia.toml"),
         format!("autosave_secs = 0\npanel_enabled = true\npanel_listen = \"{panel_addr}\"\n"),
     )
     .expect("write config");
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_terrustia"))
+    let child = Command::new(env!("CARGO_BIN_EXE_terrustia"))
         .args(["--world", "World Alpha", "--listen", game_addr])
         .current_dir(&home)
         .env("HOME", &home)
@@ -254,6 +256,8 @@ async fn switching_worlds_from_the_panel_restarts_the_real_process_into_the_new_
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn terrustia");
+    // Killed on drop, so a failing assertion below cannot leave it holding its port.
+    let mut child = support::Reaper(child);
     let pid_before = child.id();
     let stdout = stream_stdout(&mut child);
 
@@ -341,7 +345,6 @@ async fn switching_worlds_from_the_panel_restarts_the_real_process_into_the_new_
         "expected the restarted process to be serving World Beta: {body}"
     );
 
-    let _ = child.kill();
-    let _ = child.wait();
+    drop(child);
     let _ = std::fs::remove_dir_all(&home);
 }

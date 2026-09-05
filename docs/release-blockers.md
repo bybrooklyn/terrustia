@@ -319,10 +319,23 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   `world/wld_save.rs`, `admin/audit.rs` and others). The lane's claim is scoped to paths the outside
   world can trigger, so the count alone proves nothing either way. What is missing is any way to
   *demonstrate* the claim: no checker distinguishes an internal-invariant unwrap from a reachable one.
-- **The flaky-test root cause is still undiagnosed.** `tests/shutdown_signal.rs`'s sigterm test and
-  `new_world_cli` share a failure shape, measured at roughly one run in five on both the pre-session
-  base and current `main`. The next diagnostic step named in `TODO.md` (stat the binary immediately
-  before spawning, record inode and mtime on failure) has not been run.
+- ~~**The flaky-test root cause is still undiagnosed**~~ for `tests/shutdown_signal.rs`.
+  **Found and fixed 2026-09-05**, and it was not a race in the server at all. Two defects in the
+  test compounded: the kill sits after the assertions and `std::process::Child` does not kill on
+  drop, so a failing run left a real server alive; the port was a constant, so that leftover held
+  it and made every later run on the machine fail. Caught in the act in a 20-run loop: run 9 timed
+  out genuinely and left its server on 17796, and runs 10 through 20 then failed in 0.38 seconds
+  each against it. That is the "one run in five": a poisoned machine, not a racy test.
+  The third piece is why nobody saw it. The server printed `127.0.0.1:17796 is already in use` and
+  exited, and the test pipes stdout and stderr and read neither on failure, so the reported symptom
+  was always "the server should have reached its main loop by now". A kill-on-drop guard and an
+  OS-assigned port are now in `tests/support/mod.rs`, shared with the three other files that spawn
+  a server and had the same shape, and every assertion here now carries what the server said.
+  Verified both ways: forcing a mid-test failure leaves two servers running on the old code and
+  none on the new, and the suite is 8 for 8 with nothing left in `$TMPDIR`.
+  **`new_world_cli` is a separate fault and stays open.** It kills its child before asserting, so
+  it cannot leak; its lead is still the `Command::spawn` `ENOENT` against a concurrently relinked
+  `target/debug/terrustia` written up in `TODO.md`.
 
 ## Documents that were wrong
 

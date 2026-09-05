@@ -10,6 +10,8 @@
 //! Same scratch-`HOME`/`XDG_DATA_HOME`/`USERPROFILE` pattern `new_world_cli.rs` already
 //! established, for the same reason: never touch the machine's real Terraria world directory.
 
+mod support;
+
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -138,7 +140,8 @@ fn the_wizard_writes_a_config_and_generates_the_world_it_named() {
     std::fs::create_dir_all(&home).expect("scratch home");
     let dedicated_dir = home.join("dedicated-config-dir");
 
-    let mut child = spawn_setup(&home, "127.0.0.1:17790");
+    // Killed on drop, so a failing assertion below cannot leave it holding its port.
+    let mut child = support::Reaper(spawn_setup(&home, &support::free_addr()));
     let stdout_lines = stream_stdout_lines(child.stdout.take().expect("piped stdout"));
     {
         let stdin = child.stdin.as_mut().expect("piped stdin");
@@ -249,7 +252,7 @@ fn the_wizard_refuses_a_dedicated_directory_that_already_has_something_in_it() {
     std::fs::create_dir_all(&dedicated_dir).unwrap();
     std::fs::write(dedicated_dir.join("do-not-touch.txt"), b"pre-existing").unwrap();
 
-    let mut child = spawn_setup(&home, "127.0.0.1:17791");
+    let mut child = support::Reaper(spawn_setup(&home, &support::free_addr()));
     {
         let stdin = child.stdin.as_mut().expect("piped stdin");
         writeln!(stdin, "{}", dedicated_dir.display()).unwrap();

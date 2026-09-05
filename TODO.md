@@ -644,14 +644,26 @@ over effort; the first three are roughly a day each.
    copy, which `tests/bare_server_boot.rs` already does for a different reason and has never flaked.
    Full write-up in `.scratch/audit-2026-08-30/FLAKE-new-world-cli.md`.
 
-   `tests/shutdown_signal.rs::sigterm_stops_the_server_and_saves_within_a_bounded_window` belongs to
-   the same class, found and measured 2026-09-04: it fails "the server should have reached its main
-   loop by now" in well under a second rather than timing out at its real 30s budget, which is
-   `wait_for_line`'s `Err(_) => return false` firing on a disconnected channel, not a slow boot. A
-   git-worktree bisection wrongly pointed at that day's web-panel merge on single-shot evidence
-   before five-run measurements at both that commit and the true pre-session base showed the same
-   1-in-5 failure rate at each: pre-existing, not a regression, and any single-run A/B on this test
-   will falsely implicate whatever commit happens to be under test. Same open next step as above.
+   ~~`tests/shutdown_signal.rs::sigterm_stops_the_server_and_saves_within_a_bounded_window` belongs
+   to the same class.~~ **It did not, and it is fixed (2026-09-05).** The 2026-09-04 measurement was
+   right as far as it went: the failure is `wait_for_line`'s `Err(_) => return false` on a
+   disconnected channel, in well under a second, not a slow boot. What it never did was read the
+   server's own output, which said `127.0.0.1:17796 is already in use`.
+   The cause is two defects in the test compounding. The kill sits after the assertions and
+   `std::process::Child` does not kill on drop, so a failing run leaves a real server alive; the
+   port was a constant, so that leftover holds it and every later run on the machine fails at the
+   *first* assertion. Caught in the act in a 20-run loop: run 9 timed out for real and left its
+   server on 17796, and runs 10 through 20 then failed in 0.38s each against it. The "1 in 5" was a
+   machine that had been poisoned by an earlier failure, which also explains the bisection going
+   wrong and the rate looking identical at every commit: it is a property of the machine, not the
+   tree.
+   Fixed with a kill-on-drop guard and an OS-assigned port in `tests/support/mod.rs`, shared with
+   `world_switch.rs`, `resume_world_cli.rs` and `setup_wizard_cli.rs`, which spawn a server with
+   the same shape (only `shutdown_signal.rs` was observed leaking; `world_switch`'s server happens
+   to die of `SIGPIPE` when the reader goes, which is luck rather than design). Forcing a mid-test
+   failure leaves two servers on the old code and none on the new.
+   **`new_world_cli` remains open** and is a different fault: it kills its child before asserting,
+   so it cannot leak, and the `ENOENT`-against-a-relink lead above still stands.
 
 **Explicitly not on this list: another audit pass by reading.** The C3 pass found 99 findings and
 still missed Bone and the absent upward wake in `Liquid.Update`, both of which turned up during
