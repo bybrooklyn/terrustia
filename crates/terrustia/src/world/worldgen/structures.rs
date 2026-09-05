@@ -503,6 +503,16 @@ pub fn evil_chasms(
     let orb_tile = tiles::SHADOW_ORB;
     let chasms = 3 + rand.next_max(3);
     let mut orbs = 0;
+    // `GenVars.ebonStoneWall`, 3 in a corruption world and 83 in a crimson one
+    // (`WorldGen.cs:8294`, `:11330`). `ChasmRunner` writes it behind the chasm it digs
+    // (`WorldGen.cs:76866`), so this pass has to place it rather than inherit it: `terrain::fill`
+    // no longer walls the cavern layer at all (see `terrain::wall_for`), which is right for a cave
+    // and wrong for a chasm.
+    let evil_wall = if layout.evil == Evil::Crimson {
+        walls::CRIMSTONE
+    } else {
+        walls::EBONSTONE
+    };
 
     for nth in 0..chasms {
         // Spread the chasms across the band rather than stacking them.
@@ -522,6 +532,14 @@ pub fn evil_chasms(
             let half = (2.0 + along * 5.0) as i32;
             for dx in -half..=half {
                 hollow(world, cx + dx, y);
+                // `if (num13 > j + genRand.Next(3, 20)) tile.wall = ebonStoneWall;`
+                // (`WorldGen.cs:76864-76867`): the top few rows stay open to the sky, and the draw
+                // is rerolled per tile, so the line where the wall starts is ragged.
+                if y > top + rand.next_range(3, 20) && world.in_bounds(cx + dx, y) {
+                    let mut tile = world.tile(cx + dx, y);
+                    tile.wall = evil_wall;
+                    world.set_tile(cx + dx, y, tile);
+                }
             }
             // The shaft wanders, so it is not a drilled hole.
             if rand.next_max(7) == 0 {
@@ -531,6 +549,18 @@ pub fn evil_chasms(
 
         // A pocket at the bottom, with an orb in it.
         hollow_blob(world, cx, bottom, 6, rand);
+        // ...and the same wall behind it. Walling every open tile in the blob's own bounding box
+        // is equivalent to walling the blob: the only other thing open in that box is the shaft
+        // this pass just dug, which is walled already.
+        for bx in cx - 8..=cx + 8 {
+            for by in bottom - 8..=bottom + 8 {
+                if world.in_bounds(bx, by) && !world.tile(bx, by).is_active() {
+                    let mut tile = world.tile(bx, by);
+                    tile.wall = evil_wall;
+                    world.set_tile(bx, by, tile);
+                }
+            }
+        }
         let orb_y = bottom + 2;
         // Frames say which half of the sheet the sprite comes from, and a crimson heart is the
         // right-hand half — `frameX >= 36`, which is what the break handler reads to decide
@@ -538,7 +568,9 @@ pub fn evil_chasms(
         let frame_x: i16 = if layout.evil == Evil::Crimson { 36 } else { 0 };
         for (dx, dy) in [(0i32, 0i32), (1, 0), (0, 1), (1, 1)] {
             let mut tile = Tile::framed(orb_tile, frame_x + (dx as i16) * 18, (dy as i16) * 18);
-            tile.wall = walls::EBONSTONE;
+            // Was hardcoded to Ebonstone, so a crimson world's heart room carried a corruption
+            // wall. `GenVars.ebonStoneWall` is the crimson one in a crimson world.
+            tile.wall = evil_wall;
             world.set_tile(cx + dx, orb_y + dy, tile);
         }
         orbs += 1;
@@ -1359,6 +1391,119 @@ mod chest_loot_tests {
     }
 }
 
+/// A chasm carries its own world's evil wall, and a Shadow Orb room used to carry the wrong one.
+///
+/// `evil_chasms` hardcoded `walls::EBONSTONE` behind every orb, so a crimson world's Crimson Heart
+/// sat in a Corruption wall. Vanilla reads `GenVars.ebonStoneWall`, which is 3 in a corruption
+/// world (`WorldGen.cs:8294`) and 83 in a crimson one (`WorldGen.cs:11330`), and `ChasmRunner`
+/// writes that one value behind everything it digs (`WorldGen.cs:76867`).
+///
+/// The wall is also what makes a chasm a chasm rather than a cave: `terrain::fill` no longer walls
+/// the cavern layer, because `DirtWallBackgrounds` (`WorldGen.cs:11895-11933`) walks each column
+/// only to `worldSurface + 0..10` and no later pass adds one below that. So the chasm pass has to
+/// place its own, and a chasm with no wall behind it is `nextCount`-transparent
+/// (`WorldGen.cs:9539-9543`) in a way vanilla's never is.
+#[cfg(test)]
+mod evil_chasm_walls {
+    use super::*;
+
+    fn chasm_walls(crimson: bool, seed: i32) -> std::collections::BTreeSet<u16> {
+        let mut rand = UnifiedRandom::new(seed);
+        let mut layout = Layout::plan(1200, 600, &mut rand);
+        layout.evil = if crimson {
+            Evil::Crimson
+        } else {
+            Evil::Corruption
+        };
+        let mut world = World::empty(1200, 600, "chasm walls");
+        world.crimson = crimson;
+        let heights = crate::world::worldgen::terrain::heightmap(&layout, &mut rand);
+        crate::world::worldgen::terrain::fill(&mut world, &layout, &heights, &mut rand);
+        let orbs = evil_chasms(&mut world, &layout, &heights, &mut rand);
+        assert!(orbs > 0, "the pass must have dug something to measure");
+
+        // Every wall found behind a Shadow Orb tile, which is the one place the old code named
+        // Ebonstone outright.
+        let mut seen = std::collections::BTreeSet::new();
+        for x in 0..1200 {
+            for y in 0..600 {
+                let tile = world.tile(x, y);
+                if tile.is_active() && tile.block == tiles::SHADOW_ORB {
+                    seen.insert(tile.wall);
+                }
+            }
+        }
+        seen
+    }
+
+    #[test]
+    fn a_crimson_world_walls_its_heart_rooms_in_crimstone() {
+        for seed in 0..12i32 {
+            let seen = chasm_walls(true, seed);
+            assert_eq!(
+                seen,
+                [walls::CRIMSTONE].into_iter().collect(),
+                "seed {seed}: a Crimson Heart belongs in a Crimstone wall, not whatever the \
+                 corruption branch happens to name"
+            );
+        }
+    }
+
+    #[test]
+    fn a_corruption_world_still_walls_its_orb_rooms_in_ebonstone() {
+        for seed in 0..12i32 {
+            let seen = chasm_walls(false, seed);
+            assert_eq!(
+                seen,
+                [walls::EBONSTONE].into_iter().collect(),
+                "seed {seed}: and the branch that was already right stays right"
+            );
+        }
+    }
+
+    /// The shaft itself is walled below its first few rows, and open to the sky above them:
+    /// `if (num13 > j + genRand.Next(3, 20))` (`WorldGen.cs:76864-76867`). A chasm walled all the
+    /// way to the top would be a sealed pit rather than a mouth in the ground.
+    #[test]
+    fn the_top_of_a_chasm_stays_open_to_the_sky() {
+        let mut rand = UnifiedRandom::new(7);
+        let mut layout = Layout::plan(1200, 600, &mut rand);
+        layout.evil = Evil::Corruption;
+        let mut world = World::empty(1200, 600, "chasm mouth");
+        let heights = crate::world::worldgen::terrain::heightmap(&layout, &mut rand);
+        crate::world::worldgen::terrain::fill(&mut world, &layout, &heights, &mut rand);
+        evil_chasms(&mut world, &layout, &heights, &mut rand);
+
+        // Somewhere in the evil band there is an open, unwalled column of chasm within twenty
+        // rows of the surface, and walled chasm below it.
+        let mut open_near_the_top = 0;
+        let mut walled_below = 0;
+        for x in layout.evil_band.from.max(0)..layout.evil_band.to.min(1200) {
+            let top = heights[x as usize];
+            for y in top..(top + 20).min(600) {
+                let tile = world.tile(x, y);
+                if !tile.is_active() && tile.wall == 0 {
+                    open_near_the_top += 1;
+                }
+            }
+            for y in (top + 25).min(599)..(top + 60).min(600) {
+                let tile = world.tile(x, y);
+                if !tile.is_active() && tile.wall == walls::EBONSTONE {
+                    walled_below += 1;
+                }
+            }
+        }
+        assert!(
+            open_near_the_top > 0,
+            "a chasm has to have a mouth, or nobody falls into it"
+        );
+        assert!(
+            walled_below > 0,
+            "and it has to be walled once it is inside, or it reads as an ordinary cave"
+        );
+    }
+}
+
 /// Golem's fight is gated on a single tile that `temple()` used to never place.
 ///
 /// A real client will not let a player attempt to use a Lihzahrd Power Cell at all without an
@@ -1713,10 +1858,14 @@ mod cave_topology_measurement {
             let mut world = World::empty(width, height, "cave-topology");
             world.crimson = plan.evil == Evil::Crimson;
             let heights = crate::world::worldgen::terrain::heightmap(&plan, &mut rand);
-            let started = std::time::Instant::now();
+            // Processor time, not wall clock, for the reason `game::clock`'s own module doc gives:
+            // this machine runs several worldgen lanes at once and a wall-clock reading of the
+            // same code has come back anywhere from 2 to 17 seconds depending on who else was
+            // building. The carve is single-threaded, so thread CPU time is its real cost.
+            let started = crate::game::clock::Cpu::now();
             crate::world::worldgen::terrain::fill(&mut world, &plan, &heights, &mut rand);
             caves(&mut world, &plan, &mut rand);
-            let carved = started.elapsed();
+            let carved = crate::game::clock::Cpu::now().since(started);
             report(
                 &format!("seed {seed} (fill+caves, {carved:?})"),
                 &world,
@@ -1731,7 +1880,8 @@ mod cave_topology_measurement {
     #[ignore]
     fn measure_sited_caves_on_real_worlds() {
         for seed in [4242u64, 999, 12345] {
-            let started = std::time::Instant::now();
+            // Processor time again, see `measure_cave_topology`.
+            let started = crate::game::clock::Cpu::now();
             let (_world, built) = crate::world::worldgen::build(
                 super::super::SMALL_WIDTH,
                 super::super::SMALL_HEIGHT,
@@ -1746,7 +1896,7 @@ mod cave_topology_measurement {
                 built.cave_wall_variety,
                 built.cave_walls_enclosed,
                 built.underground_cabins,
-                started.elapsed()
+                crate::game::clock::Cpu::now().since(started)
             );
         }
     }
