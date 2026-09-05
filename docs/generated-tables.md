@@ -15,7 +15,7 @@ that reads it.
 
 | File | Lines | From | Generator |
 |---|---:|---|---|
-| `npc_data.rs` | 13,323 | `NPC.SetDefaults` | — |
+| `npc_data.rs` | 13,323 | `NPC.SetDefaults` | — (`just check-npc-data`) |
 | `tile_object.rs` | 6,099 | `TileObjectData.Initialize` | — |
 | `npc_params.rs` | 4,721 | `NPCID.Sets`, `NPC.SetDefaults` | — |
 | `npc_drops.rs` | ~6,800 | `ItemDropDatabase` | `gen_drops.py` |
@@ -78,6 +78,14 @@ condition, and reported 41 disagreements that did not exist. Only the third atte
 
 **Intern repeated data.** 697 NPC types share only 34 distinct debuff-immunity masks. Emitting 697
 bitmaps would be 40× the bytes for the same table.
+
+**A checker is the other way to hold a hand-written table to source.** `npc_data.rs` has no
+generator and is unlikely to get one worth the risk: it is the largest table here, and the chain it
+comes from is nested four ways that a naive parse gets wrong (see `tools/check_npc_data.py`'s own
+header for all four). `just check-npc-data` re-reads that chain and compares all 691 entries on all
+16 fields instead, which is the protection rule 7 is actually after - a table cannot go stale
+without somebody seeing it. Written 2026-09-05; it found the table already correct, with seven
+deliberate differences on the record.
 
 **Validate a new generator against the table it replaces.** `npc_drops.rs` and
 `projectile_data.rs` were both hand-written and both hand-verified, which made them the ideal test

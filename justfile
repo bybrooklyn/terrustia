@@ -174,6 +174,14 @@ DECOMPILED := ".scratch/decompiled"
 check-drops:
     python3 tools/check_drops.py {{DECOMPILED}}
 
+# Cross-check `npc_data.rs` against `NPC.SetDefaults`, entry by entry and field by field.
+#
+# It is the largest table in the project and one of three with no generator, so rule 7's usual
+# protection - regenerate and read the diff - does not apply to it. This is that protection by
+# another road: 691 entries, 16 fields each, and seven differences on the record with reasons.
+check-npc-data:
+    python3 tools/check_npc_data.py {{DECOMPILED}}
+
 # Cross-check the checked-in shimmer-decraft recipes against the decompiled game
 check-recipes:
     python3 tools/check_recipes.py {{DECOMPILED}} crates/terrustia-proto/src/recipes.rs
@@ -242,7 +250,7 @@ check-mutants *ARGS:
 # reintroduces one.
 #
 # Every data cross-check in one go: the tables, the citations, the dead writes, and the checkers
-check-data: check-drops check-recipes check-parity check-spawn-reach check-mutants check-dead-writes
+check-data: check-drops check-npc-data check-recipes check-parity check-spawn-reach check-mutants check-dead-writes
 
 # Regenerate every transcribed data table from a decompiled tree, then format
 regen:

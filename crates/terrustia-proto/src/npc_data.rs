@@ -8,7 +8,13 @@
 //! here is made in place, by hand, with the `NPC.cs` line it comes from cited at the entry. Said
 //! plainly because the word "generated" used to sit in this paragraph, and a reader who believed
 //! it would either refuse to fix a wrong number or expect a regeneration to preserve their fix.
-//! Writing a real generator is worth doing and is tracked in TODO.md.
+//!
+//! **`just check-npc-data` is what stands in for one.** Rule 7's protection is not the generator
+//! itself, it is that a table cannot drift from source without somebody seeing a diff; that
+//! checker re-reads `SetDefaults`' own chain and compares all 691 entries on all 16 fields, and
+//! it runs from `just check-data` beside the drop and recipe checkers. Every entry here was
+//! verified against source that way on 2026-09-05, and the seven deliberate differences are on
+//! its own record with what each stands in for.
 //!
 //! Five of the 691 entries deliberately do *not* match `SetDefaults`, and each one is flagged at
 //! its own entry with what source really says and what depends on the difference. Both are

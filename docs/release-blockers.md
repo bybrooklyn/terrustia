@@ -289,10 +289,14 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
 
 ## Structural
 
-- **Three proto tables have no generator.** `crates/terrustia-proto/src/npc_data.rs:6-11` says so in its
-  own header: "There is no generator for this file". `tile_object.rs` and `placed_items.rs` are the
-  same. Rule 7 in `AGENTS.md` says generated tables are codegen output that is never hand-edited; these
-  three are hand-maintained, so the rule does not currently hold for them.
+- **Three proto tables have no generator**, and the largest of them is now held to source another
+  way. `npc_data.rs` gained `just check-npc-data` on 2026-09-05: it re-reads `NPC.SetDefaults`' own
+  691-arm chain and compares every entry on all 16 fields, from `just check-data` beside the drop
+  and recipe checkers. It found the table **already correct**, with seven deliberate differences on
+  its own record (the four Lunar Towers' `boss`, the Skeleton Merchant's `town_npc`, and the Torch
+  God's size, which `SetDefaults` genuinely never sets). Rule 7's protection is that a table cannot
+  drift from source unseen, and that is now true of `npc_data.rs` without a risky 13,000-line
+  replacement. `tile_object.rs` and `placed_items.rs` still have neither a generator nor a checker.
 - **Lane B (error handling and data safety) is the only lane in `TODO.md` with no "(done)" marker**, and
   485 `.unwrap()` calls remain in production files (`net/listener.rs`, `net/codec.rs`, `world/wld.rs`,
   `world/wld_save.rs`, `admin/audit.rs` and others). The lane's claim is scoped to paths the outside
