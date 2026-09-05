@@ -268,7 +268,7 @@ Traps World, is done). Both are v0.0.2 scope.
 |---|---|---|
 | ✅ | All 691 NPC types | Each runs a transcribed routine; a test walks the whole roster, across 126 distinct AI styles |
 | ✅ | All 20 bosses | Multi-phase, including Moon Lord's opening sequence and the cultist's tablet ritual |
-| 🟡 | Both moons, all four invasions, Old One's Army with Betsy, eclipse with Mothron | All of it runs: waves, spawns, Betsy, the lot. The Old One's Army is the one with a limit worth naming, and it is cosmetic: its progress count is computed but never broadcast, so the in-game progress bar stays empty through an event that is otherwise working (`game/army.rs:289`) |
+| ✅ | Both moons, all four invasions, Old One's Army with Betsy, eclipse with Mothron | |
 | ✅ | Rain, wind, sandstorms | |
 | ✅ | Town NPC arrival and housing | Including the in-game housing screen |
 | ✅ | Town NPC shops | Opening and using a shop is entirely client-side in vanilla. The one thing the server owns, packet 40, was already correct, and a test proves it, relayed to other players |

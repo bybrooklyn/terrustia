@@ -104,10 +104,9 @@ worst first by what a player or operator would actually notice.
    rewrite from a fresh read now, so a tile that is both an Active Stone Block and actuated keeps
    both changes; `an_actuated_active_stone_block_keeps_both_changes` pins it, and neutralising the
    fix fails it on the vanished toggle alone.
-3. **`follows_boss` is broader than vanilla's segment gate**
-   (`crates/terrustia/src/game/server/systems.rs:95-102`). Vanilla gates on `realLife == -1`, set only
-   for worm segments and the Wall of Flesh mouth. Anything raised through `follows_boss` reads as a
-   segment here, so a boss escort that is not a body part would wrongly skip Soul Drain.
+3. ~~`follows_boss` is broader than vanilla's segment gate.~~ **Fixed 2026-09-05.** The derivation
+   has a name now (`shares_a_life_pool`) and answers vanilla's actual question, so Skeletron's hands
+   and Golem's fists are drained like the separate NPCs they are.
 4. **Self-update cannot replace the running binary off Unix**
    (`crates/terrustia/src/update.rs:58-60`). The operator has to finish the update by hand on Windows.
    Separately, and now fixed: Windows ARM64 could not self-update *at all*, because `target_triple`
@@ -127,8 +126,8 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   (`crates/terrustia/src/game/server/mod.rs:1258-1265`, `systems.rs:5150-5154`).
 - **Moon Lord's** hand brand-then-blob mechanic and its true countdown timer are unmodeled
   (`crates/terrustia/src/game/ai/boss/moon_lord.rs:299,505`).
-- **Old One's Army has no client-visible progress bar**: the count is computed and never broadcast
-  (`crates/terrustia/src/game/army.rs:289-292`). The waves, the spawns and Betsy all work.
+- ~~Old One's Army has no client-visible progress bar.~~ **Fixed 2026-09-05**: it rides packet 78
+  with its own icon 3 and its wave number, as `DD2Event.cs:185`/`:191` do.
 - **Frost and Pumpkin Moon wave-gated drops** are flattened to guaranteed picks rather than gated on
   the live wave number (`crates/terrustia-proto/src/conditional_drops.rs:706-758,1148`).
 - **Town-NPC attack windups** are skipped and the Pirate's escalating burst is unmodeled
