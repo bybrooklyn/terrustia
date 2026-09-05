@@ -284,6 +284,14 @@ const PRESENT_DRIFT: f32 = 30.0;
 const PRESENT_GRAVITY: f32 = 0.1;
 const PRESENT_TERMINAL: f32 = 3.0;
 const PRESENT_DRAG: f32 = 0.99;
+/// The Empress's lance (`AI_179_FairyQueenLance`, `Projectile.cs:45853-45876`): it hangs where it
+/// was drawn for a second, then leaves at forty.
+const LANCE_HOLD: f32 = 60.0;
+const LANCE_SPEED: f32 = 40.0;
+/// Her lasting rainbow (`AI_173_HallowBossRainbowTrail`, `:46264-46275`): a curve that eases in
+/// over thirty ticks to half a degree a tick and then holds it.
+const RAINBOW_TURN: f32 = std::f32::consts::PI / 360.0;
+const RAINBOW_EASE: f32 = 30.0;
 /// A thrown ale (`Projectile.cs:30655-30677`): fifteen ticks flat, then an ordinary fall.
 const ALE_DELAY: f32 = 15.0;
 const ALE_GRAVITY: f32 = 0.2;
@@ -434,6 +442,42 @@ pub fn step(
                 projectile.velocity.1 = projectile.velocity.1.min(TERMINAL);
             }
             BOMB_STYLE => bomb(projectile),
+            179 => {
+                // The Empress's lance: it hangs exactly where it was drawn for a full second and
+                // *then* leaves, at forty pixels a tick (`Projectile.cs:45853-45866`). The hold is
+                // the attack - a ring of lances appears around you, holds long enough to be read,
+                // and then all of them fire at once. Vanilla launches it at `Vector2.Zero` and
+                // keeps the angle in `ai[0]`; `Shot` carries no ai values, so the angle is taken
+                // from the direction it was launched in and the hold is done by parking the
+                // velocity, which comes to the same thing and needs no field on every shot.
+                if projectile.local_ai[0] == 0.0 {
+                    projectile.local_ai[0] = 1.0;
+                    let (vx, vy) = projectile.velocity;
+                    projectile.local_ai[1] = vy.atan2(vx);
+                    projectile.velocity = (0.0, 0.0);
+                }
+                projectile.local_ai[2] += 1.0;
+                if projectile.local_ai[2] >= LANCE_HOLD && projectile.velocity == (0.0, 0.0) {
+                    let (sin, cos) = projectile.local_ai[1].sin_cos();
+                    projectile.velocity = (cos * LANCE_SPEED, sin * LANCE_SPEED);
+                    projectile.dirty = true;
+                }
+                projectile.rotation = projectile.local_ai[1];
+            }
+            173 => {
+                // Her lasting rainbow: a constant curve that eases in over thirty ticks and then
+                // holds half a degree a tick for the rest of its life (`:46264-46275`). It is what
+                // makes the trail an arc rather than a line, and it flew dead straight here.
+                let turn = projectile.ai[0];
+                let (sin, cos) = turn.sin_cos();
+                let v = projectile.velocity;
+                projectile.velocity = (v.0 * cos - v.1 * sin, v.0 * sin + v.1 * cos);
+                if projectile.ai[0] < RAINBOW_TURN {
+                    projectile.ai[0] += RAINBOW_TURN / RAINBOW_EASE;
+                }
+                projectile.rotation = projectile.velocity.1.atan2(projectile.velocity.0)
+                    + std::f32::consts::FRAC_PI_2;
+            }
             58 => {
                 // A present dropped by the Frost Moon's minibosses (`Projectile.cs:29337-29366`).
                 // Two phases, and the first is what makes it read as *dropped* rather than thrown:
@@ -1467,6 +1511,73 @@ mod tests {
         assert!(
             grenade_travel > mine_travel * 2.0,
             "but the grenade should carry far further: {grenade_travel} against {mine_travel}"
+        );
+    }
+
+    /// The Empress's lance hangs where it was drawn for a second and then leaves at forty.
+    ///
+    /// `Projectile.cs:45853-45866`. The hold *is* the attack: a ring of lances appears around you,
+    /// holds long enough to be read, and then every one of them fires at once. Ours crawled off at
+    /// the one pixel a tick it was launched with and never accelerated, so the ring had no
+    /// telegraph and no strike - it just drifted apart.
+    #[test]
+    fn an_empress_lance_hangs_and_then_fires() {
+        let tiles = Air::default();
+        let mut store = ProjectileStore::new();
+        // Launched east at unit speed, which is how the angle reaches the arm.
+        let index = store
+            .launch(919, (1000.0, 1000.0), (1.0, 0.0), 100, 0)
+            .expect("the lance is a known type");
+        let mut lance = *store.get(index).unwrap();
+        let start = lance.position;
+
+        for _ in 0..59 {
+            assert_eq!(step(&mut lance, &tiles, &mut Vec::new()), Outcome::Flying);
+        }
+        assert_eq!(
+            lance.position, start,
+            "it must hang exactly where it was drawn, not drift"
+        );
+
+        step(&mut lance, &tiles, &mut Vec::new());
+        assert!(
+            (lance.velocity.0 - 40.0).abs() < 0.01 && lance.velocity.1.abs() < 0.01,
+            "and then leave east at forty: {:?}",
+            lance.velocity
+        );
+    }
+
+    /// Her lasting rainbow curves; it does not fly straight (`Projectile.cs:46264-46275`).
+    ///
+    /// The turn eases in over thirty ticks and then holds, so the trail is an arc. Both halves are
+    /// checked, because a version that turned at full rate from tick one would bend far too early.
+    #[test]
+    fn an_empress_rainbow_eases_into_its_curve() {
+        let tiles = Air::default();
+        let mut store = ProjectileStore::new();
+        let index = store
+            .launch(872, (1000.0, 1000.0), (8.0, 0.0), 100, 0)
+            .expect("the rainbow is a known type");
+        let mut rainbow = *store.get(index).unwrap();
+
+        step(&mut rainbow, &tiles, &mut Vec::new());
+        assert!(
+            rainbow.velocity.1.abs() < 0.001,
+            "the first tick barely turns at all: {:?}",
+            rainbow.velocity
+        );
+        for _ in 0..120 {
+            step(&mut rainbow, &tiles, &mut Vec::new());
+        }
+        assert!(
+            rainbow.velocity.1 > 1.0,
+            "and after two seconds it is well off its launch heading: {:?}",
+            rainbow.velocity
+        );
+        let speed = rainbow.velocity.0.hypot(rainbow.velocity.1);
+        assert!(
+            (speed - 8.0).abs() < 0.01,
+            "a rotation must not change its speed: {speed}"
         );
     }
 

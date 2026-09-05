@@ -9,21 +9,30 @@
 //! one. So the whole fight is a metronome, and learning her is learning the order.
 //!
 //! Fighting her in daylight enrages her, and an enraged Empress does nine thousand damage with
-//! every attack but one: the sun dance is never scaled up (vanilla leaves it a flat forty, even
+//! every attack but one: the death aurora is never scaled up (vanilla leaves it a flat forty, even
 //! enraged). That is not a difficulty setting, it is the game refusing the fight, and the flag
 //! that records it survives her leaving and coming back.
+//!
+//! **Every shot here passes `time_left: 0`, which means "use the projectile's own".** That is not a
+//! detail: three of her five projectiles carry their whole shape in that number. A rainbow streak
+//! lives 200 ticks and its arm reads `timeLeft` to decide when to stop drifting (over 140) and
+//! start homing (over 30); a lasting rainbow's fade is keyed to 660; a sun dance ends at 180. Every
+//! one of them used to be launched with a flat 900, which is longer than all three and left the
+//! rainbow streak permanently in its drift phase - so the phases could not have worked even once
+//! the arms existed. The one number was wrong in seven places for the same reason, which is why it
+//! is stated here rather than seven times below.
 
 use rand::{Rng, rngs::SmallRng};
 use terrustia_proto::npc_params::{
     EMPRESS_ARRIVAL, EMPRESS_DAMAGE, EMPRESS_DAMAGE_PHASE_2, EMPRESS_DASH_OUT, EMPRESS_DASH_SPEED,
-    EMPRESS_FLY_ACCEL, EMPRESS_FLY_SPEED, EMPRESS_GIVE_UP, EMPRESS_IDLE, EMPRESS_IDLE_PHASE_2,
-    EMPRESS_RAINBOW_COUNT, EMPRESS_RAINBOW_SPEED, EMPRESS_SCRIPT, EMPRESS_SCRIPT_PHASE_2,
-    EMPRESS_SCRIPT_PHASE_2_EXPERT, EMPRESS_SETTLED, EMPRESS_STATION_HIGH, EMPRESS_STATION_LEFT,
-    EMPRESS_STATION_RIGHT, EMPRESS_STATION_RING, EMPRESS_SUN_DANCE_DAMAGE, EMPRESS_WALL_LANCES,
-    EMPRESS_WALL_SPACING,
+    EMPRESS_DEATH_AURORA_DAMAGE, EMPRESS_FLY_ACCEL, EMPRESS_FLY_SPEED, EMPRESS_GIVE_UP,
+    EMPRESS_IDLE, EMPRESS_IDLE_PHASE_2, EMPRESS_RAINBOW_COUNT, EMPRESS_RAINBOW_SPEED,
+    EMPRESS_SCRIPT, EMPRESS_SCRIPT_PHASE_2, EMPRESS_SCRIPT_PHASE_2_EXPERT, EMPRESS_SETTLED,
+    EMPRESS_STATION_HIGH, EMPRESS_STATION_LEFT, EMPRESS_STATION_RIGHT, EMPRESS_STATION_RING,
+    EMPRESS_WALL_LANCES, EMPRESS_WALL_SPACING,
 };
 use terrustia_proto::projectile::ids::{
-    EMPRESS_BLAST, EMPRESS_ETHEREAL_LANCE, EMPRESS_LANCE, EMPRESS_RAINBOW, EMPRESS_SUN_DANCE,
+    EMPRESS_BLAST, EMPRESS_DEATH_AURORA, EMPRESS_LANCE, EMPRESS_RAINBOW, EMPRESS_SUN_DANCE,
 };
 
 use super::super::hardmode::drifters::simple_fly;
@@ -39,13 +48,15 @@ mod attack {
     pub const IDLE: f32 = 1.0;
     /// A stream of blasts from her left hand.
     pub const BLASTS: f32 = 2.0;
-    /// The sun dance, planted overhead.
-    pub const SUN_DANCE: f32 = 3.0;
+    /// The death aurora, planted over your head (`ProjectileID.HallowBossDeathAurora`, 874). This
+    /// state used to be called `SUN_DANCE`, after the name 874 was wrongly given; the sun dance is
+    /// [`LANCE_RING`]'s ring of 923s.
+    pub const DEATH_AURORA: f32 = 3.0;
     /// Prismatic bolts, laid across your path.
     pub const BOLTS: f32 = 4.0;
     /// The everlasting rainbow: a ring of thirteen.
     pub const RAINBOW: f32 = 5.0;
-    /// Ethereal lances, in a turning ring.
+    /// Sun dances (`ProjectileID.FairyQueenSunDance`, 923), in a turning ring.
     pub const LANCE_RING: f32 = 6.0;
     /// Walls of lances, laid across the arena.
     pub const LANCE_WALLS: f32 = 7.0;
@@ -87,9 +98,9 @@ pub fn empress(
     }
     let phase_2 = matches!(npc.ai[3] as i32, 1 | 3);
     let expert = expert || enraged;
-    // Slots into `EMPRESS_DAMAGE`/`EMPRESS_DAMAGE_PHASE_2`: blast, rainbow, bolt, ethereal-lance
-    // ring, lance wall. The sun dance is not here at all: unlike these five it is never scaled by
-    // expert, phase or the enrage override (`EMPRESS_SUN_DANCE_DAMAGE`'s own doc comment has the
+    // Slots into `EMPRESS_DAMAGE`/`EMPRESS_DAMAGE_PHASE_2`: blast, rainbow, bolt, sun-dance ring,
+    // lance wall. The *death aurora* is not here at all: unlike these five it is never scaled by
+    // expert, phase or the enrage override (`EMPRESS_DEATH_AURORA_DAMAGE`'s own doc comment has the
     // citations), so folding it into this closure would make it look like it shared their scaling
     // when vanilla never lets it.
     let damage = |slot: usize| {
@@ -132,7 +143,7 @@ pub fn empress(
             if npc.ai[1] == 0.0 {
                 npc.velocity = (0.0, 5.0);
                 out.shots
-                    .push(planted(npc, EMPRESS_SUN_DANCE, 0, (0.0, -80.0)));
+                    .push(planted(npc, EMPRESS_DEATH_AURORA, 0, (0.0, -80.0)));
             }
             npc.velocity.0 *= 0.95;
             npc.velocity.1 *= 0.95;
@@ -178,7 +189,7 @@ pub fn empress(
                 back_to_idle(npc);
             }
         }
-        attack::SUN_DANCE => {
+        attack::DEATH_AURORA => {
             npc.ai[1] += 1.0;
             station(
                 npc,
@@ -190,11 +201,11 @@ pub fn empress(
                 && let Some(t) = target
             {
                 out.shots.push(Shot {
-                    projectile: EMPRESS_SUN_DANCE,
-                    damage: EMPRESS_SUN_DANCE_DAMAGE,
+                    projectile: EMPRESS_DEATH_AURORA,
+                    damage: EMPRESS_DEATH_AURORA_DAMAGE,
                     position: (t.center.0, t.center.1 - 100.0),
                     velocity: (0.0, 0.0),
-                    time_left: 900,
+                    time_left: 0,
                 });
             }
             if npc.ai[1] >= 120.0 {
@@ -240,7 +251,7 @@ pub fn empress(
                             out_of.0 * EMPRESS_RAINBOW_SPEED,
                             out_of.1 * EMPRESS_RAINBOW_SPEED,
                         ),
-                        time_left: 900,
+                        time_left: 0,
                     });
                 }
             }
@@ -268,11 +279,11 @@ pub fn empress(
                     let at = (along + step * 0.5 + round as f32 * step * 0.5) % 1.0;
                     let angle = std::f32::consts::TAU * (at + side);
                     out.shots.push(Shot {
-                        projectile: EMPRESS_ETHEREAL_LANCE,
+                        projectile: EMPRESS_SUN_DANCE,
                         damage: damage(3),
                         position: (cx, cy - 100.0),
                         velocity: (angle.cos(), angle.sin()),
-                        time_left: 900,
+                        time_left: 0,
                     });
                     along += step;
                 }
@@ -550,7 +561,7 @@ fn blasts(
         damage,
         position: hand,
         velocity,
-        time_left: 900,
+        time_left: 0,
     });
 }
 
@@ -621,7 +632,7 @@ fn bolts(
         damage,
         position: origin,
         velocity: unit(along),
-        time_left: 900,
+        time_left: 0,
     });
 }
 
@@ -718,7 +729,7 @@ fn lance_wall(
             damage,
             position: origin,
             velocity: aim,
-            time_left: 900,
+            time_left: 0,
         });
         along += step;
     }
@@ -750,7 +761,7 @@ fn planted(npc: &Npc, projectile: u16, damage: i32, at: (f32, f32)) -> Shot {
         damage,
         position: (cx + at.0, cy + at.1),
         velocity: (0.0, 0.0),
-        time_left: 900,
+        time_left: 0,
     }
 }
 
@@ -936,12 +947,12 @@ mod tests {
         }
         assert!(!damage.is_empty(), "she should have attacked");
         // The sun dance is the one attack vanilla's own enrage override never touches
-        // (`EMPRESS_SUN_DANCE_DAMAGE`'s doc comment has the citations): it stays a flat forty in
+        // (`EMPRESS_DEATH_AURORA_DAMAGE`'s doc comment has the citations): it stays a flat forty in
         // the fight proper, and the one planted while she arrives is a separate, always-zero shot.
         assert!(
             damage
                 .iter()
-                .all(|d| *d == 9999 || *d == EMPRESS_SUN_DANCE_DAMAGE || *d == 0),
+                .all(|d| *d == 9999 || *d == EMPRESS_DEATH_AURORA_DAMAGE || *d == 0),
             "every attack but the sun dance should kill outright: {damage:?}"
         );
         assert!(
@@ -950,7 +961,7 @@ mod tests {
         );
     }
 
-    /// B13: the ring of ethereal lances and the wall of ordinary ones are different attacks with
+    /// B13: the ring of sun dances and the wall of lances are different attacks with
     /// different damage in vanilla (`num10` for the ring, `num7` for the wall, both finalised at
     /// `NPC.cs:46495-46499` from the locals declared at `NPC.cs:46463-46467`), which a prior pass
     /// had collapsed into one shared slot.
@@ -965,7 +976,7 @@ mod tests {
         let ring_damage = tick(&mut ring, &w, &tiles, false, false, &mut rng)
             .shots
             .iter()
-            .find(|s| s.projectile == EMPRESS_ETHEREAL_LANCE)
+            .find(|s| s.projectile == EMPRESS_SUN_DANCE)
             .expect("the ring should have fired")
             .damage;
 
@@ -998,17 +1009,17 @@ mod tests {
         for (phase_2, expert) in [(false, false), (false, true), (true, false), (true, true)] {
             let mut n = her();
             n.ai[3] = if phase_2 { 1.0 } else { 0.0 };
-            n.ai[0] = attack::SUN_DANCE;
+            n.ai[0] = attack::DEATH_AURORA;
             // The shot fires when `ai[1]` (incremented before the check) lands exactly on a
             // multiple of 180; starting one short of that puts it on this call.
             n.ai[1] = 179.0;
             let shot = tick(&mut n, &w, &tiles, false, expert, &mut rng)
                 .shots
                 .into_iter()
-                .find(|s| s.projectile == EMPRESS_SUN_DANCE)
+                .find(|s| s.projectile == EMPRESS_DEATH_AURORA)
                 .expect("the sun dance should have fired this tick");
             assert_eq!(
-                shot.damage, EMPRESS_SUN_DANCE_DAMAGE,
+                shot.damage, EMPRESS_DEATH_AURORA_DAMAGE,
                 "phase_2={phase_2} expert={expert}, got {}",
                 shot.damage
             );

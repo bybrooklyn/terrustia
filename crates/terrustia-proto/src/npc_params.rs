@@ -5842,15 +5842,15 @@ pub const EMPRESS_SCRIPT_PHASE_2_EXPERT: [u8; 10] = [7, 2, 8, 11, 5, 2, 6, 4, 8,
 /// (`NPC.cs:46833`) passes `num5` straight through. The very first sun dance, planted while she
 /// arrives (`NPC.cs:46528`), is a separate, always-literal-zero shot, ported as `planted(..., 0,
 /// ...)` at its call site rather than through this constant.
-pub const EMPRESS_SUN_DANCE_DAMAGE: i32 = 40;
-/// Damage per attack, classic then expert, phase 1: blast, rainbow, bolt, ethereal-lance ring,
+pub const EMPRESS_DEATH_AURORA_DAMAGE: i32 = 40;
+/// Damage per attack, classic then expert, phase 1: blast, rainbow, bolt, sun-dance ring,
 /// lance wall. Ported from `AI_120_HallowBoss`'s five `num6`..`num10` locals (`NPC.cs:46463-
 /// 46467`) and the `GetAttackDamage_ForProjectiles(classic, expert)` calls that finalise them
 /// (`NPC.cs:46495-46499`), matched to their attacks by the projectile id and damage local each
 /// case block's own `Projectile.NewProjectile` call passes: blast is `num8`/873 (case 2,
 /// `NPC.cs:46765-46820`, reused by circling blasts, case 12, `NPC.cs:47304-47353`); rainbow is
 /// `num9`/872 (case 5, `NPC.cs:46953-46994`); bolt is `num6`/919 (case 4, `NPC.cs:46843-46952`,
-/// reused by chasing bolts, case 11, `NPC.cs:47213-47303`); the ethereal-lance ring is
+/// reused by chasing bolts, case 11, `NPC.cs:47213-47303`); the sun-dance ring is
 /// `num10`/923 (case 6, `NPC.cs:46995-47034`); the lance wall is `num7`/919 (case 7, `NPC.cs:47035-
 /// 47135`), a genuinely different local from the ring's `num10` despite the similar name, which a
 /// prior pass had collapsed both into a single shared slot.

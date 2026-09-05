@@ -391,12 +391,12 @@ crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DAMAGE	NPC.cs	47304-47353
 crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DAMAGE_PHASE_2	NPC.cs	46462-46466	67f0f817d121	cffa1e067268
 crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DAMAGE_PHASE_2	NPC.cs	46477-46481	f98e27d4128b	cffa1e067268
 crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DAMAGE_PHASE_2	NPC.cs	46482-46494	004f6fc87284	cffa1e067268
-crates/terrustia-proto/src/npc_params.rs	const EMPRESS_SUN_DANCE_DAMAGE	NPC.cs	46462	be6ee0149d56	2eaa9fb24042
-crates/terrustia-proto/src/npc_params.rs	const EMPRESS_SUN_DANCE_DAMAGE	NPC.cs	46482-46494	004f6fc87284	2eaa9fb24042
-crates/terrustia-proto/src/npc_params.rs	const EMPRESS_SUN_DANCE_DAMAGE	NPC.cs	46495-46499	21b65e0cf2e1	2eaa9fb24042
-crates/terrustia-proto/src/npc_params.rs	const EMPRESS_SUN_DANCE_DAMAGE	NPC.cs	46500-46508	b1729a21dfd5	2eaa9fb24042
-crates/terrustia-proto/src/npc_params.rs	const EMPRESS_SUN_DANCE_DAMAGE	NPC.cs	46528	6bf8f2a90a78	2eaa9fb24042
-crates/terrustia-proto/src/npc_params.rs	const EMPRESS_SUN_DANCE_DAMAGE	NPC.cs	46833	64579b8ddd4f	2eaa9fb24042
+crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DEATH_AURORA_DAMAGE	NPC.cs	46462	be6ee0149d56	99acdb6ee4db
+crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DEATH_AURORA_DAMAGE	NPC.cs	46482-46494	004f6fc87284	99acdb6ee4db
+crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DEATH_AURORA_DAMAGE	NPC.cs	46495-46499	21b65e0cf2e1	99acdb6ee4db
+crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DEATH_AURORA_DAMAGE	NPC.cs	46500-46508	b1729a21dfd5	99acdb6ee4db
+crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DEATH_AURORA_DAMAGE	NPC.cs	46528	6bf8f2a90a78	99acdb6ee4db
+crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DEATH_AURORA_DAMAGE	NPC.cs	46833	64579b8ddd4f	99acdb6ee4db
 crates/terrustia-proto/src/npc_params.rs	const EYE_BACKOFF_BELOW	NPC.cs	20800-20852	52d613e0f3cb	bb756d87e4f3
 crates/terrustia-proto/src/npc_params.rs	const EYE_BACKOFF_LUNGE_BONUS	NPC.cs	20850	e77ac8a1fb87	0efda656e38d
 crates/terrustia-proto/src/npc_params.rs	const EYE_DASH_DRAG_FIRST	NPC.cs	20276-20280	61bc25e2ee5f	de34ccc15d4d
@@ -622,6 +622,11 @@ crates/terrustia-proto/src/placed_items.rs	fn placed_item	WorldGen.cs	46572	7954
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65569-65639	d3f3ee060b89	3dc8d66fdd69
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65640-65719	0f1bf334c965	3dc8d66fdd69
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65720-65779	395ea9816079	3dc8d66fdd69
+crates/terrustia-proto/src/projectile.rs	mod ids :: const EMPRESS_RAINBOW	NPC.cs	46528	6bf8f2a90a78	040e7ff7f2d0
+crates/terrustia-proto/src/projectile.rs	mod ids :: const EMPRESS_RAINBOW	NPC.cs	46833	64579b8ddd4f	040e7ff7f2d0
+crates/terrustia-proto/src/projectile.rs	mod ids :: const EMPRESS_RAINBOW	NPC.cs	47022	dae7634f7181	040e7ff7f2d0
+crates/terrustia-proto/src/projectile.rs	mod ids :: const EMPRESS_RAINBOW	ProjectileID.cs	2200	fdb063ca10f0	040e7ff7f2d0
+crates/terrustia-proto/src/projectile.rs	mod ids :: const EMPRESS_RAINBOW	ProjectileID.cs	2298	016b76dbb818	040e7ff7f2d0
 crates/terrustia-proto/src/projectile.rs	mod ids :: const FALLING_STAR	Projectile.cs	54028-54061	ca61f3a28f72	9ff5ec82767b
 crates/terrustia-proto/src/projectile.rs	mod ids :: const FALLING_STAR	Projectile.cs	79348	4718c5b030ba	9ff5ec82767b
 crates/terrustia-proto/src/projectile.rs	mod ids :: const GOLEM_FIREBALL	NPC.cs	31504-31564	ffc9997f4f8f	bb34a8b9ee60
@@ -732,10 +737,10 @@ crates/terrustia/src/game/ai/boss/destroyer.rs	mod tests :: fn a_destroyer_alrea
 crates/terrustia/src/game/ai/boss/destroyer.rs	mod tests :: fn an_ordinary_worm_trims_once	NPC.cs	52662-52679	bd1dc53c8f96	3333ecc4c69d
 crates/terrustia/src/game/ai/boss/destroyer.rs	mod tests :: fn daylight_drives_it_underground	NPC.cs	50489-50507	d946eeae2f5c	ce84dd83df73
 crates/terrustia/src/game/ai/boss/destroyer.rs	mod tests :: fn the_laser_carries_its_own_expert_figure	NPC.cs	50399	20d9f8d814c8	82f03ac29310
-crates/terrustia/src/game/ai/boss/empress.rs	mod tests :: fn the_lance_ring_and_the_lance_wall_do_not_share_a_damage_slot	NPC.cs	46463-46467	1b05333d4b67	f6fb343fa949
-crates/terrustia/src/game/ai/boss/empress.rs	mod tests :: fn the_lance_ring_and_the_lance_wall_do_not_share_a_damage_slot	NPC.cs	46495-46499	21b65e0cf2e1	f6fb343fa949
-crates/terrustia/src/game/ai/boss/empress.rs	mod tests :: fn the_sun_dance_stays_flat_across_phase_and_difficulty	NPC.cs	46462	be6ee0149d56	1f9e34148ea3
-crates/terrustia/src/game/ai/boss/empress.rs	mod tests :: fn the_sun_dance_stays_flat_across_phase_and_difficulty	NPC.cs	46482-46494	004f6fc87284	1f9e34148ea3
+crates/terrustia/src/game/ai/boss/empress.rs	mod tests :: fn the_lance_ring_and_the_lance_wall_do_not_share_a_damage_slot	NPC.cs	46463-46467	1b05333d4b67	733e5d39d6e5
+crates/terrustia/src/game/ai/boss/empress.rs	mod tests :: fn the_lance_ring_and_the_lance_wall_do_not_share_a_damage_slot	NPC.cs	46495-46499	21b65e0cf2e1	733e5d39d6e5
+crates/terrustia/src/game/ai/boss/empress.rs	mod tests :: fn the_sun_dance_stays_flat_across_phase_and_difficulty	NPC.cs	46462	be6ee0149d56	a47fa5cef63a
+crates/terrustia/src/game/ai/boss/empress.rs	mod tests :: fn the_sun_dance_stays_flat_across_phase_and_difficulty	NPC.cs	46482-46494	004f6fc87284	a47fa5cef63a
 crates/terrustia/src/game/ai/boss/eye.rs	const HOVERING	NPC.cs	20636	c33b03c4e49d	91118c72243b
 crates/terrustia/src/game/ai/boss/eye.rs	const HOVERING	NPC.cs	20746	442b5395ec71	91118c72243b
 crates/terrustia/src/game/ai/boss/eye.rs	const HOVERING	NPC.cs	20800	4a3d1dec719a	91118c72243b
@@ -1515,6 +1520,7 @@ crates/terrustia/src/game/projectile.rs	const BOULDER_STYLE	Projectile.cs	12491-
 crates/terrustia/src/game/projectile.rs	const BOULDER_STYLE	Projectile.cs	19056-19099	227d301575d8	bbbd758c2dcc
 crates/terrustia/src/game/projectile.rs	const BOULDER_STYLE	Projectile.cs	26596-26746	316f71664a22	bbbd758c2dcc
 crates/terrustia/src/game/projectile.rs	const FIREBALL_DELAY	Projectile.cs	24618-24641	a3a3d50ea0ac	3db63ed180c5
+crates/terrustia/src/game/projectile.rs	const LANCE_HOLD	Projectile.cs	45853-45876	d815ecd65da8	a276782a3f1c
 crates/terrustia/src/game/projectile.rs	const MINE_DRAG	Projectile.cs	48354-48366	2e12d91f4f72	7ffcf1ca0811
 crates/terrustia/src/game/projectile.rs	const PRESENT_DRIFT	Projectile.cs	29337-29366	c0c2724d47dc	d510847d932f
 crates/terrustia/src/game/projectile.rs	const SAUCER_MISSILE_STYLE	Projectile.cs	31447-31513	5f7e5832de20	330fd0297785
@@ -1528,17 +1534,18 @@ crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	48354	96b6b5078339
 crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	48378-48399	eb10839c0918	4425ece6bbd4
 crates/terrustia/src/game/projectile.rs	fn boulder	Projectile.cs	26361	684228bf3682	33118dd7193d
 crates/terrustia/src/game/projectile.rs	fn boulder	Projectile.cs	26596-26746	316f71664a22	33118dd7193d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	16781	651cda76400c	a61921da376e
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	17308	6bcc82a4f969	a61921da376e
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19056-19099	227d301575d8	a61921da376e
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19872-19886	424f6fd70985	a61921da376e
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23907-23930	2e8c5b0e8c10	a61921da376e
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23945-23947	9f860f2ea5fa	a61921da376e
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24170-24176	45ba72dd4bea	a61921da376e
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24618-24641	a3a3d50ea0ac	a61921da376e
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	29337-29366	c0c2724d47dc	a61921da376e
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30655-30677	681d2a8a6429	a61921da376e
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	31473	20db8144f6b0	a61921da376e
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	16781	651cda76400c	0f37b65701f2
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	17308	6bcc82a4f969	0f37b65701f2
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19056-19099	227d301575d8	0f37b65701f2
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19872-19886	424f6fd70985	0f37b65701f2
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23907-23930	2e8c5b0e8c10	0f37b65701f2
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23945-23947	9f860f2ea5fa	0f37b65701f2
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24170-24176	45ba72dd4bea	0f37b65701f2
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24618-24641	a3a3d50ea0ac	0f37b65701f2
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	29337-29366	c0c2724d47dc	0f37b65701f2
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30655-30677	681d2a8a6429	0f37b65701f2
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	31473	20db8144f6b0	0f37b65701f2
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	45853-45866	931a3a7d8d10	0f37b65701f2
 crates/terrustia/src/game/projectile.rs	impl Powder :: fn step	Projectile.cs	24366-24372	80818f04371c	ec35674f69cd
 crates/terrustia/src/game/projectile.rs	impl Projectile :: fn can_damage	Projectile.cs	12491-12494	0387966662de	039cb5d97aea
 crates/terrustia/src/game/projectile.rs	impl ProjectileStore :: fn launch	Projectile.cs	14916-14919	2c62941898b4	39a262f21b0e
@@ -1554,6 +1561,8 @@ crates/terrustia/src/game/projectile.rs	mod tests :: fn a_rolling_boulder_stops_
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_snowball_falls_gentler_than_a_bone	Projectile.cs	23838-23843	9c5588bcf0d2	76fc97758013
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_thrown_ale_falls_after_fifteen_ticks	Projectile.cs	30655-30677	681d2a8a6429	c912b4f8a680
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_thrown_bone_flies_flat_and_then_arcs	Projectile.cs	23907-23930	2e8c5b0e8c10	f7938f4c5ea2
+crates/terrustia/src/game/projectile.rs	mod tests :: fn an_empress_lance_hangs_and_then_fires	Projectile.cs	45853-45866	931a3a7d8d10	07f49c59fe5a
+crates/terrustia/src/game/projectile.rs	mod tests :: fn an_empress_rainbow_eases_into_its_curve	Projectile.cs	46264-46275	c3c50c4a30a1	5ca3828601c5
 crates/terrustia/src/game/projectile.rs	mod tests :: fn only_the_ball_of_fire_falls_among_the_fireballs	Projectile.cs	24618-24621	655a6b541fb8	8554a3f3a2fa
 crates/terrustia/src/game/projectile.rs	struct Powder	Projectile.cs	14787-14808	17307615afc0	6d1d94f29de7
 crates/terrustia/src/game/projectile.rs	struct Powder	Projectile.cs	15040	f768b5f890db	6d1d94f29de7

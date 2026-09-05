@@ -314,12 +314,27 @@ rather than counting them mattered:
   nothing and lingered for 900 ticks. The mage's signature spell was a decision with no consequence,
   which is the "produced but never consumed" shape the C2 audit named as root cause R4.
 
-**22 types remain, across twenty styles**, read against `Projectile.cs` rather than assumed: 45, 65,
-84, 98, 102 (2), 109, 111, 112 (2), 128, 135, 136, 149, 157, 171, 173, 179, 180, 183, 186, 187. Eight
-steer inline and twelve delegate to an `AI_NNN_` method of their own. **None of them falls**: they
-are lasers, deathrays, homing bolts and hovering clouds, so a straight line is a poorer
-approximation than it was of a thrown bone rather than a free one. Ranked by what a player would
-notice, the next is the Empress of Light's four lances and streaks (171/173/179/180).
+**The Empress of Light's, closed 2026-09-05, and the root cause was not an arm.** All seven of her
+shots passed `time_left: 900`, and `launch` treats a zero as "use the projectile's own": the table
+has 200 for the rainbow streak, 660 for the lasting rainbow, 240 for the lance, 180 for the sun
+dance, and **style 171 reads `timeLeft` to decide when to stop drifting and start homing**. With 900
+on the clock it would have drifted for 760 ticks and never homed, so no arm could have worked until
+that number was right. Style 179 (the lance holds a full second where it was drawn and then leaves
+at forty - the hold *is* the attack) and style 173 (the lasting rainbow's easing curve) are
+transcribed; **171's homing and 180's anchoring to the boss are not**, because both need something
+outside the projectile's own tick and belong with the missile in `systems.rs`.
+
+Two of her five ids also carried invented names pointing at the wrong attack (874 is
+`HallowBossDeathAurora`, not the sun dance; 923 is `FairyQueenSunDance`, not an "ethereal lance"
+vanilla has no name for). Every *use* was against the right id, checked site by site, so this was a
+rename rather than a fix - but it is the shape that had Mothron laying Crimson Penguins.
+
+**20 types remain, across eighteen styles**, read against `Projectile.cs` rather than assumed: 45,
+65, 84, 98, 102 (2), 109, 111, 112 (2), 128, 135, 136, 149, 157, 171, 180, 183, 186, 187. Seven steer
+inline and eleven delegate to an `AI_NNN_` method of their own. **None of them falls**: they are
+lasers, deathrays, homing bolts and hovering clouds, so a straight line is a poorer approximation
+than it was of a thrown bone rather than a free one. The next two worth doing are the Empress's
+remaining pair (171, 180), now that their lifetimes are right.
 
 **The explosion is the other half of style 16 and is not modelled.** A bomb reaches the ground and
 expires; `Projectile.Kill`'s own switch widens the hitbox and breaks tiles, so a grenade lands and

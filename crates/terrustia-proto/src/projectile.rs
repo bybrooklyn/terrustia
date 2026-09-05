@@ -362,12 +362,20 @@ pub mod ids {
     pub const GOBLIN_BOMB: u16 = 681;
     pub const GOBLIN_SHARK_SHOT: u16 = 811;
 
-    /// The Empress of Light's five.
+    /// The Empress of Light's five, named as `ProjectileID.cs` names them.
+    ///
+    /// Two of these used to carry invented names that pointed at the wrong attack: 874 was
+    /// `EMPRESS_SUN_DANCE` when it is the death aurora she plants on arrival and over her target
+    /// (`ProjectileID.cs:2200`), and 923 was `EMPRESS_ETHEREAL_LANCE` when it is the sun dance
+    /// itself (`:2298`). Every *use* of both was against the right id, checked site by site against
+    /// `NPC.cs:46528`, `:46833` and `:47022`, so nothing behaved wrongly - but this is the shape
+    /// that had Mothron laying Crimson Penguins when two ids sat one apart under the wrong names,
+    /// and a name that lies about which attack it is only has to be believed once.
     pub const EMPRESS_RAINBOW: u16 = 872;
     pub const EMPRESS_BLAST: u16 = 873;
-    pub const EMPRESS_SUN_DANCE: u16 = 874;
+    pub const EMPRESS_DEATH_AURORA: u16 = 874;
     pub const EMPRESS_LANCE: u16 = 919;
-    pub const EMPRESS_ETHEREAL_LANCE: u16 = 923;
+    pub const EMPRESS_SUN_DANCE: u16 = 923;
 }
 
 #[cfg(test)]
