@@ -33,6 +33,12 @@ fn is_container(block: u16) -> bool {
     )
 }
 
+/// `TileID.Sets.BasicChest` (`TileID.cs:315`): a chest proper, so neither a dresser nor either of
+/// the two fake chests that `BasicChestFake` names.
+fn is_a_basic_chest(block: u16) -> bool {
+    matches!(block, CHEST_BLOCK | terrustia_proto::locks::CHEST_2)
+}
+
 impl GameServer {
     // ---------------------------------------------------------------- packets
 
@@ -3134,6 +3140,139 @@ impl GameServer {
         Ok(())
     }
 
+    /// A chest holding one biome key and nothing else becomes the mimic that key names.
+    ///
+    /// `NPC.BigMimicSummonCheck` (`NPC.cs:78318-78404`), reached from `Player.ChestChangeEvents`
+    /// (`Player.cs:28981-28999`) when a player *closes* a chest rather than when they open one.
+    /// The chest is destroyed, its tiles cleared, and a Corrupt (473), Crimson (474) or Hallowed
+    /// (475) Mimic takes its place.
+    ///
+    /// This is the only way to get one deliberately, and it was missing: the three mimics have AI
+    /// and loot pools here and do spawn ambiently, but a Key of Light or Night placed in a chest
+    /// did nothing at all, so the two key items (both craftable, both made of the biome souls that
+    /// `conditional_drops.rs` only recently started handing out) had no use. Found by
+    /// `just parity-coverage`, which reports which parts of the game nothing we wrote cites: this
+    /// sat inside the largest uncited region of `NPC.cs`, alongside ten thousand lines of
+    /// `FindFrame` that a server correctly never needs.
+    fn big_mimic_summon_check(&mut self, chest_id: i16) -> terrustia_proto::Result<()> {
+        /// `ItemID.KeyofNight` and `ItemID.KeyofLight`.
+        const KEY_OF_NIGHT: i32 = 3091;
+        const KEY_OF_LIGHT: i32 = 3092;
+
+        if !self.world.progress.hard_mode {
+            return Ok(());
+        }
+        let Some(chest) = self.world.chest(chest_id) else {
+            return Ok(());
+        };
+        let (x, y) = (chest.x, chest.y);
+        // The chest's own tile decides whether it counts at all: `TileID.Sets.BasicChest[type]` is
+        // `{21, 467}` (`TileID.cs:315`), and on tile 21 the two locked dungeon styles (5 and 6) are
+        // excluded, which is what keeps a biome chest from eating its own key.
+        let tile = self.world.tile(i32::from(x), i32::from(y));
+        let style = tile.frame_x / 36;
+        let basic = is_a_basic_chest(tile.block)
+            && (tile.block != CHEST_BLOCK || !(5..=6).contains(&style));
+        if !basic {
+            return Ok(());
+        }
+
+        // Vanilla counts by `type > 0` alone, with no look at the stack.
+        let (mut light, mut night, mut other) = (0, 0, 0);
+        for item in &chest.items {
+            match item.id {
+                id if id <= 0 => {}
+                KEY_OF_LIGHT => light += item.stack,
+                KEY_OF_NIGHT => night += item.stack,
+                _ => other += 1,
+            }
+        }
+        // Exactly one key and nothing else. Two keys, or a key beside anything, does nothing.
+        if other != 0 || light + night != 1 {
+            return Ok(());
+        }
+
+        // `Chest.DestroyChest` and the loop that clears the chest's own tiles
+        // (`NPC.cs:78371-78386`). Vanilla empties the chest first because `DestroyChest` refuses a
+        // chest with anything in it; dropping the record takes its items with it. The clearing test
+        // is `BasicChest[type]` again rather than "the same tile as the anchor", so a 2x2 straddling
+        // both container tiles loses both halves.
+        self.world.remove_chest(chest_id);
+        for dx in 0..2 {
+            for dy in 0..2 {
+                let (cx, cy) = (i32::from(x) + dx, i32::from(y) + dy);
+                let mut cell = self.world.tile(cx, cy);
+                if !cell.is_active() || !is_a_basic_chest(cell.block) {
+                    continue;
+                }
+                // `Tile.ClearTile`: the four flags it resets, in the shape `on_chest_update`'s
+                // break path already uses. The liquid nudge is ours: vanilla's liquid pass rescans
+                // on its own, ours is woken by an edit, and without it water hangs over the hole.
+                cell.flags.set(TileFlags::ACTIVE, false);
+                cell.block = 0;
+                cell.frame_x = -1;
+                cell.frame_y = -1;
+                cell.slope = 0;
+                cell.flags.set(TileFlags::HALF_BRICK, false);
+                self.world.set_tile(cx, cy, cell);
+                self.liquids.disturb(cx, cy);
+            }
+        }
+        // `NetMessage.SendData(34, ...)` with the destroy action, then the tile square. Action 1
+        // destroys an ordinary chest and 5 a Containers2 one (`NPC.cs:78386-78392`).
+        let action: u8 = if tile.block == terrustia_proto::locks::CHEST_2 {
+            5
+        } else {
+            1
+        };
+        let mut w = terrustia_proto::PacketWriter::new(id::CHEST_UPDATES);
+        w.u8(action).i16(x).i16(y).i16(0).i16(chest_id);
+        let frame = w.finish()?;
+        self.broadcast(frame, None);
+        // `NetMessage.SendTileSquare(-1, x, y, 3)` (`NPC.cs:78393`): the 3x3 the chest occupied
+        // plus its border, so a client that had the chest drawn drops it.
+        let mut tiles = Vec::with_capacity(9);
+        for dx in 0..3 {
+            for dy in 0..3 {
+                tiles.push(self.world.tile(i32::from(x) + dx, i32::from(y) + dy));
+            }
+        }
+        let square = terrustia_proto::square::TileSquare {
+            x,
+            y,
+            width: 3,
+            height: 3,
+            change_type: 0,
+            tiles,
+        };
+        self.broadcast_tile_square(&square, None);
+
+        // `num7 = 475; if (num3 == 1) num7 = crimson ? 474 : 473;` - the Key of Light gives the
+        // Hallowed Mimic, the Key of Night whichever evil the world has.
+        let npc_type: u16 = if night == 1 {
+            if self.world.crimson { 474 } else { 473 }
+        } else {
+            475
+        };
+        let at = (
+            f32::from(x) * crate::game::npc::TILE + 16.0,
+            f32::from(y) * crate::game::npc::TILE + 32.0,
+        );
+        if let Some(index) = self.npcs.spawn(npc_type, at) {
+            self.broadcast_npc(index);
+            // `NPC.BigMimicSpawnSmoke` (`NPC.cs:78295-78301`): on a server the twenty dust and six
+            // gore are not simulated at all, they are one packet asking each client to make its
+            // own. Action 4 of the odd-jobs packet, whose two payload bytes are the NPC index and
+            // the action (`NetMessage.cs:1013-1015`).
+            let mut w = terrustia_proto::PacketWriter::new(id::MISC_DATA_SYNC);
+            w.u8(index).u8(4);
+            let frame = w.finish()?;
+            self.broadcast(frame, None);
+            debug!(x, y, npc_type, "a biome key turned a chest into a mimic");
+        }
+        Ok(())
+    }
+
     /// Packet 69: a client asking what a chest is called.
     ///
     /// Sent for the map, which shows a chest's name without opening it. Answered to the asker
@@ -3308,6 +3447,11 @@ impl GameServer {
         }
         if let Some(player) = self.player_mut(slot) {
             player.open_chest = sync.chest;
+        }
+        // `Player.ChestChangeEvents` (`Player.cs:28981-28999`): closing a chest is what checks it
+        // for a biome key. `chest == -1 && lastChest >= 0` is exactly this pair of values.
+        if sync.chest < 0 && was_open >= 0 {
+            self.big_mimic_summon_check(was_open)?;
         }
         // `NetMessage.TrySendData(80, -1, whoAmI, null, whoAmI, num21)` (`MessageBuffer.cs:3168`):
         // the other clients need to be told when this player *stops* having a chest open, not only

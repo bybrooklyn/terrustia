@@ -1511,11 +1511,20 @@ crates/terrustia/src/game/rescues.rs	const RESCUES	Projectile.cs	14806-14824	15b
 crates/terrustia/src/game/rescues.rs	fn still_bound	NPC.cs	2095	dfd83a501593	05b2cc7fe5b8
 crates/terrustia/src/game/rescues.rs	mod tests :: fn the_golfer_can_be_freed	NPC.cs	1693-1697	b8dc16f691bc	4097d609535d
 crates/terrustia/src/game/rescues.rs	mod tests :: fn the_golfer_can_be_freed	NPC.cs	19883-19885	1b22ca9b2556	4097d609535d
+crates/terrustia/src/game/server/dispatch.rs	fn is_a_basic_chest	TileID.cs	315	ea48e001f30a	5a28fbe84331
 crates/terrustia/src/game/server/dispatch.rs	fn is_chest_tile_locked	Chest.cs	295-310	7aaa48d4d064	f41315a6f768
 crates/terrustia/src/game/server/dispatch.rs	fn is_container	Main.cs	10215-10219	9d23c71118ba	acb2cbc90eda
 crates/terrustia/src/game/server/dispatch.rs	fn team_colour	Main.cs	6795-6800	9a1de6c2ac9a	a135bf418e14
 crates/terrustia/src/game/server/dispatch.rs	fn team_colour	MessageBuffer.cs	1863-1864	7b710b12d192	a135bf418e14
 crates/terrustia/src/game/server/dispatch.rs	fn team_colour	MessageBuffer.cs	2337	5e8d4d2a9bb7	a135bf418e14
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn big_mimic_summon_check	NPC.cs	78295-78301	37cecadf674b	322f8fff296c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn big_mimic_summon_check	NPC.cs	78318-78404	ee4ea034013d	322f8fff296c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn big_mimic_summon_check	NPC.cs	78371-78386	339f81293a5e	322f8fff296c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn big_mimic_summon_check	NPC.cs	78386-78392	ea3882c383f1	322f8fff296c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn big_mimic_summon_check	NPC.cs	78393	d2cbb84e6a8f	322f8fff296c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn big_mimic_summon_check	NetMessage.cs	1013-1015	70b75014435f	322f8fff296c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn big_mimic_summon_check	Player.cs	28981-28999	236f0e1c8e5a	322f8fff296c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn big_mimic_summon_check	TileID.cs	315	ea48e001f30a	322f8fff296c
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn can_craft_from_chest	Chest.cs	297-300	7fd7994161b6	77c32aa35cc5
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn can_craft_from_chest	Chest.cs	492-505	a9bf28730b58	77c32aa35cc5
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn can_craft_from_chest	CraftingRequests.cs	294-306	9a71735786e0	77c32aa35cc5
@@ -1600,10 +1609,11 @@ crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_paint	Worl
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_paint	WorldGen.cs	44538	d145458459ac	a267f10ee36a
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_paint	WorldGen.cs	44634	07d89682a205	a267f10ee36a
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_place_object	Player.cs	40461	09d9063851af	6cf02436cfc6
-crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_chest	MessageBuffer.cs	3082-3095	d7ce5738c877	4936c78984e9
-crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_chest	MessageBuffer.cs	3162-3169	0ecc929b857f	4936c78984e9
-crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_chest	MessageBuffer.cs	3166	15ab7bf22799	4936c78984e9
-crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_chest	MessageBuffer.cs	3168	4ffaefcc81db	4936c78984e9
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_chest	MessageBuffer.cs	3082-3095	d7ce5738c877	c3296ff7a11c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_chest	MessageBuffer.cs	3162-3169	0ecc929b857f	c3296ff7a11c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_chest	MessageBuffer.cs	3166	15ab7bf22799	c3296ff7a11c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_chest	MessageBuffer.cs	3168	4ffaefcc81db	c3296ff7a11c
+crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_chest	Player.cs	28981-28999	236f0e1c8e5a	c3296ff7a11c
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_controls	MessageBuffer.cs	998-1002	af86154c89f2	82e5b90ef908
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_hurt	MessageBuffer.cs	3890-3906	356ad25080a0	f298d9ef046d
 crates/terrustia/src/game/server/dispatch.rs	impl GameServer :: fn on_player_hurt	NetMessage.cs	2633	f0a755e6fe52	f298d9ef046d

@@ -4048,6 +4048,128 @@ async fn a_full_chest_will_not_break() {
         .expect("a chest with things in it should survive");
 }
 
+/// Build a hardmode world with one chest at 402,330 holding whatever the caller names.
+///
+/// `ItemID.KeyofLight` is 3092 and `ItemID.KeyofNight` 3091.
+fn a_world_with_a_chest_holding(contents: Vec<ItemStack>) -> impl FnOnce(&mut World) {
+    move |world: &mut World| {
+        world.progress.hard_mode = true;
+        for dx in 0..2 {
+            for dy in 0..2 {
+                world.set_tile(
+                    402 + dx,
+                    330 + dy,
+                    Tile::framed(21, dx as i16 * 18, dy as i16 * 18),
+                );
+            }
+        }
+        let mut items = vec![ItemStack::default(); 40];
+        for (slot, item) in contents.into_iter().enumerate() {
+            items[slot] = item;
+        }
+        world.add_chest(Chest {
+            x: 402,
+            y: 330,
+            name: String::new(),
+            items,
+        });
+    }
+}
+
+/// Open the chest at 402,330 and then close it, which is what actually runs the check.
+async fn open_then_close_the_chest(client: &mut Client) {
+    client.move_to(402.0 * 16.0, 330.0 * 16.0).await.unwrap();
+    client.open_chest(402, 330).await.unwrap();
+    client
+        .wait_for(
+            "the chest opening",
+            |e| matches!(e, Event::Other(f) if f.id == id::SYNC_PLAYER_CHEST),
+        )
+        .await
+        .expect("the chest never opened");
+    let closed = terrustia_proto::objects::SyncPlayerChest::closed()
+        .encode()
+        .unwrap();
+    client.send(&closed).await.unwrap();
+}
+
+/// A biome key alone in a chest turns that chest into the mimic the key names.
+///
+/// `NPC.BigMimicSummonCheck` (`NPC.cs:78318-78404`), reached from `Player.ChestChangeEvents`
+/// (`Player.cs:28981-28999`). *Closing* the chest is the trigger, not opening it, so the summon
+/// rides the chest-sync packet a client sends when it shuts the window. Both keys are craftable
+/// here, and before this they did nothing at all.
+#[tokio::test]
+async fn a_key_of_light_alone_in_a_chest_becomes_a_hallowed_mimic() {
+    let addr = start_with(
+        Config::default(),
+        a_world_with_a_chest_holding(vec![ItemStack::new(3092, 1, 0)]),
+    )
+    .await;
+    let mut bob = join(addr, "bob").await;
+    open_then_close_the_chest(&mut bob).await;
+
+    bob.wait_for(
+        "the hallowed mimic",
+        |e| matches!(e, Event::NpcSynced(n) if n.npc_type() == 475 && n.life > 0),
+    )
+    .await
+    .expect("closing a chest on a Key of Light summoned nothing");
+
+    // The chest goes with it: `Chest.DestroyChest` plus the loop that clears its four tiles.
+    let fresh = join(addr, "fresh").await;
+    for dx in 0..2 {
+        for dy in 0..2 {
+            assert!(
+                fresh
+                    .world()
+                    .tile(402 + dx, 330 + dy)
+                    .is_none_or(|t| !t.is_active()),
+                "the mimic left the chest tile at {dx},{dy} standing"
+            );
+        }
+    }
+}
+
+/// A key beside anything else does nothing, and neither does two keys.
+///
+/// `if (num4 == 0 && num2 + num3 == 1)` (`NPC.cs:78353`) is the whole gate, and it is the reason
+/// a player cannot use their loot chest as a mimic farm by dropping a spare key in it.
+#[tokio::test]
+async fn a_biome_key_with_company_summons_nothing() {
+    let addr = start_with(
+        Config::default(),
+        // A Key of Night and one dirt block.
+        a_world_with_a_chest_holding(vec![ItemStack::new(3091, 1, 0), ItemStack::new(2, 1, 0)]),
+    )
+    .await;
+    let mut bob = join(addr, "bob").await;
+    open_then_close_the_chest(&mut bob).await;
+
+    let summoned = bob
+        .try_wait_for(
+            "a mimic that should not be there",
+            |e| matches!(e, Event::NpcSynced(n) if (473..=475).contains(&n.npc_type())),
+            Duration::from_millis(600),
+        )
+        .await;
+    assert!(
+        summoned.is_none(),
+        "a key sharing a chest still summoned a mimic"
+    );
+
+    // And the chest is still a chest.
+    let mut fresh = join(addr, "fresh").await;
+    fresh.open_chest(402, 330).await.unwrap();
+    fresh
+        .wait_for(
+            "the chest, still there",
+            |e| matches!(e, Event::Other(f) if f.id == id::SYNC_PLAYER_CHEST),
+        )
+        .await
+        .expect("the chest was destroyed without summoning anything");
+}
+
 /// A training dummy appears when somebody is near its tile, and goes when they leave.
 #[tokio::test]
 async fn a_training_dummy_comes_and_goes() {
