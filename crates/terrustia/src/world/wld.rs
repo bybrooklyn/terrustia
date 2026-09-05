@@ -1351,7 +1351,21 @@ fn read_journey_powers(r: &mut PacketReader<'_>, world: &mut World) {
                 .bool()
                 .map(|v| world.journey_stop_biome_spread = v)
                 .is_ok(),
-            _ => false,
+            // Stopping here is correct and is the whole reason this returns rather than skipping:
+            // an id whose payload width this build does not know cannot be stepped over, so
+            // everything after it would be read at the wrong offset. What was wrong is that it did
+            // it in silence. A world saved by a newer Terraria, or carrying a power this build
+            // predates, lost every setting after that point with nothing said, and the operator's
+            // first clue was a toggle that would not stay put.
+            unknown => {
+                warn!(
+                    power = unknown,
+                    "this world names a Journey power this build does not know; its settings, and \
+                     any stored after it, are left at their defaults because the rest of that \
+                     section cannot be read at a trustworthy offset"
+                );
+                false
+            }
         };
         if !ok {
             return;
