@@ -151,17 +151,52 @@ pub fn sync_parent_dir(path: &Path) {
 /// `std::fs::copy` truncates the destination first and then fills it, so a disk that runs out
 /// halfway leaves a healthy backup replaced by a fragment of a world - which is precisely the file
 /// somebody reaches for on the worst day they have.
+/// Flush a freshly copied temporary file to the disk, by whatever means the platform allows.
+///
+/// `std::fs::copy` goes through the page cache like any other write, so the same durability
+/// argument as `write_and_sync` applies and the copy has to be synced before it is renamed into
+/// place. Reopening is the cheap way to get a syncable handle without reading the bytes back
+/// through this process; *how* to reopen is where the platforms part company.
+///
+/// On unix a read-only handle is enough, and is what this deliberately uses: `std::fs::copy` gives
+/// the temporary file the source's permissions, so asking for write access would fail on a world an
+/// operator had marked read-only. `fsync` needs no write access, so it does not have to.
+///
+/// **Windows is the opposite, and got this wrong for as long as the code existed.** `sync_all` there
+/// is `FlushFileBuffers`, which the API documents as failing unless the handle carries
+/// `GENERIC_WRITE`. A read-only handle therefore returned `PermissionDenied` every single time, so
+/// `copy_atomic` never once succeeded on Windows: `rotate_backups` logs its failures and carries on
+/// by design, so every Windows operator was running with **no world backups at all**, silently,
+/// with the world itself saving perfectly. Found the first time this project's tests were run on
+/// Windows, which had never happened before 2026-09-05.
+///
+/// So the temporary file (which is ours, made a moment ago, and about to be renamed away) has its
+/// read-only attribute cleared if the copy brought one across, and is then opened for write. The
+/// operator's own world file is never touched by this: only the copy is.
+fn sync_copied_temp(temp: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        std::fs::File::open(temp)?.sync_all()
+    }
+    #[cfg(not(unix))]
+    {
+        let permissions = std::fs::metadata(temp)?.permissions();
+        if permissions.readonly() {
+            let mut writable = permissions;
+            #[allow(clippy::permissions_set_readonly_false)]
+            writable.set_readonly(false);
+            std::fs::set_permissions(temp, writable)?;
+        }
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(temp)?
+            .sync_all()
+    }
+}
+
 pub fn copy_atomic(doing: &str, from: &Path, to: &Path) -> std::io::Result<()> {
     let temp = temp_path(to);
-    let copied = std::fs::copy(from, &temp).and_then(|_| {
-        // `copy` goes through the page cache like any other write, so the same durability argument
-        // as `write_and_sync` applies. Reopening is the cheap way to get a syncable handle without
-        // reading the bytes back through this process - read-only, deliberately: `fsync` does not
-        // need write access, and `std::fs::copy` gives the temporary file the *source's*
-        // permissions, so opening it for write would fail on a world an operator had made
-        // read-only. Same shape as `sync_parent_dir`, which syncs a directory it only opened.
-        std::fs::File::open(&temp)?.sync_all()
-    });
+    let copied = std::fs::copy(from, &temp).and_then(|_| sync_copied_temp(&temp));
     if let Err(e) = copied {
         let _ = std::fs::remove_file(&temp);
         return Err(explain(doing, to, &e));
