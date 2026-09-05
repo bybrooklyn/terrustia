@@ -90,12 +90,13 @@ Three rules govern what comes back:
 - **Alchemy gives back less.** Each unit of an alchemy recipe's ingredients has a one-in-three
   chance of being lost, which is what stops potions being a free material duplicator.
 
-The table was checked against the source by a script written from the format rather than from the
-generator: 300 recipes sampled at random, all matching, and 2,536 of 2,536 pre-D1 craftable items
-present. `tools/check_recipes.py` still parses `SetupRecipes` the plain literal way, so it does not
-sample the loop-built families; those 548 unique new items were checked separately, by an
-independent re-derivation of every one of them, and by confirming that all 2,536 pre-D1 items kept
-the exact recipe they had before (bar the one counterweight fix above).
+The table is checked against the source by a script written from the format rather than from the
+generator, and as of 2026-09-05 it reads **all 3,090 recipes, all matching**. It used to read 2,545
+of them: the loop-built and helper-built families named their results through parameters, counters
+and locals rather than literals, so `tools/check_recipes.py` saw none of them and the 548 unique
+new items had to be checked by hand instead. It inlines the helpers, unrolls the counted loops and
+resolves the recipe groups now, so nothing in the table is unchecked and `just check-mutants` kills
+100% of the mutants it makes against it.
 
 ## A note on chains
 

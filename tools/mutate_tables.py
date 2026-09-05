@@ -105,17 +105,6 @@ PYTHON_CHECKERS = sorted({checker for _, checker in PYTHON_TARGETS})
 # an entry says "this checker provably cannot see this class of row, and here is the class". Every
 # surviving mutant is still printed either way.
 BUDGET: dict[tuple[str, str], tuple[float, str]] = {
-    ("recipes.rs", "check_recipes.py"): (
-        0.25,
-        "check_recipes.py reads recipes written as `currentRecipe.createItem.SetDefaults(N); ...; "
-        "AddRecipe();` in Recipe.cs. Roughly 545 of the 3105 committed rows are not written that "
-        "way: `AddStandardFurnitureSetRecipes` (22 call sites x 21 recipes) and "
-        "`AddCritterStatueRecipe` (22) are parameterised helpers whose arguments come from the "
-        "call site, and `CreateReverseWallRecipes`/`CreateReversePlatformRecipes` build theirs "
-        "from arrays. Mutating one of those rows is invisible, so about a sixth of random mutants "
-        "survive for that reason alone. Closing it means teaching the checker to substitute a "
-        "helper's arguments into its body - worth doing, not done here.",
-    ),
     ("conditional_drops.rs", "check_drops.py"): (
         0.10,
         "check_drops.py compares game-minus-ours and reports ours-minus-game separately without "

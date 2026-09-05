@@ -15,23 +15,23 @@ that reads it.
 
 | File | Lines | From | Generator |
 |---|---:|---|---|
-| `npc_data.rs` | 13,323 | `NPC.SetDefaults` | — (`just check-npc-data`) |
+| `npc_data.rs` | 13,422 | `NPC.SetDefaults` | none (`just check-npc-data`) |
 | `tile_object.rs` | 6,138 | `TileObjectData.Initialize` | `terrustia-codegen tile_object` (`just check-tile-object`) |
-| `npc_params.rs` | 4,721 | `NPCID.Sets`, `NPC.SetDefaults` | — |
-| `npc_drops.rs` | ~6,800 | `ItemDropDatabase` | `gen_drops.py` |
-| `projectile_data.rs` | ~10,000 | `Projectile.SetDefaults` | `gen_projectiles.py` |
-| `banners.rs` | ~520 | `BannerSystem` / `ItemID.Sets.KillsToBanner` | `gen_banners.py` |
-| `placed_items.rs` | 2,550 | `Item.SetDefaults` | — (`just check-placed-items`) |
-| `town_names.rs` | 517 | localisation + `NPC.getNewNPCNameInner` | `gen_town_names.py` |
-| `buffs.rs` | ~450 | `Main.debuff`, `BuffID.Sets`, `NPCID.Sets.DebuffImmunitySets` | `gen_buffs.py` |
-| `tile_drops.rs` | 395 | `WorldGen.KillTile_GetItemDrops` | — |
-| `conditional_drops.rs` | 490 | drop rules with conditions | — |
-| `statues.rs` | 313 | `Wiring.HitSwitch` statue cases | — |
-| `recipes.rs` | ~3,600 | `Recipe.SetupRecipes` | `gen_recipes.py` |
-| `shimmer.rs` | ~200 | `ItemID.Sets`, `NPCID.Sets` | `gen_shimmer.py` |
-| `hurt_tiles.rs` | ~120 | `TileID.Sets` + `Collision.CanTileHurt` | `gen_hurt_tiles.py` |
-| `angler.rs` | ~120 | `Main.AnglerQuestSwap` | `gen_angler.py` |
-| `travel_shop.rs` | ~90 | `Chest.SetupTravelShop_GetItem` | `gen_travel_shop.py` |
+| `npc_params.rs` | 4,721 | `NPCID.Sets`, `NPC.SetDefaults` | none |
+| `npc_drops.rs` | ~6,800 | `ItemDropDatabase` | `terrustia-codegen drops` |
+| `projectile_data.rs` | ~10,000 | `Projectile.SetDefaults` | `terrustia-codegen projectiles` |
+| `banners.rs` | ~520 | `BannerSystem` / `ItemID.Sets.KillsToBanner` | `terrustia-codegen banners` |
+| `placed_items.rs` | 3,322 | `Item.SetDefaults`, `GetItemDrop_*`, six inline arms | none (`just check-placed-items`) |
+| `town_names.rs` | 517 | localisation + `NPC.getNewNPCNameInner` | `terrustia-codegen town_names` |
+| `buffs.rs` | ~450 | `Main.debuff`, `BuffID.Sets`, `NPCID.Sets.DebuffImmunitySets` | `terrustia-codegen buffs` |
+| `tile_drops.rs` | 395 | `WorldGen.KillTile_GetItemDrops` | none |
+| `conditional_drops.rs` | 490 | drop rules with conditions | none |
+| `statues.rs` | 313 | `Wiring.HitSwitch` statue cases | none |
+| `recipes.rs` | 30,638 | `Recipe.SetupRecipes` | `terrustia-codegen recipes` (`just check-recipes`) |
+| `shimmer.rs` | ~200 | `ItemID.Sets`, `NPCID.Sets` | `terrustia-codegen shimmer` |
+| `hurt_tiles.rs` | ~120 | `TileID.Sets` + `Collision.CanTileHurt` | `terrustia-codegen hurt_tiles` |
+| `angler.rs` | ~120 | `Main.AnglerQuestSwap` | `terrustia-codegen angler` |
+| `travel_shop.rs` | ~90 | `Chest.SetupTravelShop_GetItem` | `terrustia-codegen travel_shop` |
 | `tile_death.rs` | 179 | `Main.tileLavaDeath`, `Main.tileWaterDeath` | `terrustia-codegen tile_death` |
 | `net_variants.rs` | ~660 | `NPC.SetDefaultsFromNetId` | `terrustia-codegen net_variants` |
 
@@ -46,7 +46,7 @@ cargo run -p terrustia-codegen --bin codegen -- <table> "$D" <out.rs>   # just o
 And the checkers, which report rather than emit:
 
 ```sh
-just check-recipes      # a sample of recipes, re-parsed independently
+just check-recipes      # every recipe, re-parsed independently
 just check-drops        # loot the game gives that we do not
 just check-npc-data     # every `NPC.SetDefaults` entry, all 16 fields
 just check-placed-items # every `createTile`/`placeStyle` pair the game defines
@@ -97,11 +97,20 @@ hand-written in `conditional_drops.rs` under `check_drops.py`'s eye. A generator
 condition would hand out the wrong loot forever while looking authoritative — worse than the gap it
 closed.
 
-**Check a big one against the source with a *second* script.** `recipes.rs` holds 2,551 recipes;
+**Check a big one against the source with a *second* script.** `recipes.rs` holds 3,090 recipes;
 a bug in the generator would be invisible in review and would quietly give back the wrong
 ingredients forever. So a separate checker, written from the format rather than from the
-generator, re-parses a random sample and compares — 300 recipes, all matching. A bug shared by
-both would have to be made twice.
+generator, re-parses every one of them and compares. A bug shared by both would have to be made
+twice.
+
+**A checker that reads part of its source is worth what it reads, and no more.** Every one of these
+started out reading less than it appeared to, and in each case the gap was found by mutation
+testing rather than by review: `check_recipes.py` read 2,545 of 3,090 recipes because the rest are
+built by helpers, counted loops and reassigned locals rather than written literally;
+`check_placed_items.py` read 1,027 of 3,129 placement pairs because 889 items place through a
+helper and ~120 more compute the field from `type`. Both read all of theirs now, and both kill 100%
+of their mutants, but neither would have without `just check-mutants` saying so. Write the checker,
+then make it fail on purpose.
 
 **Use `static`, not `const`, for the large ones.** A `const` array is copied at every use site.
 Clippy catches this; it is worth knowing why rather than just applying the fix.
