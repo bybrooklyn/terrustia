@@ -52,6 +52,25 @@ impl Cpu {
     /// `GetThreadTimes` is the equivalent, reporting kernel and user time as 100-nanosecond ticks
     /// in a pair of `FILETIME`s. Both are wanted: a tick that spends its time in a write syscall
     /// costs the server just as much as one that spends it in a loop.
+    ///
+    /// **Disclosed narrowing, and it matters for what the tick metrics mean here.** The unit is
+    /// 100 ns but the *resolution* is not: `GetThreadTimes` is updated on the scheduler's own
+    /// clock tick, about 15.6 ms by default. A game tick's whole budget is 16.67 ms, so on Windows
+    /// a per-tick CPU reading is effectively quantised to "zero" or "most of a tick", and the p99
+    /// tick figure the soak harness reports there cannot be compared with the same figure from a
+    /// unix host. This was found the first time the suite ran on Windows at all: four million
+    /// multiplies measured as exactly zero, twice, with the clock working correctly underneath.
+    ///
+    /// The fix is `QueryThreadCycleTime`, which counts actual cycles and so has the resolution
+    /// this wants, at the cost of needing a cycles-per-second figure to turn them back into a
+    /// `Duration` (and that figure moves with turbo and thermal throttling, so it has to be
+    /// calibrated rather than assumed). That is a real piece of work and is recorded in
+    /// `docs/release-blockers.md` rather than guessed at here. Until then, wall-clock timings on
+    /// Windows are unaffected and remain trustworthy; only the CPU half is coarse.
+    ///
+    /// Nothing silently degrades because of it: the phase accounting still adds up, it is just
+    /// granular, and the stall branch that separates "the server was slow" from "the machine was
+    /// busy" reads the wall clock, which is exact on every platform.
     #[cfg(windows)]
     #[allow(unsafe_code)]
     pub fn now() -> Self {
@@ -129,18 +148,35 @@ mod tests {
     }
 
     /// Work does show up, so the clock is not simply stuck at zero.
+    ///
+    /// The work is doubled until the clock registers it rather than fixed at four million
+    /// multiplies, because a fixed batch asserts the clock's *resolution* and not the thing this
+    /// test is named for. Windows reports thread CPU time in scheduler ticks of about 15.6 ms (see
+    /// [`Cpu::now`]'s own note there), so four million multiplies really did read exactly zero on
+    /// both Windows runners the first time this suite ran anywhere but Linux, while the clock
+    /// underneath was working correctly.
+    ///
+    /// A clock that is genuinely stuck still fails: the loop gives up after a wall-clock second,
+    /// which is two orders of magnitude past even Windows' quantum.
     #[test]
     fn work_costs_processor_time() {
-        let before = Cpu::now();
-        let mut total = 0u64;
-        for i in 0..4_000_000u64 {
-            total = total.wrapping_add(i * i);
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        let mut rounds = 4_000_000u64;
+        loop {
+            let before = Cpu::now();
+            let mut total = 0u64;
+            for i in 0..rounds {
+                total = total.wrapping_add(i * i);
+            }
+            std::hint::black_box(total);
+            if Cpu::now().since(before) > Duration::ZERO {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "a whole second of real work registered no processor time at all: the clock is stuck"
+            );
+            rounds *= 2;
         }
-        std::hint::black_box(total);
-        let used = Cpu::now().since(before);
-        assert!(
-            used > Duration::ZERO,
-            "four million multiplies cost nothing?"
-        );
     }
 }

@@ -766,18 +766,31 @@ mod tick_accounting {
     }
 
     /// And it does still charge for work, so the clock is not simply stuck at zero.
+    ///
+    /// Doubling rather than a fixed batch, for the reason `game::clock`'s own
+    /// `work_costs_processor_time` gives: Windows reports thread CPU time in ~15.6 ms scheduler
+    /// ticks, so a fixed four million multiplies asserts the clock's resolution rather than that
+    /// it charges at all, and read exactly zero there. A stuck clock still fails, at the deadline.
     #[test]
     fn a_phase_does_charge_for_work() {
-        let mut clock = PhaseClock::start();
-        let mut total = 0u64;
-        for i in 0..4_000_000u64 {
-            total = total.wrapping_add(i * i);
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        let mut rounds = 4_000_000u64;
+        loop {
+            let mut clock = PhaseClock::start();
+            let mut total = 0u64;
+            for i in 0..rounds {
+                total = total.wrapping_add(i * i);
+            }
+            std::hint::black_box(total);
+            if clock.lap() > Duration::ZERO {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "a whole second of real work was charged nothing: the phase clock is stuck"
+            );
+            rounds *= 2;
         }
-        std::hint::black_box(total);
-        assert!(
-            clock.lap() > Duration::ZERO,
-            "four million multiplies cost nothing?"
-        );
     }
 }
 

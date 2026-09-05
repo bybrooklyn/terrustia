@@ -1395,6 +1395,20 @@ mod tests {
         }
 
         assert!(path.exists(), "the world itself");
+
+        // `rotate_backups` logs its failures and carries on by design, so when a backup is missing
+        // the reason has already been thrown away: unit tests initialise no subscriber, so the
+        // `warn!` goes nowhere and the assertion below can only report the symptom. This runs the
+        // one step the chain actually depends on, against the real files this test just made, so a
+        // platform that refuses it says *why* in the failure rather than leaving the next reader to
+        // guess from an absence. It is how the Windows half of this test was diagnosed at all.
+        crate::safe_write::copy_atomic(
+            "backing the world up before saving",
+            &path,
+            &path.with_extension("wld.bakprobe"),
+        )
+        .expect("copy_atomic is what rotate_backups uses to make .bak1; if it fails, so does that");
+        let _ = std::fs::remove_file(path.with_extension("wld.bakprobe"));
         for n in 1..=BACKUPS_KEPT {
             assert!(
                 path.with_extension(format!("wld.bak{n}")).exists(),
