@@ -904,17 +904,18 @@ fn act(world: &mut impl WiredWorld, x: i32, y: i32, colour: Wire, out: &mut Fire
     // something above it unsupported (`CanKillTile`, and a `PreventsActuationUnder` check on the
     // tile directly above); this project has neither piece of machinery yet, so it only checks
     // that there is *something* above to stand on, which is the common case that check exists for.
-    // Known gap, not fixed here: `tile` is the caller's stale snapshot, not a fresh read. An
-    // actuated Active Stone Block (toggled by an earlier arm on the same flood) loses that toggle
-    // when it lands here, since `hidden`/`shown` below are built from the stale copy rather than
-    // `world.tile(x, y)`. The two new arms above this one deliberately re-read instead of copying
-    // this pattern.
+    // Both arms rewrite from a *fresh* read rather than from `tile`, the caller's snapshot. They
+    // used to copy the snapshot, which silently dropped anything another arm had already written to
+    // this tile earlier in the same flood: an actuator toggled a few arms above lands on the tile,
+    // then this arm overwrote it with a copy taken before that happened, and the toggle was gone.
+    // Only the block type is this arm's to change; everything else on the tile belongs to whoever
+    // wrote it last.
     if tile.is_active() && tile.block == ACTIVE_STONE {
         if !out.skipped.insert((x, y)) {
             return;
         }
         if world.tile(x, y - 1).is_active() {
-            let mut hidden = tile;
+            let mut hidden = world.tile(x, y);
             hidden.block = INACTIVE_STONE;
             world.set_tile(x, y, hidden);
             out.changed.push((x, y));
@@ -925,7 +926,7 @@ fn act(world: &mut impl WiredWorld, x: i32, y: i32, colour: Wire, out: &mut Fire
         if !out.skipped.insert((x, y)) {
             return;
         }
-        let mut shown = tile;
+        let mut shown = world.tile(x, y);
         shown.block = ACTIVE_STONE;
         world.set_tile(x, y, shown);
         out.changed.push((x, y));
@@ -2407,6 +2408,47 @@ mod tests {
         assert!(
             !board.tile(105, 100).flags.has(TileFlags::ACTUATED),
             "and back again"
+        );
+    }
+
+    /// An Active Stone Block that is *also* actuated keeps both changes, because both arms run on
+    /// the same tile in the same `act` call and the later one must not undo the earlier.
+    ///
+    /// The actuator arm is the first thing `act` does and the stone arm is a hundred lines below
+    /// it, so a single tile carrying both goes through them in that order within one call. The
+    /// stone arm used to rewrite from the caller's snapshot, taken before the actuator wrote
+    /// anything, so the toggle it had just made was silently dropped: the block changed type and
+    /// came back un-actuated.
+    ///
+    /// Neutralised by putting `let mut hidden = tile;` back in place of the fresh
+    /// `world.tile(x, y)` read: the block still turns into Inactive Stone and the `ACTUATED`
+    /// assertion below fails, which is exactly the shape of the bug (a change that lands, and a
+    /// change beside it that vanishes).
+    #[test]
+    fn an_actuated_active_stone_block_keeps_both_changes() {
+        let mut board = Board(HashMap::new());
+        board.set_tile(100, 100, wired(136, Wire::Red));
+        for x in 101..105 {
+            let mut wire = Tile::AIR;
+            wire.flags.set(TileFlags::WIRE_RED, true);
+            board.set_tile(x, 100, wire);
+        }
+        // Something to stand on above it, which is the stone arm's own guard.
+        board.set_tile(105, 99, Tile::block(1));
+        let mut stone = actuated(Wire::Red);
+        stone.block = ACTIVE_STONE;
+        board.set_tile(105, 100, stone);
+
+        hit_switch(&mut board, 100, 100);
+
+        let after = board.tile(105, 100);
+        assert_eq!(
+            after.block, INACTIVE_STONE,
+            "the stone arm should still have hidden the block"
+        );
+        assert!(
+            after.flags.has(TileFlags::ACTUATED),
+            "and the actuator toggle from earlier in the same call must survive it"
         );
     }
 
