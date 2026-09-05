@@ -4669,8 +4669,29 @@ impl GameServer {
     /// This is the progress bar. Without it a player has no way to know whether a goblin army is
     /// nearly over or has barely started, which turns a paced event into an indefinite one.
     fn broadcast_invasion_progress(&mut self) {
-        let (progress, target, kind, wave) = match &self.invasion {
-            Some(invasion) => (
+        // The Old One's Army rides the same bar, with its own icon (3) and its wave number in the
+        // fourth field: `DD2Event.cs:185` and `:191` report and send exactly that, and `:239-243`
+        // and `:388-392` repeat it on every kill and wave change. Its count was being computed
+        // faithfully by `Army::progress` and then dropped on the floor, so an event that works in
+        // every other respect showed players an empty progress bar for its whole duration. Checked
+        // ahead of `self.invasion` because the two cannot run at once and this one is the more
+        // specific case.
+        let army = self.army.tier.is_some().then(|| {
+            let boss_health = self
+                .npcs
+                .iter()
+                .find(|(_, n)| n.npc_type == terrustia_proto::npc_params::DD2_BETSY && n.is_alive())
+                .map(|(_, n)| n.life as f32 / n.life_max.max(1) as f32);
+            self.army.progress(boss_health)
+        });
+        let (progress, target, kind, wave) = match (army, &self.invasion) {
+            (Some(Some((done, needed))), _) => (
+                done,
+                needed,
+                3i8,
+                i8::try_from(self.army.wave).unwrap_or(i8::MAX),
+            ),
+            (_, Some(invasion)) => (
                 invasion.started_with - invasion.remaining,
                 invasion.started_with,
                 invasion.kind as i8,
@@ -4678,7 +4699,7 @@ impl GameServer {
             ),
             // Zero of zero is how the game says "nothing is happening", which is what takes the
             // bar off the screen.
-            None => (0, 0, 0, 0),
+            _ => (0, 0, 0, 0),
         };
         if (progress, target) == self.last_sent_invasion {
             return;
@@ -7236,6 +7257,54 @@ impl GameServer {
         let index = self.take_item_slot(item, position)?;
         self.broadcast_item(index);
         Some(index)
+    }
+}
+
+/// The Old One's Army rides the ordinary invasion progress bar, and used to leave it empty.
+#[cfg(test)]
+mod the_old_ones_army_reports_its_progress {
+    use super::*;
+    use crate::config::Config;
+    use tokio::sync::mpsc;
+
+    /// `DD2Event.cs:185` reports `(currentKillCount, requiredKillCount, 3, currentWave)` and `:191`
+    /// sends exactly that as packet 78. `Army::progress` computed the first two faithfully and
+    /// nothing ever sent them, so every Old One's Army ran to completion with a bar that never
+    /// moved: the event worked and looked broken.
+    ///
+    /// Neutralised by removing the `army` arm from `broadcast_invasion_progress`'s match: no packet
+    /// 78 carrying icon 3 is sent at all and the assertion below fails.
+    #[test]
+    fn a_running_army_puts_its_wave_on_the_invasion_bar() {
+        let world = crate::world::World::empty(500, 300, "army progress probe");
+        let mut server = GameServer::new(Config::default(), world);
+        let (out_tx, mut out_rx) = mpsc::channel(64);
+        let mut player = Player::new(0, "127.0.0.1:1".parse().expect("loopback"), out_tx);
+        player.state = ConnState::Playing;
+        server.players[0] = Some(player);
+
+        server.army.start(crate::game::army::Tier::One);
+        server.broadcast_invasion_progress();
+
+        let reported: Vec<bytes::Bytes> = std::iter::from_fn(|| out_rx.try_recv().ok())
+            .filter(|frame| {
+                frame.len() > 2 && frame[2] == terrustia_proto::id::INVASION_PROGRESS_REPORT
+            })
+            .collect();
+        assert!(
+            !reported.is_empty(),
+            "a running Old One's Army should put something on the invasion bar"
+        );
+        // Payload is i32 progress, i32 target, i8 icon, i8 wave after the 3-byte header.
+        let frame = &reported[0];
+        assert_eq!(
+            frame[11], 3,
+            "the icon is the Old One's Army's own 3, not an invasion's kind"
+        );
+        assert_eq!(
+            frame[12], 1,
+            "and the fourth field carries the wave number, which is what makes it read as 'wave 1'"
+        );
     }
 }
 
