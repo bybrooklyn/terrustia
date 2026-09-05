@@ -4271,12 +4271,20 @@ async fn an_enemy_can_kill_a_player_and_everyone_hears() {
 #[tokio::test]
 async fn an_enemy_kills_a_townsperson_it_is_standing_in() {
     let addr = start_with(Config::default(), |world| {
+        // Sealed on all four sides, not only hollowed. `clear_area`'s own doc comment makes the
+        // mirror-image point: a test that relies on the generator leaving a particular tile *open*
+        // breaks the next time the generator changes, and one that relies on it leaving a tile
+        // *solid* breaks the same way. This room's left wall and its floor-level right side both
+        // opened up when `structures::caves()` moved to vanilla's runners, and the zombies simply
+        // walked out through them, which is a fact about the fixture and not about contact damage.
+        for x in 378..432 {
+            for y in 298..334 {
+                world.set_tile(x, y, Tile::block(1));
+            }
+        }
         for x in 380..430 {
             for y in 300..320 {
                 world.set_tile(x, y, Tile::AIR);
-            }
-            for y in 320..332 {
-                world.set_tile(x, y, Tile::block(1));
             }
         }
     })

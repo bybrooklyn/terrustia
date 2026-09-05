@@ -21,15 +21,12 @@
 //! whoever next touches chest placement, not silently omitted. Everything else — the cobweb wall,
 //! the pot, the large and small piles, the stalactites — is transcribed.
 //!
-//! **Site-acceptance and `spread_spider`'s footprint both deviate from vanilla, for the same
-//! reason `gem_caves.rs` documents in full.** `structures::caves()` produces one large
-//! interconnected tunnel network, not vanilla's mix of small isolated pockets — so a candidate
-//! site here almost always saturates `cave_flood::count`'s 3500-tile search cap, and vanilla's own
-//! upper-bound rejection (reject anything that large) would reject nearly everywhere. Only the
-//! lower bound (500 tiles) and the mushroom-contamination check still gate acceptance.
-//! `spread_spider` itself is capped at the same 3500 tiles for the same reason `spread_gem` is:
-//! vanilla's wave has no cap of its own because vanilla's topology bounds it naturally, and that
-//! assumption doesn't hold here.
+//! **Site-acceptance is vanilla's whole rule again, and `spread_spider` needs no cap of its own**,
+//! for the reason `gem_caves.rs` documents in full: the saturation that would have made vanilla's
+//! 3500-tile upper bound reject everywhere was `terrain::fill`'s wall on the cavern layer's solid
+//! rock, not `structures::caves()`' topology, and both have been fixed. So the upper bound is back
+//! alongside the 500-tile lower bound and the mushroom-contamination check, and the wave runs to
+//! the pocket's own edge the way vanilla's does.
 
 use std::collections::HashSet;
 
@@ -79,7 +76,7 @@ pub fn scatter(world: &mut World, layout: &Layout, rng: &mut SmallRng) -> usize 
         let mut x = rng.random_range(200..layout.width - 200);
         let mut y = rng.random_range(layout.rock + 30..world.height() - 230);
         let mut found = cave_flood::count(world, x, y, 3500, true, false);
-        while (found.tiles < 500 || found.shroom > 1) && tries < max_tries {
+        while (found.tiles >= 3500 || found.tiles < 500 || found.shroom > 1) && tries < max_tries {
             tries += 1;
             x = rng.random_range(200..layout.width - 200);
             y = rng.random_range(layout.rock + 30..world.height() - 230);
@@ -93,22 +90,16 @@ pub fn scatter(world: &mut World, layout: &Layout, rng: &mut SmallRng) -> usize 
     placed
 }
 
-/// `Spread.Spider`, transcribed. See the module doc for why this caps its own footprint rather
-/// than spreading until it meets solid rock, the way vanilla's does.
+/// `Spread.Spider`, transcribed. Nothing bounds it but the pocket, as in vanilla: the wave stops
+/// at solid or walled rock and walls what it crosses, and the site check above already rejected any
+/// pocket of 3500 tiles or more.
 fn spread_spider(world: &mut World, x: i32, y: i32, rng: &mut SmallRng) {
-    const SPREAD_CAP: usize = 3500;
     let mut seen: HashSet<(i32, i32)> = HashSet::new();
     let mut wave = vec![(x, y)];
 
     while !wave.is_empty() {
-        if seen.len() >= SPREAD_CAP {
-            break;
-        }
         let this_wave = std::mem::take(&mut wave);
         for (cx, cy) in this_wave {
-            if seen.len() >= SPREAD_CAP {
-                break;
-            }
             if cx < 1 || cx >= world.width() - 1 || cy < 1 || cy >= world.height() - 1 {
                 continue;
             }
@@ -295,12 +286,13 @@ mod tests {
         assert_eq!(scatter(&mut world, &layout, &mut rng), 0);
     }
 
-    /// The actual defect this module shipped with: `structures::caves()` produces one large,
-    /// genuinely-connected tunnel network rather than vanilla's small isolated pockets, so a
-    /// pocket this large is what a real generated world's candidate sites actually look like. Fails
-    /// on the pre-fix code (restoring the `>= 3500` check makes `placed` come back `0`).
+    /// Vanilla's upper bound, restored: a 60,000-tile corridor is a vast open space, not a spider
+    /// cave pocket. This is the same fixture that used to assert the opposite while the bound was
+    /// switched off, and its doc comment then recorded that shape as what a real generated
+    /// candidate looks like. The measured topology says otherwise (see
+    /// `structures::cave_topology_measurement`), so the fixture now asserts what vanilla does.
     #[test]
-    fn a_pocket_far_larger_than_the_old_upper_bound_is_still_accepted() {
+    fn a_pocket_bigger_than_vanillas_own_window_is_not_a_site() {
         let (mut world, layout) = rock_block(4200, 1000, 300);
         for x in 100..4100 {
             for y in 690..705 {
@@ -308,40 +300,17 @@ mod tests {
             }
         }
         let mut rng = SmallRng::seed_from_u64(3);
-        let placed = scatter(&mut world, &layout, &mut rng);
-        assert!(
-            placed > 0,
-            "a large, well-connected, otherwise-valid pocket must not be rejected for its size \
-             alone — that rejection is what made every real generated world place zero"
-        );
-    }
-
-    /// [`spread_spider`]'s own cap: painting an unbounded distance down a long open corridor would
-    /// be the same bug relocated from siting to decoration.
-    #[test]
-    fn spread_spider_does_not_paint_an_unbounded_distance_down_a_long_corridor() {
-        let (mut world, layout) = rock_block(4200, 1000, 300);
-        for x in 100..4100 {
-            for y in 690..705 {
-                world.set_tile(x, y, Tile::AIR);
-            }
-        }
-        let mut rng = SmallRng::seed_from_u64(5);
-        let placed = scatter(&mut world, &layout, &mut rng);
-        assert!(
-            placed > 0,
-            "expected at least one spider cave in a long corridor"
+        assert_eq!(
+            scatter(&mut world, &layout, &mut rng),
+            0,
+            "a 4000-tile-long open corridor is not a spider cave pocket"
         );
 
         let walled = (0..world.width())
             .flat_map(|x| (0..world.height()).map(move |y| (x, y)))
             .filter(|&(x, y)| world.tile(x, y).wall == SPIDER_WALL)
             .count();
-        assert!(
-            walled > 0 && walled <= 3500 * placed,
-            "{walled} cobweb-walled tiles across {placed} pocket(s) — spread_spider's cap should \
-             keep each pocket's footprint at or under 3500 tiles, not paint the whole corridor"
-        );
+        assert_eq!(walled, 0, "nothing sited means nothing painted");
     }
 
     #[test]

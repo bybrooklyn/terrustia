@@ -160,6 +160,7 @@ fn fill_blob(world: &mut World, cx: i32, cy: i32, radius: i32, block: u16) {
 ///   anyway because it is one term.
 ///
 /// [nt]: super::secret_seed::SecretSeeds::no_traps
+#[allow(clippy::too_many_arguments)]
 fn tile_runner(
     world: &mut World,
     x: i32,
@@ -225,6 +226,7 @@ fn tile_runner(
 /// cavern. Unlike [`tile_runner`] its radius does not taper to nothing, so it opens real rooms.
 ///
 /// Returns where it ended, which is where the next link starts.
+#[allow(clippy::too_many_arguments)]
 fn dig_tunnel(
     world: &mut World,
     x: f64,
@@ -1745,6 +1747,38 @@ mod cave_topology_measurement {
                 built.cave_walls_enclosed,
                 built.underground_cabins,
                 started.elapsed()
+            );
+        }
+    }
+
+    /// The regression guard for the whole thing, and the only one here that asserts.
+    ///
+    /// `GemCaves` and `SpiderCaves` both site by measuring the open pocket at a candidate point and
+    /// rejecting anything outside a size window (50 to 299 tiles, and 500 to 3499). That is only
+    /// answerable in a world whose caves come in pockets and whose cavern-layer rock carries no
+    /// wall, so this one assertion covers both halves of this lane at once: with either half
+    /// undone, every candidate in the world is rejected and both counts fall to zero. It runs the
+    /// real pipeline at real size rather than a fixture, because the shape of a real generated
+    /// world is exactly the thing in question.
+    #[test]
+    fn a_real_world_still_sites_gem_and_spider_caves_under_vanillas_own_size_rule() {
+        for seed in [4242u64, 12345] {
+            let (_world, built) = crate::world::worldgen::build(
+                super::super::SMALL_WIDTH,
+                super::super::SMALL_HEIGHT,
+                "sited-caves",
+                seed,
+            );
+            // The quotas are `width * 0.003` and `width * 0.005` (`WorldGen.cs:17546`, `:17476`).
+            // Anything short of them means candidates were being rejected, which is the failure
+            // this guards; the exact number is vanilla's own arithmetic, not a tuned figure.
+            assert_eq!(
+                built.gem_caves, 12,
+                "seed {seed}: gem caves short of their quota - candidates are being rejected"
+            );
+            assert_eq!(
+                built.spider_caves, 21,
+                "seed {seed}: spider caves short of their quota - candidates are being rejected"
             );
         }
     }
