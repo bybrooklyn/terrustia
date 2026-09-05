@@ -95,6 +95,17 @@ pub struct Weather {
     /// turns this one off outright (`Main.cs:13195`) and hands the band over to the storm. Only the
     /// dry branch has a time window, because only a *day* can be windy.
     pub happy_windy_day: bool,
+    /// `Main.coinRain`: how much money, in copper, this shower still owes the ground.
+    ///
+    /// Not a flag. It is a *budget*, decremented by the value of every coin the sky drops
+    /// (`WorldGen.cs:72388`), which is what makes a money rain end on its own rather than run to
+    /// the end of the shower - and what makes one gold coin worth as much of it as a hundred
+    /// silver. Zero the rest of the time, which is almost always: one shower in twenty-five
+    /// (`Main.StartRain`, `Main.cs:65648`).
+    ///
+    /// Runtime only, in the game too: `Main` holds it and no world file has a field for it, so a
+    /// server restart mid-downpour loses the rest of the money. Vanilla's own behaviour.
+    pub coin_rain: i32,
 }
 
 impl Default for Weather {
@@ -116,6 +127,7 @@ impl Default for Weather {
             cloud_bg_active: 0.0,
             storming: false,
             happy_windy_day: false,
+            coin_rain: 0,
         }
     }
 }
@@ -543,6 +555,11 @@ impl Weather {
         self.raining = false;
         self.rain_time = 0;
         self.max_rain = 0.0;
+        // `Main.StopRain` (`Main.cs:65630`) clears it here rather than leaving it to the spawner's
+        // own guard, and so does this: every path that stops the rain stops the money with it,
+        // including the ones that never reach a tick of `spawn_falling_objects` (a Journey rain
+        // power, a world switch, an operator).
+        self.coin_rain = 0;
     }
 
     /// One tick of the sandstorm.

@@ -4651,6 +4651,9 @@ impl GameServer {
         let clouds_changed = clouds != self.world.num_clouds;
         self.world.num_clouds = clouds;
         if was_raining != self.weather.raining {
+            if self.weather.raining {
+                self.roll_coin_rain();
+            }
             self.announce(if self.weather.raining {
                 "It has started to rain."
             } else {
@@ -4660,6 +4663,47 @@ impl GameServer {
         } else if clouds_changed {
             self.broadcast_world_data();
         }
+    }
+
+    /// `Main.StartRain`'s money-rain roll (`Main.cs:65638-65652`):
+    ///
+    /// ```csharp
+    /// int range = 25;
+    /// if (tenthAnniversaryWorld && !getGoodWorld) { range = 5; }
+    /// range = Player.GetPlayerWithHighestLuck().RollLuck(range);
+    /// if ((range == 0) | guaranteeCoinRain) {
+    ///     float num = (float)maxTilesX / 4200f;
+    ///     ChatHelper.BroadcastChatMessage(NetworkText.FromKey(Lang.gen[93].Key), new Color(255, 200, 150));
+    ///     coinRain = rand.Next(75, 151) * 100 * 100;
+    ///     coinRain = (int)((float)coinRain * num);
+    /// }
+    /// ```
+    ///
+    /// One shower in twenty-five rains money, and it is announced when it starts because there is
+    /// no other way to know: the sky looks the same and the coins begin somewhere else in the
+    /// world. Rolled on the rising edge of the rain rather than inside `Weather::start_rain`,
+    /// because the announcement and the world width both belong to the server and neither belongs
+    /// to a weather simulation.
+    ///
+    /// `guaranteeCoinRain` is `/rain money` in the game's own console and has no counterpart here
+    /// yet. `Main.tenthAnniversaryWorld` is not modelled anywhere in this server, so the ordinary
+    /// 25 is the whole roll, and `GetPlayerWithHighestLuck().RollLuck(25)` reduces to `rand(25)` at
+    /// zero luck for the reason [`Self::spawn_falling_objects`] gives at greater length.
+    fn roll_coin_rain(&mut self) {
+        use rand::Rng;
+        if self.rng.random_range(0..25) != 0 {
+            return;
+        }
+        let scale = f64::from(self.world.width()) / 4200.0;
+        // 75 to 150 gold, scaled by how big the world is, counted in copper.
+        let purse = f64::from(self.rng.random_range(75..151) * 100 * 100);
+        self.weather.coin_rain = (purse * scale) as i32;
+        // `Lang.gen[93]`, which is `Language.GetText("LegacyWorldGen." + i)` (`Lang.cs:480`), so
+        // the key is the whole of it and the text stays on the client where it belongs. Sent as a
+        // key rather than a literal for the same reason every other announcement here is: a client
+        // in any language reads it in theirs, and no game text is checked in.
+        self.announce_key("LegacyWorldGen.93", Vec::new());
+        info!(coin_rain = self.weather.coin_rain, "it is raining money");
     }
 
     /// Where each pillar that is still standing is, in [`crate::game::lunar::PILLARS`] order.
@@ -5846,12 +5890,13 @@ impl GameServer {
 
         // `Main.isThereAWorldSurface` (`WorldGen.cs:72227`): the whole routine is skipped without
         // one, which is also what keeps the unit-test worlds out of it.
-        if self.world.day_time {
-            return;
-        }
         let w = self.world.width();
         let h = self.world.height();
         if w <= 50 || h <= 20 {
+            return;
+        }
+        self.rain_coins();
+        if self.world.day_time {
             return;
         }
         let chance = 10.0 * (f64::from(w) / 4200.0) * f64::from(self.starfall_boost);
@@ -5868,7 +5913,7 @@ impl GameServer {
         let y = self.rng.random_range(0..(f64::from(h) * 0.05) as i32) * 16;
         let mut aimed_at = -1.0f32;
 
-        let closest = self.closest_player((x as f32, y as f32));
+        let closest = self.closest_player((x as f32, y as f32), (1, 1));
         if let Some(slot) = closest {
             // `RollLuck(15)` at zero luck. See the note above.
             let range = self.rng.random_range(0..15);
@@ -5907,6 +5952,121 @@ impl GameServer {
         self.broadcast_projectile(index);
     }
 
+    /// `SpawnFallingObjects`' coin-rain arm (`WorldGen.cs:72351-72397`):
+    ///
+    /// ```csharp
+    /// if (Main.coinRain > 0) {
+    ///     if (!Main.raining || Main.IsItStorming) { Main.coinRain = 0; }
+    ///     else if (Main.rand.Next(30) == 0) {
+    ///         int num18 = Main.rand.Next(50, Main.maxTilesX - 50); num18 *= 16;
+    ///         int num19 = Main.rand.Next((int)((double)Main.maxTilesY * 0.05)); num19 *= 16;
+    ///         Vector2 position4 = new Vector2(num18, num19);
+    ///         int num20 = Player.FindClosest(position4, 12, 12);
+    ///         if (Main.player[num20].active && !Main.player[num20].dead && Main.rand.Next(2) == 0) {
+    ///             num18 = (int)Main.player[num20].Center.X + Main.rand.Next(-2400, 2400);
+    ///             num18 = Utils.Clamp(num18, 800, (Main.maxTilesX - 50) * 16);
+    ///             position4.X = num18;
+    ///         }
+    ///         if (!Collision.SolidCollision(position4, 32, 32)) {
+    ///             int type = 71;
+    ///             int num21 = Main.rand.Next(50, 100);
+    ///             int num22 = num21;
+    ///             if (Main.rand.Next(3) == 0) { type = 72; num21 = Main.rand.Next(25, 100); num22 = num21 * 100; }
+    ///             if (Main.rand.Next(9) == 0) { type = 73; num21 = 1; num22 = num21 * 100 * 100; }
+    ///             int num23 = Item.NewItem(..., num18, num19, 16, 16, type, num21);
+    ///             Main.coinRain -= num22;
+    ///             if (num23 > 390) { Main.coinRain = 0; }
+    ///             if (Main.coinRain < 0) { Main.coinRain = 0; }
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// Money rain, which this server had no way of producing: the roll that starts one lives in
+    /// [`Self::roll_coin_rain`] and this is what it spends. Coins fall as ordinary world items and
+    /// take the ordinary item gravity, unlike a star, which is a projectile until it lands.
+    ///
+    /// Three things worth naming in the transcription. The budget is charged the coin's *value*
+    /// rather than its stack, so the one-in-nine gold coin costs as much of the purse as a hundred
+    /// silver: a money rain is a fixed amount of money, not a fixed number of drops. Both draws
+    /// stack rather than branching, so the silver roll's 25-to-99 stack is what a gold roll
+    /// overwrites, and the gold roll reads the silver's re-rolled type. And `num23 > 390` stops the
+    /// whole rain when the item array is nearly full - vanilla protecting its own 400 slots, which
+    /// this server has exactly as many of.
+    ///
+    /// `Main.IsItStorming` is [`crate::game::weather::Weather::storming`], which is the real latch
+    /// rather than a wind threshold, so a shower that turns into a thunderstorm stops paying out
+    /// exactly when the game's would.
+    fn rain_coins(&mut self) {
+        use rand::Rng;
+        use terrustia_proto::shimmer::COPPER_COIN;
+
+        if self.weather.coin_rain <= 0 {
+            return;
+        }
+        if !self.weather.raining || self.weather.storming {
+            self.weather.coin_rain = 0;
+            return;
+        }
+        if self.rng.random_range(0..30) != 0 {
+            return;
+        }
+
+        let w = self.world.width();
+        let h = self.world.height();
+        let x = self.rng.random_range(50..w - 50) * 16;
+        let y = self.rng.random_range(0..(f64::from(h) * 0.05) as i32) * 16;
+        let mut position = (x as f32, y as f32);
+        // Half the coins are dropped near somebody rather than anywhere, which is what stops a
+        // money rain being invisible on a large world.
+        if let Some(slot) = self.closest_player(position, (12, 12))
+            && self.rng.random_range(0..2) == 0
+            && let Some(player) = self.player(slot)
+        {
+            let centre = player.position.0 + PLAYER_HALF_WIDTH;
+            let drift = self.rng.random_range(-2400..2400) as f32;
+            position.0 = (centre + drift).clamp(800.0, ((w - 50) * 16) as f32);
+        }
+        if self.solid_collision(position, (32.0, 32.0)) {
+            return;
+        }
+
+        // Copper by default, silver one time in three, gold one time in nine of what is left.
+        // Vanilla's two draws stack rather than branch, and so do these.
+        let mut coin = COPPER_COIN;
+        let mut stack = self.rng.random_range(50..100);
+        let mut worth = stack;
+        if self.rng.random_range(0..3) == 0 {
+            coin = COPPER_COIN + 1;
+            stack = self.rng.random_range(25..100);
+            worth = stack * 100;
+        }
+        if self.rng.random_range(0..9) == 0 {
+            coin = COPPER_COIN + 2;
+            stack = 1;
+            worth = 100 * 100;
+        }
+
+        let dropped = self.spawn_item(
+            terrustia_proto::item::ItemStack {
+                id: i32::from(coin),
+                stack: stack as i16,
+                prefix: 0,
+            },
+            position,
+        );
+        self.weather.coin_rain -= worth;
+        // `num23 > 390`: the item array is 400 slots and the rain is not worth the last ten.
+        // `spawn_item` returning `None` is the same condition arrived at one slot later, so it
+        // stops the rain too rather than leaving it spinning against a full array.
+        if dropped.is_none_or(|index| index > 390) {
+            self.weather.coin_rain = 0;
+        }
+        if self.weather.coin_rain < 0 {
+            self.weather.coin_rain = 0;
+        }
+    }
+
     /// `Player.FindClosest(position, 1, 1)` (`Player.cs:4934-4958`): the nearest living player by
     /// *Manhattan* distance between centres, not Euclidean. The game's own choice, kept because a
     /// star aimed by one metric and judged by another would not land where it looks like it should.
@@ -5914,15 +6074,23 @@ impl GameServer {
     /// Vanilla falls back to the first active player when every one of them is dead; here that is
     /// `None`, and every caller treats it as "nobody to aim at", which is the same outcome by a
     /// shorter road.
-    fn closest_player(&self, position: (f32, f32)) -> Option<u8> {
+    ///
+    /// `size` is the `(Width, Height)` the caller passes: the game measures to the centre of that
+    /// box, and it is `(1, 1)` for a falling star and `(12, 12)` for a coin, so it is a parameter
+    /// rather than a constant. Integer division, because vanilla's is.
+    fn closest_player(&self, position: (f32, f32), size: (i32, i32)) -> Option<u8> {
+        let target = (
+            position.0 + (size.0 / 2) as f32,
+            position.1 + (size.1 / 2) as f32,
+        );
         self.players
             .iter()
             .flatten()
             .filter(|p| p.is_playing() && p.life > 0)
             .min_by(|a, b| {
                 let d = |p: &crate::game::player::Player| {
-                    (p.position.0 + PLAYER_HALF_WIDTH - position.0).abs()
-                        + (p.position.1 + PLAYER_HEIGHT / 2.0 - position.1).abs()
+                    (p.position.0 + PLAYER_HALF_WIDTH - target.0).abs()
+                        + (p.position.1 + PLAYER_HEIGHT / 2.0 - target.1).abs()
                 };
                 d(a).total_cmp(&d(b))
             })
@@ -13139,6 +13307,193 @@ mod falling_stars {
         assert!(
             (900..1500).contains(&modest),
             "and a modest night is one in three of the rest: {modest} of 4000"
+        );
+    }
+}
+
+/// Money rain, which this server had no way of producing at all: one shower in twenty-five is one
+/// in vanilla, and the coins are a real early-game windfall rather than a cosmetic one.
+#[cfg(test)]
+mod money_rain {
+    use super::*;
+    use terrustia_proto::shimmer::COPPER_COIN;
+
+    fn raining_server() -> GameServer {
+        let mut world = crate::world::World::empty(4200, 1200, "money rain probe");
+        // A floor, so a coin that lands has somewhere to land, and clear sky above it.
+        for x in 0..4200 {
+            world.set_tile(x, 400, Tile::block(1));
+        }
+        let mut server = GameServer::new(Config::default(), world);
+        server.weather.raining = true;
+        server.weather.storming = false;
+        server
+    }
+
+    /// What every coin on the ground is worth between them, in copper.
+    fn purse_on_the_ground(server: &GameServer) -> i32 {
+        server
+            .items
+            .iter()
+            .filter_map(|(_, item)| {
+                let tier = item.item.id - i32::from(COPPER_COIN);
+                (0..4).contains(&tier).then(|| {
+                    i32::from(item.item.stack) * 100i32.pow(u32::try_from(tier).unwrap_or(0))
+                })
+            })
+            .sum()
+    }
+
+    /// `Main.StartRain`: one shower in twenty-five, and the purse is 75 to 150 gold scaled by how
+    /// wide the world is. On a 4200-tile world the scale is exactly 1.
+    #[test]
+    fn one_shower_in_twenty_five_rains_money() {
+        let mut server = raining_server();
+        let mut started = 0;
+        for _ in 0..2000 {
+            server.weather.coin_rain = 0;
+            server.roll_coin_rain();
+            if server.weather.coin_rain > 0 {
+                started += 1;
+                assert!(
+                    (75 * 100 * 100..=150 * 100 * 100).contains(&server.weather.coin_rain),
+                    "75 to 150 gold in copper, and nothing else: {}",
+                    server.weather.coin_rain
+                );
+            }
+        }
+        assert!(
+            (40..=120).contains(&started),
+            "one shower in twenty-five: {started} of 2000"
+        );
+    }
+
+    /// The purse scales with the world, because a bigger world spreads the same coins thinner.
+    #[test]
+    fn a_bigger_world_rains_more_money() {
+        let mut small = GameServer::new(
+            Config::default(),
+            crate::world::World::empty(2100, 600, "half-width"),
+        );
+        let mut big = raining_server();
+        let mut small_total = 0i64;
+        let mut big_total = 0i64;
+        for _ in 0..3000 {
+            small.weather.coin_rain = 0;
+            small.roll_coin_rain();
+            small_total += i64::from(small.weather.coin_rain);
+            big.weather.coin_rain = 0;
+            big.roll_coin_rain();
+            big_total += i64::from(big.weather.coin_rain);
+        }
+        assert!(small_total > 0 && big_total > 0, "both must have rained");
+        let ratio = big_total as f64 / small_total as f64;
+        assert!(
+            (1.5..3.0).contains(&ratio),
+            "a world twice as wide rains about twice the money: ratio {ratio:.2}"
+        );
+    }
+
+    /// The budget is spent by *value*, not by drop count: it empties, and what reached the ground
+    /// is worth at least what was promised.
+    #[test]
+    fn the_purse_is_spent_down_to_nothing_and_paid_out_in_full() {
+        let mut server = raining_server();
+        let promised = 75 * 100 * 100;
+        server.weather.coin_rain = promised;
+
+        for _ in 0..200_000 {
+            server.rain_coins();
+            if server.weather.coin_rain == 0 {
+                break;
+            }
+        }
+        assert_eq!(
+            server.weather.coin_rain, 0,
+            "a money rain has to end on its own, or it runs for the whole shower"
+        );
+        let paid = purse_on_the_ground(&server);
+        assert!(
+            paid >= promised,
+            "the ground must hold at least what the sky promised: {paid} against {promised}"
+        );
+        // The last drop is what takes the budget negative, so the overshoot is one coin's worth.
+        assert!(
+            paid <= promised + 100 * 100,
+            "and not much more than one gold coin over it: {paid} against {promised}"
+        );
+    }
+
+    /// All three coins fall, and a gold one costs a hundred silver's worth of the purse. That is
+    /// what stops the two stacked draws being a cosmetic choice.
+    #[test]
+    fn copper_silver_and_gold_all_fall() {
+        let mut server = raining_server();
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..40 {
+            server.weather.coin_rain = 150 * 100 * 100;
+            for _ in 0..200_000 {
+                server.rain_coins();
+                if server.weather.coin_rain == 0 {
+                    break;
+                }
+            }
+            for (_, item) in server.items.iter() {
+                seen.insert(item.item.id);
+            }
+        }
+        assert_eq!(
+            seen,
+            (0..3)
+                .map(|tier| i32::from(COPPER_COIN) + tier)
+                .collect::<std::collections::BTreeSet<_>>(),
+            "copper, silver and gold, and no platinum: the game's own three"
+        );
+    }
+
+    /// `if (!Main.raining || Main.IsItStorming) Main.coinRain = 0;` - a shower that turns into a
+    /// thunderstorm stops paying, and so does one that simply ends.
+    #[test]
+    fn a_storm_or_a_clear_sky_ends_the_payout() {
+        for (raining, storming) in [(false, false), (true, true), (false, true)] {
+            let mut server = raining_server();
+            server.weather.raining = raining;
+            server.weather.storming = storming;
+            server.weather.coin_rain = 150 * 100 * 100;
+            server.rain_coins();
+            assert_eq!(
+                server.weather.coin_rain, 0,
+                "raining={raining} storming={storming} must stop the money"
+            );
+            assert_eq!(
+                purse_on_the_ground(&server),
+                0,
+                "and must not pay out on the way"
+            );
+        }
+    }
+
+    /// `Main.StopRain` clears the purse itself, so every path that stops the rain stops the money
+    /// with it - including the ones that never reach a tick of the spawner.
+    #[test]
+    fn stopping_the_rain_clears_the_purse() {
+        let mut server = raining_server();
+        server.weather.coin_rain = 150 * 100 * 100;
+        server.weather.stop_rain();
+        assert_eq!(server.weather.coin_rain, 0);
+    }
+
+    /// Nothing rains money when nothing has started one, whatever the weather is doing.
+    #[test]
+    fn an_ordinary_shower_drops_no_coins() {
+        let mut server = raining_server();
+        for _ in 0..20_000 {
+            server.rain_coins();
+        }
+        assert_eq!(
+            purse_on_the_ground(&server),
+            0,
+            "twenty-four showers in twenty-five are just rain"
         );
     }
 }
