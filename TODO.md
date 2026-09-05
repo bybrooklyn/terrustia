@@ -268,24 +268,41 @@ decompiled or installed game material can never ship to hosted CI.
 
 **C6, projectile AI styles, counted rather than estimated (2026-09-05).** `projectile.rs`'s module
 doc claimed "a handful of behaviours cover everything the roster and the world's traps fire". The
-count says otherwise: of the **79 projectile types something in this server can put in the air, 43
-reach no arm of their own** and fly straight because that is what the fallthrough does. The doc is
-corrected and the count is now in it.
+count said otherwise: of the **79 projectile types something in this server can put in the air, 43
+reached no arm of their own** and flew straight because that is what the fallthrough does.
 
-Most of the 43 are harmless as straight lines. These are not, worst first:
+**Sixteen of those 43 are closed**, which is every style that puts a projectile on an arc. Twenty-six
+are left and the doc now carries that number.
 
-- **Style 25, the boulder (fixed 2026-09-05).** Vanilla launches a boulder *at rest* and the arm is
-  what gives it gravity, so with no arm a wired Boulder Statue put a stationary 31-pixel hostile box
-  under itself for a full minute. Transcribed with its ledge probe, its speed ceiling, its hard-
-  landing hop, its sideways kill and its seven-tick damage grace.
-- **Style 2, the thrown arc (7 types).** `Bone`, `ThrowingKnife`, `FrostDaggerfish`,
-  `NurseSyringeHurt`, `SantaBombs`, `SnowBallFriendly`, `CannonballHostile`: twenty ticks of free
-  flight and then `velocity.Y += 0.4; velocity.X *= 0.97` (`Projectile.cs:23907-23928`). They fly
-  dead flat here, so a wired cannon's ball never falls.
-- **Style 8 (3 types), including the Golem's fireball (258).** Bouncing off the temple floor is a
-  signature of that fight.
-- **Style 16 (3 types).** `Grenade`, `ProximityMineI`, `PartyGirlGrenade` never detonate.
-- **Style 5**, the Fallen Star, which only started existing here on 2026-09-05.
+Closed 2026-09-05, each neutralisation-verified:
+
+- **Style 25, the boulder.** Vanilla launches a boulder *at rest* and the arm is what gives it
+  gravity, so with no arm a wired Boulder Statue put a stationary 31-pixel hostile box under itself
+  for a full minute. Ledge probe, speed ceiling, hard-landing hop, sideways kill, seven-tick grace.
+- **Style 2, the throw (7 types).** `Bone`, `ThrowingKnife`, `FrostDaggerfish`, `NurseSyringeHurt`,
+  `SantaBombs`, `SnowBallFriendly`, `CannonballHostile`: twenty ticks flat, then
+  `velocity.Y += 0.4; velocity.X *= 0.97` to a terminal of 32 (`Projectile.cs:23907-23930`). The
+  snowball is the one with its own numbers.
+- **Style 16, the bomb (3 types).** `Grenade`, `ProximityMineI`, `PartyGirlGrenade`. They bounce at
+  two fifths rather than dying on contact, a mine settles dead and the others roll.
+- **Style 8, the fireball (3 types).** The counter is skipped for 27, 96 and 258, so the Golem's
+  fireball and a Cursed Flame fly flat and only the Ball of Fire arcs. The skip is the behaviour.
+- **Style 5, the falling star.** No acceleration; what it has is the latch that keeps it from
+  colliding until it has been clear of terrain once.
+- **Style 58, the present**, and **style 68, the ale**: both plain arcs with their own numbers.
+
+**The 26 that remain, read against `Projectile.cs` rather than assumed.** Two styles genuinely never
+touch a velocity (79, 133); twelve steer inline (45, 58 closed, 65, 68 closed, 80, 84, 98, 102, 109,
+112, 128); eleven delegate to an `AI_NNN_` method of their own (111, 135, 136, 149, 157, 171, 173,
+179, 180, 183, 186, 187). **None of them falls**: they are lasers, deathrays, homing bolts and
+hovering clouds, so a straight line is a poorer approximation than it was of a thrown bone rather
+than a free one. Ranked by what a player would notice, the next three are the Saucer's deathray and
+missile (79/80), the Empress's four lances and streaks (171/173/179/180), and the Dark Mage's two
+(133).
+
+**The explosion is the other half of style 16 and is not modelled.** A bomb reaches the ground and
+expires; `Projectile.Kill`'s own switch widens the hitbox and breaks tiles, so a grenade lands and
+does nothing where vanilla's takes a hole out of the wall.
 
 **Boulder *tiles* release nothing when mined, and the blocker is not the projectile.**
 `WorldGen.KillTile`'s own switch (`WorldGen.cs:49177-49212`) is eleven cases, ten of them the

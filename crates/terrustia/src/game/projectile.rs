@@ -5,15 +5,37 @@
 //! decided to shoot has been emitting its aim and cadence for a while; this is what makes those
 //! decisions land.
 //!
-//! Nine behaviours are transcribed. That is **not** everything the roster and the world's traps
-//! fire, and this file said it was until the count was actually taken: of the 79 projectile types
-//! something here can put in the air, 43 reach no arm of their own and fly straight because that is
-//! what the fallthrough does. Most are harmless as straight lines (a caster's bolt is one), but the
-//! gravity styles are not, and the worst of them is written down at the bottom of this list.
+//! Fifteen behaviours are transcribed. This file used to say "a handful of behaviours cover
+//! everything the roster and the world's traps fire"; the count, when it was finally taken, was
+//! **43 of the 79 types something here can launch reaching no arm at all**. It is 26 now, and the
+//! sixteen closed are every style that puts a projectile on an arc.
+//!
+//! The 26 left are not all straight lines, and saying so would be the same mistake again. Read
+//! against `Projectile.cs`: two of their styles genuinely never touch a velocity, twelve steer
+//! inline, and eleven delegate to an `AI_NNN_` method of their own. What they have in common is
+//! that none of them *falls*: they are lasers, deathrays, homing bolts and hovering clouds, and a
+//! straight line is a poorer approximation of them than it was of a thrown bone, not a free one.
+//! `TODO.md`'s C6 has the list, by style, with what each one does.
 //!
 //! * **Style 1**, the arc: it flies straight for a quarter of a second and then starts falling, a
 //!   tenth of a pixel a tick, capped at sixteen. Feathers, stingers, snowballs, skulls and darts.
+//! * **Style 2**, the throw: twenty ticks flat, then it falls four tenths of a pixel a tick and
+//!   drags, to a terminal of thirty-two. Bones, knives, syringes, cannonballs, Santa's bombs. The
+//!   snowball falls gentler and drags lighter, and is the one type here with its own numbers.
+//! * **Style 5**, the falling star: no acceleration at all. What it has instead is a latch - it
+//!   passes through terrain until it has been clear of it once - so a star handed over inside a
+//!   mountain falls out of it rather than dying on the tick it appears.
+//! * **Style 8**, the fireball: twenty ticks, then a fifth of a pixel a tick. Three types skip the
+//!   counter entirely and so never fall, which is why a Golem's fireball and a Cursed Flame cross
+//!   a room flat while a Ball of Fire arcs into the floor.
 //! * **Style 10**, the lob: it falls from the first tick and sticks where it lands.
+//! * **Style 16**, the bomb: it *bounces*, at two fifths, off anything it meets, and off a floor
+//!   only if it was still falling at speed. A mine settles dead where it lands; everything else
+//!   keeps its own fuse and then rolls along whatever it landed on. A grenade thrown at a wall
+//!   used to vanish into it.
+//! * **Style 58**, the present: it holds its upward speed for half a second, tips over a tenth of
+//!   a pixel a tick, and then falls at three and no faster. Catchable, which is the point of it.
+//! * **Style 68**, the ale: fifteen ticks flat, then an ordinary fall.
 //! * **Style 14**, the rolling ball: it falls, loses speed along the ground, and *bounces* off
 //!   what it hits at nine tenths rather than dying on it. A spiky ball trap fills a corridor
 //!   because of this one rule.
@@ -32,11 +54,19 @@
 //! * **Style 126**, the geyser: it rises out of its vent until the way ahead is clear, then hangs
 //!   there for a second. If it never gets clear it dies inside the wall.
 //!
-//! Style 25 is the one that was doing real harm by its absence. A Boulder Statue launches its
-//! boulder *at rest*, so with no arm to give it gravity it never moved at all: a wired statue put a
-//! stationary thirty-one-pixel hostile box under itself for a full minute and then took it away
-//! again. The trap that is meant to chase you down a corridor was a damage aura around its own
-//! pedestal.
+//! Style 25 was the one doing real harm by its absence. A Boulder Statue launches its boulder *at
+//! rest*, so with no arm to give it gravity it never moved at all: a wired statue put a stationary
+//! thirty-one-pixel hostile box under itself for a full minute and then took it away again. The
+//! trap that is meant to chase you down a corridor was a damage aura around its own pedestal.
+//!
+//! **What is still narrowed, and it is no longer movement.** A style-16 bomb reaches the ground
+//! and then simply expires: `Projectile.Kill`'s explosion, which widens the hitbox and breaks
+//! tiles, is not modelled, so a grenade lands and does nothing where vanilla's takes a hole out of
+//! the wall. Per-type flourishes inside the arms that are here are disclosed at each: a boulder's
+//! six cousins keep their own branches, a bomb's two unreached families keep theirs. And the
+//! per-axis collision probe every bouncing style shares is not vanilla's swept
+//! `Collision.TileCollision`, so an inside corner comes off both axes here where the game would
+//! clip one.
 
 use terrustia_proto::projectile::{MAX_PROJECTILES, ProjectileKey, SERVER_OWNER};
 use terrustia_proto::projectile_data::{ProjectileStats, projectile_stats};
@@ -225,6 +255,54 @@ const FLAME_EVERY: f32 = 6.0;
 const FLAME: u16 = 188;
 /// How much of its speed a rolling ball keeps when it bounces.
 const BOUNCE: f32 = -0.9;
+/// A thrown thing (`Projectile.cs:23907-23930`): twenty ticks of flat flight, then it falls and
+/// drags, to a terminal of thirty-two rather than sixteen.
+const THROWN_DELAY: f32 = 20.0;
+const THROWN_GRAVITY: f32 = 0.4;
+const THROWN_DRAG: f32 = 0.97;
+const THROWN_TERMINAL: f32 = 32.0;
+/// It also tumbles the whole way (`Projectile.cs:23945-23947`).
+const THROWN_SPIN: f32 = 0.03;
+/// `ProjectileID.SnowBallFriendly`, the one style-2 type this server launches with its own numbers
+/// (`Projectile.cs:23838-23843`): a gentler fall and a lighter drag.
+const SNOWBALL: u16 = 166;
+const SNOWBALL_GRAVITY: f32 = 0.3;
+const SNOWBALL_DRAG: f32 = 0.98;
+/// A fireball (`Projectile.cs:24618-24641`). Twenty ticks, then a soft fall, and a fixed spin.
+const FIREBALL_DELAY: f32 = 20.0;
+const FIREBALL_GRAVITY: f32 = 0.2;
+const FIREBALL_SPIN: f32 = 0.3;
+/// A falling star's own style (`Projectile.cs:24082-24133`), which is not a movement arm at all.
+const STAR_STYLE: i32 = 5;
+/// A dropped present (`Projectile.cs:29337-29366`): it drifts for half a second, tips over, and
+/// then settles into a slow fall it never exceeds.
+const PRESENT_DRIFT: f32 = 30.0;
+const PRESENT_GRAVITY: f32 = 0.1;
+const PRESENT_TERMINAL: f32 = 3.0;
+const PRESENT_DRAG: f32 = 0.99;
+/// A thrown ale (`Projectile.cs:30655-30677`): fifteen ticks flat, then an ordinary fall.
+const ALE_DELAY: f32 = 15.0;
+const ALE_GRAVITY: f32 = 0.2;
+const ALE_DRAG: f32 = 0.99;
+const ALE_SPIN: f32 = 0.25;
+/// A bomb (`Projectile.cs:47764-48409`, `AI_016_Bombs`).
+const BOMB_STYLE: i32 = 16;
+const BOMB_GRAVITY: f32 = 0.2;
+/// A mine settles rather than rolling: one drag on both axes, and anything under a tenth of a pixel
+/// is snapped to a stop (`Projectile.cs:48354-48366`).
+const MINE_DRAG: f32 = 0.97;
+const MINE_STOP: f32 = 0.1;
+/// Everything else rolls along whatever it landed on until it is under a hundredth of a pixel
+/// (`Projectile.cs:48378-48399`), after a fuse of its own measured in `ai[0]`.
+const BOMB_ROLL_DRAG: f32 = 0.97;
+const BOMB_ROLL_STOP: f32 = 0.01;
+const BOMB_LONG_FUSE: f32 = 10.0;
+const BOMB_SHORT_FUSE: f32 = 5.0;
+const BOMB_SPIN: f32 = 0.1;
+/// A bomb bounces off what it hits at two fifths, and only off a floor it met at speed
+/// (`Projectile.cs:19872-19886`).
+const BOMB_BOUNCE: f32 = -0.4;
+const BOMB_BOUNCE_FLOOR: f32 = 0.7;
 /// A boulder: `Projectile.cs:26596-26746` for the flight, `:19056-19099` for what it does to the
 /// wall it meets, and `:12491-12494` for the seven ticks before it can hurt anybody.
 const BOULDER_STYLE: i32 = 25;
@@ -294,6 +372,98 @@ pub fn step(
                     projectile.velocity.1 = (projectile.velocity.1 + ARC_GRAVITY).min(TERMINAL);
                 }
                 projectile.rotation = projectile.velocity.1.atan2(projectile.velocity.0) + 1.57;
+            }
+            2 => {
+                // A thrown thing: it flies flat for twenty ticks and then falls
+                // (`Projectile.cs:23907-23930`). Bones, knives, syringes, cannonballs and Santa's
+                // bombs all leave a hand or a barrel on an arc, and flew perfectly straight here.
+                //
+                // The spin (`:23945-23947`) is `* direction` in vanilla, which is the thrower's
+                // facing. A projectile carries no direction on this server, so it always tumbles
+                // one way; the rotation is drawn by the client and changes nothing else.
+                projectile.rotation +=
+                    (projectile.velocity.0.abs() + projectile.velocity.1.abs()) * THROWN_SPIN;
+                let (gravity, drag) = if projectile.projectile_type == SNOWBALL {
+                    (SNOWBALL_GRAVITY, SNOWBALL_DRAG)
+                } else {
+                    (THROWN_GRAVITY, THROWN_DRAG)
+                };
+                projectile.ai[0] += 1.0;
+                if projectile.ai[0] >= THROWN_DELAY {
+                    projectile.velocity.1 += gravity;
+                    projectile.velocity.0 *= drag;
+                }
+                // Style 2's own terminal, which is twice everything else's.
+                projectile.velocity.1 = projectile.velocity.1.min(THROWN_TERMINAL);
+            }
+            STAR_STYLE => {
+                // A falling star does not accelerate at all: it keeps whatever speed it was given,
+                // and the whole arm is bookkeeping. The one piece that matters to a server is the
+                // latch below, handled at the collision step: `ai[1]` stays zero until the star
+                // has been clear of terrain once (`Projectile.cs:24170-24176`), which is what stops
+                // one handed over inside a mountain from dying on the tick it appears.
+                //
+                // Its death at dawn is real and lives in `systems::tick_falling_stars`, because it
+                // needs the world clock this function is deliberately not given.
+                if projectile.ai[1] == 0.0
+                    && !hits_terrain(
+                        tiles,
+                        projectile.position,
+                        (projectile.width(), projectile.height()),
+                    )
+                {
+                    projectile.ai[1] = 1.0;
+                }
+            }
+            8 => {
+                // A fireball. The counter is skipped for three types, and that skip *is* the
+                // behaviour: with `ai[1]` never reaching twenty, a Golem's fireball (258) and a
+                // Cursed Flame (96) never take gravity at all and fly flat for their whole life,
+                // where a Ball of Fire (15) arcs (`Projectile.cs:24618-24641`).
+                if !matches!(projectile.projectile_type, 27 | 96 | 258) {
+                    projectile.ai[1] += 1.0;
+                }
+                if projectile.ai[1] >= FIREBALL_DELAY {
+                    projectile.velocity.1 += FIREBALL_GRAVITY;
+                }
+                projectile.rotation += FIREBALL_SPIN;
+                projectile.velocity.1 = projectile.velocity.1.min(TERMINAL);
+            }
+            BOMB_STYLE => bomb(projectile),
+            58 => {
+                // A present dropped by the Frost Moon's minibosses (`Projectile.cs:29337-29366`).
+                // Two phases, and the first is what makes it read as *dropped* rather than thrown:
+                // it holds whatever upward speed it was given for half a second, then takes a tenth
+                // of a pixel a tick until it is falling at all, and only then commits to the second
+                // phase and its slow terminal of three. A present that fell like a rock would be
+                // impossible to catch.
+                if projectile.ai[0] == 0.0 {
+                    projectile.ai[1] += 1.0;
+                    if projectile.ai[1] > PRESENT_DRIFT {
+                        projectile.velocity.1 += PRESENT_GRAVITY;
+                    }
+                    if projectile.velocity.1 >= 0.0 {
+                        projectile.ai[0] = 1.0;
+                    }
+                }
+                if projectile.ai[0] == 1.0 {
+                    projectile.velocity.1 =
+                        (projectile.velocity.1 + PRESENT_GRAVITY).min(PRESENT_TERMINAL);
+                    projectile.velocity.0 *= PRESENT_DRAG;
+                }
+                projectile.rotation = projectile.velocity.1.atan2(projectile.velocity.0)
+                    + std::f32::consts::FRAC_PI_2;
+            }
+            68 => {
+                // The Tavernkeep's ale (`Projectile.cs:30655-30677`): fifteen ticks flat, then an
+                // ordinary fall with a light drag. The spin is `* direction` in vanilla, which a
+                // projectile does not carry here; see the style-2 arm for the same note.
+                projectile.rotation += ALE_SPIN;
+                projectile.ai[0] += 1.0;
+                if projectile.ai[0] >= ALE_DELAY {
+                    projectile.velocity.1 = (projectile.velocity.1 + ALE_GRAVITY).min(TERMINAL);
+                    projectile.velocity.0 *= ALE_DRAG;
+                }
             }
             10 => {
                 // A lob: it falls from the moment it leaves, and slows as it goes.
@@ -383,7 +553,13 @@ pub fn step(
             projectile.position.0 + projectile.velocity.0,
             projectile.position.1 + projectile.velocity.1,
         );
-        if projectile.stats.tile_collide {
+        // A falling star does not collide until it has been clear of terrain once, which its own
+        // arm latches into `ai[1]` above (`Projectile.cs:24170-24176`). Vanilla flips the
+        // projectile's `tileCollide` field; ours lives in the shared stats table, so the latch is
+        // read here instead of written there.
+        let collides = projectile.stats.tile_collide
+            && !(projectile.stats.ai_style == STAR_STYLE && projectile.ai[1] == 0.0);
+        if collides {
             if projectile.stats.ai_style == 14 {
                 // A rolling ball bounces off what it hits instead of dying on it, and each axis is
                 // settled on its own: a ball that lands on a floor keeps travelling along it, which
@@ -411,6 +587,37 @@ pub fn step(
                     }
                 } else {
                     projectile.position = next;
+                }
+            } else if projectile.stats.ai_style == BOMB_STYLE {
+                // A bomb bounces off what it hits rather than dying on it, at two fifths of the
+                // speed it arrived with (`Projectile.cs:19872-19886`). The vertical bounce has a
+                // floor: a bomb that has almost stopped falling settles instead of hopping for
+                // ever, which is `lastVelocity.Y > 0.7`. Without any of this a grenade thrown at a
+                // wall vanished on contact rather than dropping at its feet and going off.
+                let last = projectile.velocity;
+                if !hits_terrain(tiles, next, size) {
+                    projectile.position = next;
+                } else {
+                    let across = !hits_terrain(tiles, (next.0, projectile.position.1), size);
+                    let down = !hits_terrain(tiles, (projectile.position.0, next.1), size);
+                    // As the rolling ball and the boulder above: both axes free alone but not
+                    // together is a corner, and comes off both.
+                    let (moved, hit_x, hit_y) = match (across, down) {
+                        (true, false) => ((next.0, projectile.position.1), false, true),
+                        (false, true) => ((projectile.position.0, next.1), true, false),
+                        _ => (projectile.position, true, true),
+                    };
+                    projectile.position = moved;
+                    if hit_x {
+                        projectile.velocity.0 = last.0 * BOMB_BOUNCE;
+                    }
+                    if hit_y {
+                        projectile.velocity.1 = if last.1 > BOMB_BOUNCE_FLOOR {
+                            last.1 * BOMB_BOUNCE
+                        } else {
+                            0.0
+                        };
+                    }
                 }
             } else if projectile.stats.ai_style == BOULDER_STYLE {
                 // A boulder slides rather than dying: `Collision.TileCollision` zeroes whichever
@@ -480,6 +687,64 @@ pub fn step(
 
     projectile.dirty = true;
     Outcome::Flying
+}
+
+/// A bomb, a mine or a grenade: it arcs, lands, and settles or rolls depending on which it is.
+///
+/// `Projectile.AI_016_Bombs` (`Projectile.cs:47764-48409`). The routine is nine tenths dust, sound
+/// and per-type fuses; what a server needs is the last eighty lines, and they split the family in
+/// two. A **mine** takes gravity and one drag on *both* axes from the first tick and stops dead
+/// where it lands, which is what makes it a mine. **Everything else** keeps its fuse: nothing at
+/// all happens until `ai[0]` passes it, and then it falls, and rolls along whatever it landed on
+/// until it is under a hundredth of a pixel a tick.
+///
+/// Two of vanilla's four families are not reached from here and so are not transcribed: the
+/// `133`-family's fifteen-tick fuse and the `134`-family, which does not fall at all and freezes
+/// on contact instead. Nothing this server launches is either.
+fn bomb(p: &mut Projectile) {
+    // `ai[0]++` (`Projectile.cs:48333`), before any of the branches read it.
+    p.ai[0] += 1.0;
+    match p.projectile_type {
+        // `type == 135 || 138 || 141 || 144 || 778 || 782 || 795 || 798 || 801 || 786 || 789 || 792`
+        // (`Projectile.cs:48354`): the proximity mines.
+        135 | 138 | 141 | 144 | 778 | 782 | 786 | 789 | 792 | 795 | 798 | 801 => {
+            p.velocity.1 += BOMB_GRAVITY;
+            p.velocity.0 *= MINE_DRAG;
+            p.velocity.1 *= MINE_DRAG;
+            if p.velocity.0.abs() < MINE_STOP {
+                p.velocity.0 = 0.0;
+            }
+            if p.velocity.1.abs() < MINE_STOP {
+                p.velocity.1 = 0.0;
+            }
+        }
+        other => {
+            // The long fuse is `type == 30 || 397 || 517 || 681 || 588 || 779 || 783 || 862 || 863
+            // || 1088`; everything else waits five ticks rather than ten
+            // (`Projectile.cs:48378-48399`).
+            let fuse = if matches!(
+                other,
+                30 | 397 | 517 | 588 | 681 | 779 | 783 | 862 | 863 | 1088
+            ) {
+                BOMB_LONG_FUSE
+            } else {
+                BOMB_SHORT_FUSE
+            };
+            if p.ai[0] > fuse {
+                // Vanilla pins the counter here, so a bomb's `ai[0]` never climbs past ten however
+                // long it lies there.
+                p.ai[0] = BOMB_LONG_FUSE;
+                if p.velocity.1 == 0.0 && p.velocity.0 != 0.0 {
+                    p.velocity.0 *= BOMB_ROLL_DRAG;
+                    if p.velocity.0.abs() < BOMB_ROLL_STOP {
+                        p.velocity.0 = 0.0;
+                    }
+                }
+                p.velocity.1 += BOMB_GRAVITY;
+            }
+        }
+    }
+    p.rotation += p.velocity.0 * BOMB_SPIN;
 }
 
 /// A boulder: it falls, and once it has landed it rolls away from whichever side has a wall.
@@ -1014,6 +1279,275 @@ mod tests {
             "and stayed on top of the floor, not fallen through to {}",
             ball.position.1
         );
+    }
+
+    /// A thrown thing flies flat for twenty ticks and then arcs into the ground.
+    ///
+    /// `Projectile.cs:23907-23930`. Seven types this server launches are style 2 - a skeleton's
+    /// bone, a town NPC's throwing knife and frost daggerfish, the Nurse's syringe, Santa's bombs,
+    /// a snowball and a wired cannon's cannonball - and every one of them used to fly dead straight
+    /// until it hit something or ran out of time.
+    #[test]
+    fn a_thrown_bone_flies_flat_and_then_arcs() {
+        let tiles = Air::default();
+        let mut bone = launched(21, (6.0, 0.0));
+        let start = bone.position.1;
+        for _ in 0..19 {
+            assert_eq!(step(&mut bone, &tiles, &mut Vec::new()), Outcome::Flying);
+        }
+        assert!(
+            (bone.position.1 - start).abs() < 0.001,
+            "flat for the first twenty ticks, not {}",
+            bone.position.1 - start
+        );
+        assert_eq!(bone.velocity.0, 6.0, "and it has not slowed either");
+
+        for _ in 0..20 {
+            assert_eq!(step(&mut bone, &tiles, &mut Vec::new()), Outcome::Flying);
+        }
+        assert!(
+            bone.position.1 > start + 50.0,
+            "and then it falls: {} pixels",
+            bone.position.1 - start
+        );
+        assert!(
+            bone.velocity.0 < 6.0,
+            "dragging as it goes, not {}",
+            bone.velocity.0
+        );
+    }
+
+    /// The snowball is the one style-2 type with its own numbers (`Projectile.cs:23838-23843`).
+    ///
+    /// A gentler fall and a lighter drag, so it carries further than a bone thrown the same way.
+    /// Reading the shared tail for it would have been invisible: both fall, one just falls less.
+    #[test]
+    fn a_snowball_falls_gentler_than_a_bone() {
+        let tiles = Air::default();
+        let mut snowball = launched(SNOWBALL, (6.0, 0.0));
+        let mut bone = launched(21, (6.0, 0.0));
+        for _ in 0..60 {
+            step(&mut snowball, &tiles, &mut Vec::new());
+            step(&mut bone, &tiles, &mut Vec::new());
+        }
+        assert!(
+            snowball.position.1 < bone.position.1,
+            "the snowball should still be higher: {} against {}",
+            snowball.position.1,
+            bone.position.1
+        );
+        assert!(
+            snowball.velocity.0 > bone.velocity.0,
+            "and faster forward: {} against {}",
+            snowball.velocity.0,
+            bone.velocity.0
+        );
+    }
+
+    /// Three style-8 types never take gravity, and that skip is the behaviour.
+    ///
+    /// `Projectile.cs:24618-24621` increments the counter for everything *except* 27, 96 and 258,
+    /// so a Golem's fireball and a Cursed Flame cross a room flat where a Ball of Fire arcs. Both
+    /// halves are asserted, because an arm that gave all three gravity would look right until
+    /// somebody fought the Golem.
+    #[test]
+    fn only_the_ball_of_fire_falls_among_the_fireballs() {
+        let tiles = Air::default();
+        for flat in [96u16, 258] {
+            let mut p = launched(flat, (6.0, 0.0));
+            let start = p.position.1;
+            for _ in 0..120 {
+                step(&mut p, &tiles, &mut Vec::new());
+            }
+            assert!(
+                (p.position.1 - start).abs() < 0.001,
+                "projectile {flat} should fly flat, not fall {}",
+                p.position.1 - start
+            );
+        }
+        let mut ball = launched(15, (6.0, 0.0));
+        let start = ball.position.1;
+        for _ in 0..120 {
+            step(&mut ball, &tiles, &mut Vec::new());
+        }
+        assert!(
+            ball.position.1 > start + 100.0,
+            "but a Ball of Fire arcs: {} pixels",
+            ball.position.1 - start
+        );
+    }
+
+    /// A grenade bounces off a wall instead of dying in it, and settles on the floor.
+    ///
+    /// `Projectile.cs:19872-19886` for the bounce and `:48378-48399` for the roll. Without either,
+    /// a thrown grenade vanished on the first thing it touched, which is the opposite of the point
+    /// of a grenade.
+    #[test]
+    fn a_grenade_bounces_off_a_wall_and_settles_on_the_floor() {
+        let mut tiles = Air::default();
+        // A floor with no edge to roll off, so what the test measures is the bounce and the roll
+        // rather than how long the fixture happens to be.
+        for x in 0..200 {
+            tiles.0.insert((x, 64), Tile::block(1));
+        }
+        for y in 50..64 {
+            tiles.0.insert((70, y), Tile::block(1));
+        }
+        let mut store = ProjectileStore::new();
+        let index = store
+            .launch(30, (60.0 * TILE, 60.0 * TILE), (8.0, 0.0), 60, 0)
+            .expect("the grenade is a known type");
+        let mut grenade = *store.get(index).unwrap();
+
+        let mut turned = false;
+        for _ in 0..400 {
+            assert_eq!(
+                step(&mut grenade, &tiles, &mut Vec::new()),
+                Outcome::Flying,
+                "a grenade must never die on what it hits"
+            );
+            if grenade.velocity.0 < 0.0 {
+                turned = true;
+            }
+        }
+        assert!(turned, "it should have come off the wall");
+        assert!(
+            grenade.position.1 < 64.0 * TILE,
+            "and be resting on the floor, not through it at {}",
+            grenade.position.1
+        );
+        assert_eq!(
+            grenade.velocity.0, 0.0,
+            "with its roll scrubbed off rather than skidding for ever"
+        );
+    }
+
+    /// A mine drops where it is thrown; a grenade carries (`Projectile.cs:48354-48366`).
+    ///
+    /// The two are compared rather than measured against a number, because the difference is the
+    /// whole point of the split and a number would only pin this fixture. A mine drags on *both*
+    /// axes from its first tick, in the air as well as on the ground; a grenade keeps every bit of
+    /// its speed until it lands and only then starts scrubbing it off. Throw them identically and
+    /// the grenade ends up much further away.
+    #[test]
+    fn a_proximity_mine_drops_where_a_grenade_carries() {
+        let mut tiles = Air::default();
+        for x in 0..600 {
+            tiles.0.insert((x, 64), Tile::block(1));
+        }
+        let thrown = |kind: u16| {
+            let mut store = ProjectileStore::new();
+            let index = store
+                .launch(kind, (60.0 * TILE, 60.0 * TILE), (8.0, 0.0), 60, 0)
+                .expect("a known type");
+            let mut p = *store.get(index).unwrap();
+            let start = p.position.0;
+            for _ in 0..600 {
+                step(&mut p, &tiles, &mut Vec::new());
+            }
+            (p.position.0 - start, p.velocity.0)
+        };
+        let (mine_travel, mine_speed) = thrown(135);
+        let (grenade_travel, grenade_speed) = thrown(30);
+
+        assert_eq!(mine_speed, 0.0, "a mine comes to a full stop");
+        assert_eq!(grenade_speed, 0.0, "and so, eventually, does a grenade");
+        assert!(
+            grenade_travel > mine_travel * 2.0,
+            "but the grenade should carry far further: {grenade_travel} against {mine_travel}"
+        );
+    }
+
+    /// A present is dropped, not thrown: it holds its rise, tips over, and floats down.
+    ///
+    /// `Projectile.cs:29337-29366`. The two phases matter separately - the first is a half-second
+    /// of whatever upward speed it left with, and the second caps its fall at three - and a present
+    /// that skipped either would be impossible to catch, which is what a Frost Moon present is for.
+    #[test]
+    fn a_present_holds_its_rise_and_then_floats_down() {
+        let tiles = Air::default();
+        let mut present = launched(351, (2.0, -6.0));
+        let top = present.position.1;
+        for _ in 0..30 {
+            step(&mut present, &tiles, &mut Vec::new());
+        }
+        assert!(
+            present.position.1 < top,
+            "it should still be rising after half a second, not at {}",
+            present.position.1 - top
+        );
+        assert!(present.velocity.1 < 0.0, "and still going up");
+
+        for _ in 0..600 {
+            step(&mut present, &tiles, &mut Vec::new());
+        }
+        assert!(
+            present.velocity.1 <= PRESENT_TERMINAL + 0.001,
+            "and never fall faster than three: {}",
+            present.velocity.1
+        );
+        assert!(
+            present.position.1 > top,
+            "having come down again: {}",
+            present.position.1 - top
+        );
+    }
+
+    /// A thrown ale arcs (`Projectile.cs:30655-30677`).
+    #[test]
+    fn a_thrown_ale_falls_after_fifteen_ticks() {
+        let tiles = Air::default();
+        let mut ale = launched(669, (6.0, 0.0));
+        let start = ale.position.1;
+        for _ in 0..14 {
+            step(&mut ale, &tiles, &mut Vec::new());
+        }
+        assert!(
+            (ale.position.1 - start).abs() < 0.001,
+            "flat for fifteen ticks, not {}",
+            ale.position.1 - start
+        );
+        for _ in 0..40 {
+            step(&mut ale, &tiles, &mut Vec::new());
+        }
+        assert!(
+            ale.position.1 > start + 50.0,
+            "and then it falls: {} pixels",
+            ale.position.1 - start
+        );
+    }
+
+    /// A falling star handed over inside a mountain falls out of it rather than dying in it.
+    ///
+    /// `Projectile.cs:24170-24176`: `ai[1]` latches the first tick the star is clear of terrain,
+    /// and only then does it collide. `AI_148_StarSpawner` hands a star over at whatever position
+    /// the spawner reached, which is not guaranteed to be open sky.
+    #[test]
+    fn a_falling_star_passes_through_terrain_until_it_is_clear_of_it() {
+        let mut tiles = Air::default();
+        for x in 50..70 {
+            for y in 50..56 {
+                tiles.0.insert((x, y), Tile::block(1));
+            }
+        }
+        let mut store = ProjectileStore::new();
+        let index = store
+            .launch(12, (60.0 * TILE, 52.0 * TILE), (0.0, 8.0), 1000, 0)
+            .expect("the star is a known type");
+        let mut star = *store.get(index).unwrap();
+        for tick in 0..30 {
+            assert_eq!(
+                step(&mut star, &tiles, &mut Vec::new()),
+                Outcome::Flying,
+                "the star died inside the rock it was handed over in, on tick {tick}"
+            );
+        }
+        assert!(
+            star.position.1 > 56.0 * TILE,
+            "and it should have fallen out of the bottom, not stuck at {}",
+            star.position.1
+        );
+        assert_eq!(star.ai[1], 1.0, "with the latch set once it was clear");
     }
 
     /// Put a boulder at rest at a tile position, the way a Boulder Statue and a broken Boulder
