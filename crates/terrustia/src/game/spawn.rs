@@ -1568,37 +1568,64 @@ pub fn zombie_settings(
 /// `Small`/`Big Female Zombie` are both 200. `tools/check_spawn_reach.py` drops them from
 /// vanilla's roster for exactly that reason, and the roster probe here resolves them the same way.
 ///
-/// **The closing switch's own size swap is reproduced** (`:4811-4814`,
-/// `if (Main.rand.Next(3) == 0) { type8 = ((Main.rand.Next(2) != 0) ? num55 : num54); }`): one
-/// surface-night zombie in three is a small or a big one. It was dropped on the stated grounds
+/// **Every negative arm of this chain is reproduced.** The closing switch's size swap
+/// (`:4811-4814`), the five coloured eyes' twins and the small Demon Eye (`:4569`, `:4581-4610`),
+/// and the rain zombies' two sizes (`:4675-4690`). All of them were dropped on the stated grounds
 /// that "nothing here models NPC scale", which was true until `net_variants.rs` and
-/// `NpcStore::spawn_net_id` existed. The other negative arms - `-38` to `-43` (`NPC.cs:4569`,
-/// `:4581-4610`) and the rain zombies' `-54`/`-55` - are still absent, and are a spawner change
-/// rather than a missing mechanism now.
+/// `NpcStore::spawn_net_id` existed.
 ///
 /// `ground_block` is the tile the spawn stands on, the game's own `spawnTileY` (`NPC.cs:329`), which
 /// is this server's `y + 1`. Only the snow arm reads it.
+/// One draw from a spawn chain: the NPC, and the companion vanilla sometimes puts beside it.
+///
+/// The surface night's coloured-eye arm is the only source of a companion (`NPC.cs:4577-4612`):
+/// each of the five spawns its own smaller net-id twin *in addition to* itself, one draw in three,
+/// with two `SpawnNPC` calls back to back and no `return` between them. A pick that can only
+/// answer with one NPC cannot say that, which is why all five twins were absent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Drawn {
+    pub net_id: NetId,
+    /// Spawned at the same tile, before the draw itself, when vanilla asks for one.
+    pub companion: Option<NetId>,
+}
+
+impl Drawn {
+    const fn one(net_id: NetId) -> Self {
+        Self {
+            net_id,
+            companion: None,
+        }
+    }
+
+    const fn pair(net_id: NetId, companion: NetId) -> Self {
+        Self {
+            net_id,
+            companion: Some(companion),
+        }
+    }
+}
+
 pub fn seasonal_night_pick(
     at: Seasonal,
     zombie: ZombieSettings,
     ground_block: u16,
     luck: f32,
     rng: &mut SmallRng,
-) -> Option<i16> {
+) -> Option<Drawn> {
     let one_in = |rng: &mut SmallRng, n: u32| rng.random_ratio(1, n);
 
     // NPC.cs:4539. The Raven is the season's own bird, and a graveyard has one whether or not it is
     // October.
     if (at.halloween || at.graveyard) && one_in(rng, 12) {
-        return Some(301); // Raven
+        return Some(Drawn::one(301)); // Raven
     }
     // NPC.cs:4544. The Ghost is the graveyard's alone: no calendar produces one.
     if at.graveyard && one_in(rng, 30) {
-        return Some(316); // Ghost
+        return Some(Drawn::one(316)); // Ghost
     }
     // NPC.cs:4549.
     if (at.halloween || at.graveyard) && at.hard_mode && one_in(rng, 10) {
-        return Some(304); // HoppinJack
+        return Some(Drawn::one(304)); // HoppinJack
     }
     // NPC.cs:4554: one attempt in six takes the demon-eye branch, and on the new moon a further one
     // in two of the rest takes it as well, so the darkest night of the eight is roughly three times
@@ -1612,37 +1639,67 @@ pub fn seasonal_night_pick(
         }
         // NPC.cs:4561: `Main.rand.Next(317, 319)`, so 317 or 318.
         if at.halloween && one_in(rng, 2) {
-            return Some(317 + rng.random_range(0..2i16)); // DemonEyeOwl, DemonEyeSpaceship
+            return Some(Drawn::one(317 + rng.random_range(0..2i16))); // DemonEyeOwl, DemonEyeSpaceship
         }
-        // NPC.cs:4566. The plain Demon Eye, which the surface night pool also carries; the same
-        // reasoning as the Wandering Eye above applies, so the roll stands and the draw is left to
-        // the pool.
+        // `NPC.cs:4566-4576`:
+        //
+        // ```csharp
+        // if (Main.rand.Next(2) == 0) {
+        //     if (Main.rand.Next(4) == 0) { SpawnNPC(..., -43); } else { SpawnNPC(..., 2); }
+        //     return;
+        // }
+        // ```
+        //
+        // Half of what is left is the plain Demon Eye - which [`pool`]'s surface night also
+        // carries, so the draw is handed back for it - except one time in four, when it is the
+        // *small* one instead. Net id -43 had no producer at all while this arm could only hand
+        // the draw back or name a positive type.
         if one_in(rng, 2) {
-            return None;
+            return if one_in(rng, 4) {
+                Some(Drawn::one(-43)) // DemonEye2, the small one
+            } else {
+                None
+            };
         }
-        // NPC.cs:4577-4612: the five coloured eyes, one of which is drawn flat.
-        const EYES: [u16; 5] = [
-            190, // CataractEye
-            191, // SleepyEye
-            192, // DialatedEye
-            193, // GreenEye
-            194, // PurpleEye
+        // `NPC.cs:4577-4612`: the five coloured eyes, drawn flat - and each spawns its own smaller
+        // twin *beside* it one draw in three, two `SpawnNPC` calls back to back with no `return`
+        // between them:
+        //
+        // ```csharp
+        // case 0:
+        //     if (Main.rand.Next(3) == 0) { SpawnNPC(..., -38); }
+        //     SpawnNPC(..., 190);
+        //     break;
+        // ```
+        //
+        // All five twins were absent for as long as this could answer with one NPC.
+        const EYES: [(i16, i16); 5] = [
+            (190, -38), // CataractEye
+            (191, -39), // SleepyEye
+            (192, -40), // DialatedEye
+            (193, -41), // GreenEye
+            (194, -42), // PurpleEye
         ];
-        return Some(EYES[rng.random_range(0..EYES.len())] as i16);
+        let (eye, twin) = EYES[rng.random_range(0..EYES.len())];
+        return Some(if one_in(rng, 3) {
+            Drawn::pair(eye, twin)
+        } else {
+            Drawn::one(eye)
+        });
     }
     // NPC.cs:4623 and :4628. `RollOnlyBadLuck(300)` is a plain `Main.rand.Next(300)` at luck zero
     // (`Luck.cs:31-37`), unlike its `Extreme` sibling. The pair are the only wedding a blood moon
     // ever throws, and a graveyard has them on an ordinary night.
     if (at.blood_moon || at.graveyard) && rolls_only_unlucky(luck, 300, rng) {
-        return Some(53); // TheGroom
+        return Some(Drawn::one(53)); // TheGroom
     }
     if (at.blood_moon || at.graveyard) && rolls_only_unlucky(luck, 300, rng) {
-        return Some(536); // TheBride
+        return Some(Drawn::one(536)); // TheBride
     }
     // NPC.cs:4633. The full moon, and note the third condition: this is *two* attempts in three, not
     // every one, and `!Main.dayTime` is explicit here, so a daylit graveyard gets no werewolves.
     if !at.day_time && at.moon_phase == 0 && at.hard_mode && !one_in(rng, 3) {
-        return Some(104); // Werewolf
+        return Some(Drawn::one(104)); // Werewolf
     }
     // NPC.cs:4638, the Possessed Armor, and `:4643`, the Blood Zombie and the Drippler. Both are
     // already carried by [`hardmode_pool`] and [`blood_moon_pool`], so both rolls are made and the
@@ -1673,25 +1730,43 @@ pub fn seasonal_night_pick(
         // flying chain's snow arm), so without this arm both were unreachable. Note `!ZoneGraveyard`
         // on both: a graveyard in the snow gets neither.
         if !at.graveyard && at.hard_mode && one_in(rng, 4) {
-            return Some(169); // IceElemental
+            return Some(Drawn::one(169)); // IceElemental
         }
         if !at.graveyard && at.hard_mode && one_in(rng, 3) {
-            return Some(155); // Wolf
+            return Some(Drawn::one(155)); // Wolf
         }
         // NPC.cs:4665, the expert Armed Zombie Eskimo, which is the arm's third branch and the only
         // place in the whole spawner 431 comes from.
         if zombie.armed && at.expert && one_in(rng, 2) {
-            return Some(431); // ArmedZombieEskimo
+            return Some(Drawn::one(431)); // ArmedZombieEskimo
         }
         // NPC.cs:4671's plain Zombie Eskimo is the arm's fallthrough and is already in [`pool`]'s
         // snow night, so it is handed back rather than answered.
         return None;
     }
-    // NPC.cs:4675, the rain arm. All three of its outcomes are NPC 223 (`-54` and `-55` are the
-    // small and big Rain Zombie, the same type at a different scale), so the inner `Next(3)` and
-    // `Next(2)` collapse away.
+    // `NPC.cs:4675-4690`, the rain arm:
+    //
+    // ```csharp
+    // if (raining && Main.rand.Next(2) == 0) {
+    //     if (Main.rand.Next(3) != 0) { SpawnNPC(..., 223); }
+    //     else if (Main.rand.Next(2) == 0) { SpawnNPC(..., -54); }
+    //     else { SpawnNPC(..., -55); }
+    //     return;
+    // }
+    // ```
+    //
+    // Two draws in three are the plain Rain Zombie and the last is a coin between the small and
+    // the big one. All three resolve to NPC 223, which is why the two inner rolls used to collapse
+    // away here - true of the *type* and not of what a client is told, and the two sizes had no
+    // producer at all until `Npc::net_id` existed.
     if at.raining && one_in(rng, 2) {
-        return Some(223); // ZombieRaincoat
+        return Some(Drawn::one(if !one_in(rng, 3) {
+            223 // ZombieRaincoat
+        } else if one_in(rng, 2) {
+            -54 // SmallRainZombie
+        } else {
+            -55 // BigRainZombie
+        }));
     }
     // NPC.cs:4712, and it answers ahead of the Maggot Zombie below it:
     //
@@ -1709,12 +1784,12 @@ pub fn seasonal_night_pick(
     // was the last of three entries in `docs/spawn-gaps.tsv` and the only one of them that was
     // ever going to move.
     if at.graveyard && rolls_extremely_unlucky_only(luck, 30, rng) {
-        return Some(691); // MossZombie
+        return Some(Drawn::one(691)); // MossZombie
     }
     // NPC.cs:4717: the graveyard's own zombie. `maggotZombieChance` is 20 and nothing in
     // `GetZombieSettings` (`NPC.cs:5595-5619`) ever moves it.
     if at.graveyard && one_in(rng, 20) {
-        return Some(632); // MaggotZombie
+        return Some(Drawn::one(632)); // MaggotZombie
     }
     // NPC.cs:4722, the Torch Zombie, and the only place either it or its armed twin comes from. Its
     // gate is neither a season nor a place: any ordinary night hands one out, and on a server whose
@@ -1722,23 +1797,23 @@ pub fn seasonal_night_pick(
     // one in twelve the bare default would give (see [`zombie_settings`]).
     if one_in(rng, zombie.torch_chance) {
         if zombie.armed && at.expert && one_in(rng, 2) {
-            return Some(591); // ArmedTorchZombie
+            return Some(Drawn::one(591)); // ArmedTorchZombie
         }
-        return Some(590); // TorchZombie
+        return Some(Drawn::one(590)); // TorchZombie
     }
     // NPC.cs:4734: `Main.rand.Next(319, 322)`, so 319, 320 or 321.
     if at.halloween && one_in(rng, 2) {
-        return Some(319 + rng.random_range(0..3)); // ZombieDoctor, ZombieSuperman, ZombiePixie
+        return Some(Drawn::one(319 + rng.random_range(0..3))); // ZombieDoctor, ZombieSuperman, ZombiePixie
     }
     // NPC.cs:4739: `Main.rand.Next(331, 333)`, so 331 or 332.
     if at.xmas && one_in(rng, 2) {
-        return Some(331 + rng.random_range(0..2)); // ZombieXmas, ZombieSweater
+        return Some(Drawn::one(331 + rng.random_range(0..2))); // ZombieXmas, ZombieSweater
     }
     // NPC.cs:4744-4769, the armed zombies. Note which style is missing from the game's own switch:
     // case 1 is excluded by the gate itself (`zombieStyle != 1`), because the Bald Zombie has no
     // armed twin, and cases 0 and 2 to 6 map onto 430 and 432 to 436 in order.
     if zombie.armed && zombie.style != 1 && at.expert && one_in(rng, 3) {
-        return Some(match zombie.style {
+        return Some(Drawn::one(match zombie.style {
             2 => 432, // ArmedZombiePincussion
             3 => 433, // ArmedZombieSlimed
             4 => 434, // ArmedZombieSwamp
@@ -1747,7 +1822,7 @@ pub fn seasonal_night_pick(
             // `short type7 = 430` is the game's own initialiser as well as its case 0, so a style
             // the switch does not name would answer with it there too.
             _ => 430, // ArmedZombie
-        });
+        }));
     }
     // NPC.cs:4771-4816, the chain's fallthrough: the seven plain zombies, one per style, each with
     // its own small and big net-id pair. This is what an ordinary surface night in the game
@@ -1773,7 +1848,7 @@ pub fn seasonal_night_pick(
         // `short type8 = 3` is the initialiser and case 0 both, as above.
         _ => (3, -26, -27), // Zombie
     };
-    Some(if one_in(rng, 3) {
+    Some(Drawn::one(if one_in(rng, 3) {
         if rng.random_range(0..2) != 0 {
             big
         } else {
@@ -1781,7 +1856,7 @@ pub fn seasonal_night_pick(
         }
     } else {
         plain
-    })
+    }))
 }
 
 /// The cavern chain's own seasonal arms, ahead of the ordinary pool: `NPC.cs:5005-5199`.
@@ -6918,7 +6993,7 @@ pub fn try_spawn(
                             Biome::Corruption | Biome::Crimson | Biome::Jungle | Biome::Dungeon
                         );
                     if seasonal_ground
-                        && let Some(npc_type) = seasonal_night_pick(
+                        && let Some(drawn) = seasonal_night_pick(
                             seasonal,
                             zombie,
                             world.tile(x, y + 1).block,
@@ -6926,7 +7001,13 @@ pub fn try_spawn(
                             rng,
                         )
                     {
-                        out.push((npc_type, (x as f32 * 16.0, y as f32 * 16.0)));
+                        let at = (x as f32 * 16.0, y as f32 * 16.0);
+                        // The companion first, which is the order vanilla writes the two
+                        // `SpawnNPC` calls in.
+                        if let Some(companion) = drawn.companion {
+                            out.push((companion, at));
+                        }
+                        out.push((drawn.net_id, at));
                         break;
                     }
                     // The caverns have a chain of their own ahead of their pool, and it is where
@@ -7453,6 +7534,14 @@ mod tests {
                                                             luck,
                                                             &mut rng,
                                                         )
+                                                        .into_iter()
+                                                        .flat_map(|drawn| {
+                                                            // Both halves of a pair are reachable
+                                                            // creatures, so both belong in the
+                                                            // roster.
+                                                            [Some(drawn.net_id), drawn.companion]
+                                                        })
+                                                        .flatten()
                                                         .map(
                                                             terrustia_proto::npc_data::from_net_id,
                                                         ),
@@ -9670,6 +9759,99 @@ mod tests {
         );
     }
 
+    /// A rainy night's zombie comes in three sizes, and two of them are net ids.
+    ///
+    /// `NPC.cs:4675-4690`: two draws in three are the plain Rain Zombie and the last is a coin
+    /// between the small and the big one. All three are NPC 223 underneath, which is why the two
+    /// inner rolls used to collapse away - true of the type and not of what a client is told.
+    #[test]
+    fn a_rainy_night_has_three_sizes_of_zombie() {
+        let at = Seasonal {
+            raining: true,
+            ..Seasonal::default()
+        };
+        let mut rng = SmallRng::seed_from_u64(31);
+        let mut seen: std::collections::BTreeMap<i16, u32> = std::collections::BTreeMap::new();
+        for _ in 0..200_000 {
+            let zombie = zombie_settings(true, 1, &mut rng);
+            let Some(drawn) = seasonal_night_pick(at, zombie, 2, 0.0, &mut rng) else {
+                continue;
+            };
+            if terrustia_proto::npc_data::from_net_id(drawn.net_id) == 223 {
+                *seen.entry(drawn.net_id).or_default() += 1;
+            }
+        }
+        assert_eq!(
+            seen.keys().copied().collect::<Vec<_>>(),
+            vec![-55, -54, 223],
+            "the big one, the small one and the plain one: {seen:?}"
+        );
+        let total: u32 = seen.values().sum();
+        let plain = f64::from(seen[&223]) / f64::from(total);
+        assert!(
+            (0.60..0.73).contains(&plain),
+            "two draws in three are the plain one: {plain:.3}"
+        );
+        // ...and the remaining third splits evenly between the two sizes.
+        let small = f64::from(seen[&-54]);
+        let big = f64::from(seen[&-55]);
+        assert!(
+            (0.8..1.25).contains(&(small / big)),
+            "a coin between them: {small} small against {big} big"
+        );
+    }
+
+    /// The five coloured demon eyes each bring a smaller twin, and the plain one is sometimes the
+    /// small one instead.
+    ///
+    /// `NPC.cs:4577-4612` writes each coloured eye as two `SpawnNPC` calls with no `return`
+    /// between them: `if (Main.rand.Next(3) == 0) { SpawnNPC(-38); } SpawnNPC(190);`. And
+    /// `:4566-4576` picks `-43` over the plain Demon Eye one draw in four. All six net ids were
+    /// absent while this chain could only answer with a single positive type.
+    #[test]
+    fn a_demon_eye_brings_a_twin_and_is_sometimes_the_small_one() {
+        let at = Seasonal::default();
+        let mut rng = SmallRng::seed_from_u64(19);
+        let mut twins = std::collections::BTreeSet::new();
+        let mut small_eyes = 0;
+        let mut paired = 0;
+        let mut coloured = 0;
+        for _ in 0..200_000 {
+            let zombie = zombie_settings(true, 1, &mut rng);
+            let Some(drawn) = seasonal_night_pick(at, zombie, 2, 0.0, &mut rng) else {
+                continue;
+            };
+            if drawn.net_id == -43 {
+                small_eyes += 1;
+            }
+            if (190..=194).contains(&drawn.net_id) {
+                coloured += 1;
+                if let Some(twin) = drawn.companion {
+                    paired += 1;
+                    twins.insert(twin);
+                }
+            } else {
+                assert_eq!(
+                    drawn.companion, None,
+                    "only the coloured eyes bring one: {drawn:?}"
+                );
+            }
+        }
+        assert!(small_eyes > 0, "the small Demon Eye must be reachable");
+        assert_eq!(
+            twins,
+            [-42, -41, -40, -39, -38].into_iter().collect(),
+            "all five twins, and each paired with its own colour"
+        );
+        assert!(coloured > 1_000, "the arm has to have answered: {coloured}");
+        // One coloured draw in three brings a twin.
+        let share = f64::from(paired) / f64::from(coloured);
+        assert!(
+            (0.28..0.39).contains(&share),
+            "one in three brings a twin: {share:.3}"
+        );
+    }
+
     /// One surface-night zombie in three is a size variant of itself.
     ///
     /// `if (Main.rand.Next(3) == 0) { type8 = ((Main.rand.Next(2) != 0) ? num55 : num54); }`
@@ -9688,9 +9870,10 @@ mod tests {
             let mut zombie = zombie_settings(true, 1, &mut rng);
             zombie.style = 0;
             zombie.armed = false;
-            let Some(net_id) = seasonal_night_pick(at, zombie, 2, 0.0, &mut rng) else {
+            let Some(drawn) = seasonal_night_pick(at, zombie, 2, 0.0, &mut rng) else {
                 continue;
             };
+            let net_id = drawn.net_id;
             // The chain has arms above this one - the demon eyes, the seasonal draws - and any
             // of them can answer first. Only the ones that reached the closing switch are the
             // subject here, and a Zombie underneath is exactly what identifies them.
@@ -9742,7 +9925,9 @@ mod tests {
             for _ in 0..200_000 {
                 let zombie = zombie_settings(true, 1, &mut rng);
                 // Tile 2 is grass, which is what the other tests of this chain stand on.
-                if seasonal_night_pick(at, zombie, 2, luck, &mut rng) == Some(MOSS_ZOMBIE as i16) {
+                if seasonal_night_pick(at, zombie, 2, luck, &mut rng).map(|d| d.net_id)
+                    == Some(MOSS_ZOMBIE as i16)
+                {
                     seen += 1;
                 }
             }
@@ -11085,7 +11270,7 @@ mod tests {
             (0..200_000)
                 .filter(|_| {
                     let zombie = zombie_settings(true, 1, &mut rng);
-                    matches!(seasonal_night_pick(at, zombie, 2, 0.0, &mut rng), Some(ty) if (190..=194).contains(&ty))
+                    matches!(seasonal_night_pick(at, zombie, 2, 0.0, &mut rng), Some(d) if (190..=194).contains(&d.net_id))
                 })
                 .count()
         };
@@ -13187,7 +13372,7 @@ mod tests {
                         0.0,
                         &mut rng,
                     )
-                    .unwrap_or(0),
+                    .map_or(0, |d| d.net_id),
                 ));
             }
             let each = start.elapsed().as_secs_f64() / f64::from(n) * 1e9;

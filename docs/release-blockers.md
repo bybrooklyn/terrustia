@@ -273,11 +273,12 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
 - **All 65 negative net ids** were absent from every world this server served, and the Slime Rain
   variants are only the first of them. `net_variants.rs` is the generated table
   (`NPC.SetDefaultsFromNetId`) and `NpcStore::spawn_net_id` applies it; what remains is to route
-  the *other* callers through it. **The largest of those landed the same day**: the surface night's
-  closing switch swaps one zombie in three for a small or a big one (`NPC.cs:4811-4814`), fourteen
-  net ids across the seven zombie styles, and `try_spawn` now carries a net id rather than a type
-  so an arm that picks one can say so. What remains is `-38` to `-43` (`NPC.cs:4569`, `:4581-4610`)
-  and the rain zombies' `-54`/`-55`, each a spawner change rather than a missing mechanism.
+  the *other* callers through it, **and the surface night's are all done**: the closing switch's
+  size swap for the seven zombie styles (`NPC.cs:4811-4814`, fourteen ids), the five coloured eyes'
+  twins and the small Demon Eye (`:4569`, `:4581-4610`, six more), and the rain zombies' two sizes
+  (`:4675-4690`). `try_spawn` carries a net id rather than a type so an arm that picks one can say
+  so, and `Drawn` carries the *companion* vanilla sometimes spawns beside a draw, which is what the
+  coloured eyes need: two `SpawnNPC` calls with no `return` between them.
 - ~~**Lantern Night's** manual-forcing toggle is unmodeled.~~ **This entry was wrong**, and the
   code it pointed at said so at the time. `LanternNight.ToggleManualLanterns` is defined in
   `Terraria.GameContent.Events/LanternNight.cs:107` and called from **nowhere in the entire
