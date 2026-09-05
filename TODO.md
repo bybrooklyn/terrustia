@@ -776,14 +776,22 @@ only the *deepest single* connection in a window, so it under-reports the total:
 just under the 1,052,672 ceiling for many consecutive windows, and one connection's backlog alone
 does not account for 1536 MiB, because run 4 held 800,668 frames on its deepest connection at a peak
 of 206 MiB. The backlog was spread across many connections at once. 255 slots times 1,052,672 frames
-is a theoretical ceiling in the tens of gigabytes, and nothing bounds the sum.
+is a theoretical ceiling in the tens of gigabytes, and nothing bounded the sum.
 
 `connection.rs` picked 4,096 per player to stop drops, which is the right trade for the retention
-clause and the wrong one for the memory clause, and the two have never been measured against each
+clause and the wrong one for the memory clause, and the two had never been measured against each
 other. Which way a run falls tracks how contended the box is: peak RSS ran 1536, 600, 206 and 169 MiB
 against external-stall counts of 35, 10, 1 and 3, and `vm.swapusage` sat at 1.7 to 1.8 GiB of 3 GiB
 throughout. Qualifying the memory clause honestly needs a box that is not already paging; run 4 is
 the closest this one got.
+
+**Resolved 2026-09-05 by bounding the sum rather than the depth.** The tension above is real only
+while the two clauses are made to trade against the same number. They are not the same number: the
+retention clause wants a *deep* queue for one connection over a transient, and the memory clause
+wants a *small total* across all of them. `QueuedBytes` counts both, per connection and server-wide,
+and past `OUTBOUND_TOTAL_BUDGET` (256 MiB) the server sheds the deepest queue - so 4,096 stays and
+the tens-of-gigabytes ceiling becomes a quarter of a gigabyte. The soak has not been re-run since,
+so the clause is bounded rather than measured; `docs/release-blockers.md` records it that way.
 
 **The extended multi-hour boss soak is waived for v0.0.1** and carried to the next release. Its
 distinct value over the thirty-minute run is leak detection over a long horizon, and the shorter run

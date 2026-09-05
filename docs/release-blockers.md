@@ -28,7 +28,7 @@ followed throughout is: a status word in a document is not evidence. Only code a
 | Zero unknown protocol IDs | MET | `docs/packet-ids.tsv` has no `unknown` row and no row that is `none`/`none` |
 | Fuzzing green | MET | `fuzz/artifacts/` is empty; both targets run per-push in CI |
 | p99 tick under the 16.67 ms budget at 255 players | MET | `TODO.md`'s soak table, four runs, with a neutralised control run proving the `BiomeCache` cap is what holds it |
-| **Peak RSS under 1 GiB at 255 players** | **UNMET** | Same table: run 2 reached 1536 MiB. One run of four passed cleanly. See "The memory ceiling" below |
+| **Peak RSS under 1 GiB at 255 players** | **BOUNDED 2026-09-05, NOT RE-MEASURED** | Run 2 reached 1536 MiB because nothing bounded the sum of the outbound queues. A 256 MiB server-wide budget now does. The soak has not been re-run since. See "The memory ceiling" below |
 | Differential against a real `TerrariaServer` | RUN 2026-09-05, passed on what it covers | 66,542 bytes of Re-Logic's own output re-framed with nothing left over; every id with an encoder re-encoded byte-identically, including all 15 `TileSection` frames. Coverage is partial by construction; see "The differential" below |
 | Test suite on every release platform | MET, 2026-09-05 | The three host-native matrix entries now run the suite for real. Closing it cost four bug fixes; see "What running the tests on Windows found" below |
 | Human fresh-world Moon Lord playthrough | NOT RUN | Waivable by `TODO.md`'s own wording, but only "if the automated and differential evidence is otherwise complete", and the two rows above say it is not |
@@ -66,18 +66,29 @@ real `CTRL_BREAK_EVENT`.
 
 ## The memory ceiling
 
-The clause is "peak server RSS under 1 GiB at 255 players". It is not met, and the reason is structural
-rather than a tuning miss.
+The clause is "peak server RSS under 1 GiB at 255 players". The cause of the failure was structural
+rather than a tuning miss, and the structure has since been changed.
 
 `net::connection` gives every player an outbound queue of 4,096 frames, chosen to stop drops and right
-for the retention clause. `queue_peak` reports only the deepest single connection, so it under-reports
-the total: 255 slots times 1,052,672 frames is a ceiling in the tens of gigabytes, and **nothing bounds
-the sum**. Which side of the ceiling a run lands on tracks how contended the machine is, not how the
-server behaves: peak RSS ran 1536, 600, 206 and 169 MiB against external-stall counts of 35, 10, 1 and 3.
+for the retention clause. `queue_peak` reports only the deepest single connection, so it under-reported
+the total: 255 slots times 1,052,672 frames is a ceiling in the tens of gigabytes, and nothing bounded
+the sum. Which side of the ceiling a run landed on tracked how contended the machine was, not how the
+server behaved: peak RSS ran 1536, 600, 206 and 169 MiB against external-stall counts of 35, 10, 1 and 3.
+Run 2's 1536 MiB was backlog spread across many connections rather than piled on one, which is exactly
+the shape the per-connection reading cannot see.
 
-That is a design decision nobody has taken yet, not a bug to fix. The options are a global byte budget
-across all queues, a smaller per-connection queue traded against the retention clause, or an explicit
-shedding policy. `TODO.md` states the tension honestly; what it does not have is a decision.
+**The decision taken (2026-09-05): bound the sum, keep the depth.** `OUTBOUND_PER_PLAYER` stays at
+4,096 because its own comment records what it buys - a transient backlog behind a descheduled game
+loop drains again afterwards, and a shallower queue turns that recoverable case into dropped players.
+`QueuedBytes` charges every queued frame to a per-connection counter and to one shared by the whole
+listener; past `OUTBOUND_TOTAL_BUDGET` (256 MiB, a quarter of the ceiling) the server sheds whichever
+connection is holding the most, which is the same answer `send_bytes` already gave a single connection
+whose own queue filled. Depth covers the transient, the budget covers the aggregate.
+
+**What this does and does not claim.** It makes the queues a bounded contributor to RSS, which is the
+one term that could reach the tens of gigabytes. It does not re-measure the gate: the soak wants a
+quiet machine and has not been re-run since. Until it is, the honest statement is that the unbounded
+term is bounded, not that the clause is met.
 
 ## The differential
 
