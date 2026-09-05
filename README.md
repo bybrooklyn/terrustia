@@ -270,6 +270,7 @@ Traps World, is done). Both are v0.0.2 scope.
 | ✅ | All 20 bosses | Multi-phase, including Moon Lord's opening sequence and the cultist's tablet ritual |
 | ✅ | Both moons, all four invasions, Old One's Army with Betsy, eclipse with Mothron | |
 | ✅ | Rain, wind, sandstorms | |
+| ✅ | Falling stars and money rain | The two arms of `SpawnFallingObjects` whose inputs this server has. Stars fall all night at a rate the dusk `starfallBoost` sets, one in fifteen aimed near a player on the surface, and land as Fallen Stars: without them there was no way to build a Mana Crystal, because the item did not exist in any world. One shower in twenty-five rains money, announced as vanilla announces it, spending a purse of 75 to 150 gold by coin *value* so it ends on its own |
 | ✅ | Town NPC arrival and housing | Including the in-game housing screen |
 | ✅ | Town NPC shops | Opening and using a shop is entirely client-side in vanilla. The one thing the server owns, packet 40, was already correct, and a test proves it, relayed to other players |
 | ✅ | **Town NPCs fighting back** | All 28 real vanilla combat-capable town NPCs, across every attack class, target and damage nearby hostiles, verified end to end over a real socket including the shot landing |

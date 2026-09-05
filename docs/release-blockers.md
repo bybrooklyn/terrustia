@@ -179,8 +179,16 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
 
 - Player **luck** is modeled nowhere (`crates/terrustia/src/game/spawn.rs:400`), so no luck item ever
   changes a spawn rate or a drop rarity.
-- **Fallen Stars** and the surface fairy mechanic are unmodeled
-  (`crates/terrustia/src/game/server/mod.rs:1258-1265`, `systems.rs:5150-5154`).
+- ~~**Fallen Stars** and the surface fairy mechanic are unmodeled.~~ **Fallen Stars fixed
+  2026-09-05**: `systems::spawn_falling_objects` is `WorldGen.cs:72398-72434`, and the two-projectile
+  handover and the item drop are `Projectile.cs:54028-54061` and `:79348`. This one was worse than
+  its "not a defect" heading admitted: the whole pre-hardmode mana ladder had no first rung, because
+  a Mana Crystal is made from Fallen Stars and no Fallen Star existed anywhere in any world this
+  server served. The **surface fairy** mechanic is still unmodeled.
+- ~~**Money rain** is unmodeled.~~ **Fixed 2026-09-05**, and it was never on this list: one shower
+  in twenty-five is a money rain in vanilla (`Main.cs:65638-65652`) and nothing here set
+  `Main.coinRain`, so `SpawnFallingObjects`' coin arm had no input. 75 to 150 gold scaled by world
+  width is not a cosmetic omission.
 - **Moon Lord's** hand brand-then-blob mechanic and its true countdown timer are unmodeled
   (`crates/terrustia/src/game/ai/boss/moon_lord.rs:299,505`).
 - ~~Old One's Army has no client-visible progress bar.~~ **Fixed 2026-09-05**: it rides packet 78
