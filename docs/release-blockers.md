@@ -216,7 +216,13 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   handover and the item drop are `Projectile.cs:54028-54061` and `:79348`. This one was worse than
   its "not a defect" heading admitted: the whole pre-hardmode mana ladder had no first rung, because
   a Mana Crystal is made from Fallen Stars and no Fallen Star existed anywhere in any world this
-  server served. The **surface fairy** mechanic is still unmodeled.
+  server served.
+  **The "surface fairy" half of this entry was wrong.** Vanilla has exactly one fairy spawn arm,
+  `CheckToSpawnUndergroundFairy` (`NPC.cs:3616`, `:5820-5842`), and this server models it; there is
+  no surface one to be missing. What *was* missing is that arm's `tenthAnniversaryWorld` half, which
+  halves the base chance to 250 and biases three draws in four to the pink fairy - dropped with the
+  note "no flag plumbed through `EventSpawns`", and wired 2026-09-05 along with `Star.NightSetup`'s
+  own two anniversary constants.
 - ~~**Money rain** is unmodeled.~~ **Fixed 2026-09-05**, and it was never on this list: one shower
   in twenty-five is a money rain in vanilla (`Main.cs:65638-65652`) and nothing here set
   `Main.coinRain`, so `SpawnFallingObjects`' coin arm had no input. 75 to 150 gold scaled by world
@@ -272,7 +278,14 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   net ids across the seven zombie styles, and `try_spawn` now carries a net id rather than a type
   so an arm that picks one can say so. What remains is `-38` to `-43` (`NPC.cs:4569`, `:4581-4610`)
   and the rain zombies' `-54`/`-55`, each a spawner change rather than a missing mechanism.
-- **Lantern Night's** manual-forcing toggle is unmodeled (`crates/terrustia/src/game/lantern_night.rs:43`).
+- ~~**Lantern Night's** manual-forcing toggle is unmodeled.~~ **This entry was wrong**, and the
+  code it pointed at said so at the time. `LanternNight.ToggleManualLanterns` is defined in
+  `Terraria.GameContent.Events/LanternNight.cs:107` and called from **nowhere in the entire
+  decompiled tree** - re-checked 2026-09-05, one definition and no caller - so there is nothing a
+  player can do to reach it in the real game either. `lantern_night.rs` carries the `manual` field
+  and the method anyway, so `is_up()` matches `LanternsUp`'s own `genuine ? true : manual`, and
+  nothing calls it here for the same reason nothing calls it there. Listing it as a gap made this
+  file's own count of player-visible gaps one too high.
 
 ## Structural
 

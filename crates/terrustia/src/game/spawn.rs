@@ -3882,19 +3882,22 @@ const FAIRY_CHANCE: u32 = 500;
 /// Hardmode makes a fairy *rarer*, not commoner: `(int)(500f * 1.66f)` is exactly 830 at `f32`
 /// (the product rounds to 830.0 rather than to 829.99998, so the truncation costs nothing).
 ///
-/// `Main.tenthAnniversaryWorld` is real state in this server (`world.secret_seeds.tenth_anniversary`,
-/// already read by the Big Mimic AI) but the spawner has no such flag on `EventSpawns` to read it
-/// through, so the 250 arm drops and the base is always 500 until one is plumbed here. `RollLuck(num)`
-/// is `Main.rand.Next(num)` at luck zero (`Luck.cs:5-16`), the narrowing every other `Roll*Luck` site
-/// in this file already makes.
+/// `Main.tenthAnniversaryWorld && !Main.getGoodWorld` halves the base to 250, and the hardmode
+/// multiplier applies *after* it - so an anniversary hardmode world is 415 rather than 500. The
+/// flag reaches here through [`EventSpawns::tenth_anniversary`], which is where the note that used
+/// to stand in its place asked for one.
 ///
 /// `any_helpful_fairies` is `NPC.AnyHelpfulFairies()` (`NPC.cs:90954-90964`): a live 583, 584 or
 /// 585 whose `ai[2] > 1f`, which is every state past the two drifting ones (`game::ai::fairy`'s own
 /// `state` module). It is passed as a closure and asked last, so a declined roll never walks the
 /// NPC table.
+// Eight, one over the lint's line, and every one is a flag `CheckToSpawnUndergroundFairy` reads:
+// the same allow the long pick routines in this file already carry.
+#[allow(clippy::too_many_arguments)]
 fn underground_fairy(
     world: &World,
     fairy_log: bool,
+    tenth_anniversary: bool,
     hard_mode: bool,
     ground_y: i32,
     any_helpful_fairies: &dyn Fn() -> bool,
@@ -3904,11 +3907,17 @@ fn underground_fairy(
     if !fairy_log {
         return false;
     }
-    let chance = if hard_mode {
-        (FAIRY_CHANCE as f32 * 1.66) as u32
+    // `int num = 500; if (tenthAnniversaryWorld && !getGoodWorld) num = 250;` and only then the
+    // hardmode multiplier, which is the order that makes an anniversary hardmode world 415 rather
+    // than 500.
+    let mut chance = if tenth_anniversary {
+        FAIRY_CHANCE / 2
     } else {
         FAIRY_CHANCE
     };
+    if hard_mode {
+        chance = (chance as f32 * 1.66) as u32;
+    }
     if !rolls_lucky(luck, chance, rng) {
         return false;
     }
@@ -5271,6 +5280,14 @@ pub struct EventSpawns<'a> {
     /// per candidate tile, so a per-tile scan of the whole overworld would be paying a million tile
     /// reads for an answer that changes at most once a night.
     pub fairy_log: bool,
+    /// `Main.tenthAnniversaryWorld && !Main.getGoodWorld`, pre-combined because every one of the
+    /// three arms that reads it reads exactly that pair: the underground fairy's own base chance
+    /// (`NPC.cs:5827-5830`), which colour of fairy arrives (`:3619-3622`), and `Star.NightSetup`'s
+    /// two constants (`Star.cs:46-50`).
+    ///
+    /// Real world state (`world.secret_seeds.tenth_anniversary`) that the spawner had no way to
+    /// reach, which is why all three arms were dropped with the same note.
+    pub tenth_anniversary: bool,
     /// Whether the wall has fallen, which is what opens the hardmode half of every pool.
     pub hard_mode: bool,
     /// ...and whether a mechanical boss is down, which is what opens the underworld's.
@@ -6330,11 +6347,9 @@ pub fn try_spawn(
                 // }
                 // ```
                 //
-                // The three colours are drawn flat and mean nothing: `Main.rand.Next(583, 586)` is
-                // the whole of it, and a fairy's behaviour does not read its own type anywhere. The
-                // tenth-anniversary arm drops for the same reason [`underground_fairy`]'s own doc
-                // gives: real state (`world.secret_seeds.tenth_anniversary`), no flag plumbed
-                // through `EventSpawns` to read it.
+                // The three colours are drawn flat and mean nothing on their own: a fairy's
+                // behaviour does not read its own type anywhere. The anniversary arm biases three
+                // draws in four to the pink one, which is the whole of what it does.
                 //
                 // `ai2 = 2f` is the fairy's `state::APPROACH` (`game::ai::fairy`), so one arrives
                 // already coming for the player rather than drifting where it appeared, which is
@@ -6353,6 +6368,7 @@ pub fn try_spawn(
                     underground_fairy(
                         world,
                         events.fairy_log,
+                        events.tenth_anniversary,
                         events.hard_mode,
                         y + 1,
                         &busy,
@@ -6361,7 +6377,15 @@ pub fn try_spawn(
                     )
                 } =>
                 {
-                    FAIRY_CRITTER_PINK + rng.random_range(0..3u16)
+                    // `int type3 = Main.rand.Next(583, 586); if (tenthAnniversary && !getGood &&
+                    // Main.rand.Next(4) != 0) { type3 = 583; }` - the draw is made either way, so
+                    // the bias costs the same rng either way too.
+                    let colour = FAIRY_CRITTER_PINK + rng.random_range(0..3u16);
+                    if events.tenth_anniversary && rng.random_range(0..4) != 0 {
+                        FAIRY_CRITTER_PINK
+                    } else {
+                        colour
+                    }
                 }
                 // The other two Gnomes, both sitting immediately above the Glowing Mushroom arm in
                 // vanilla's own chain (`NPC.cs:3625` and `:3629`) and therefore immediately above it
@@ -7368,7 +7392,7 @@ mod tests {
         // surface at 200 and its rock layer at 300, so the gate's window is row 250 (their halfway
         // line) up to row 299 (`height - 300`, exclusive), and 275 sits inside it.
         for _ in 0..20_000 {
-            if underground_fairy(&burrow, true, false, 275, &|| false, 0.0, &mut rng) {
+            if underground_fairy(&burrow, true, false, false, 275, &|| false, 0.0, &mut rng) {
                 for colour in 0..3u16 {
                     set.insert(FAIRY_CRITTER_PINK + colour);
                 }
@@ -7810,6 +7834,7 @@ mod tests {
             party: false,
             starfall_night: false,
             fairy_log: false,
+            tenth_anniversary: false,
             downed_plantera: false,
             downed_all_mechs: false,
             boss_cap: false,
@@ -9607,6 +9632,44 @@ mod tests {
         );
     }
 
+    /// An anniversary world halves the underground fairy's base chance and biases three draws in
+    /// four to the pink one (`NPC.cs:5827-5830`, `:3619-3622`). Both arms were dropped with the
+    /// same note - real world state, no flag on `EventSpawns` to read it through - and both are
+    /// wired now.
+    #[test]
+    fn an_anniversary_world_has_more_fairies_and_mostly_pink_ones() {
+        let mut cave = World::empty(1000, 800, "fairy anniversary");
+        let halfway = (i32::from(cave.surface) + i32::from(cave.rock_layer)) / 2;
+        let ground_y = halfway + 20;
+        for x in 0..1000 {
+            cave.set_tile(x, ground_y + 1, terrustia_proto::tile::Tile::block(1));
+        }
+        let rate = |anniversary: bool| {
+            let mut rng = SmallRng::seed_from_u64(5);
+            (0..200_000)
+                .filter(|_| {
+                    underground_fairy(
+                        &cave,
+                        true,
+                        anniversary,
+                        false,
+                        ground_y,
+                        &|| false,
+                        0.0,
+                        &mut rng,
+                    )
+                })
+                .count()
+        };
+        let ordinary = rate(false);
+        let anniversary = rate(true);
+        assert!(ordinary > 0, "the ordinary world must produce some");
+        assert!(
+            anniversary > ordinary * 3 / 2,
+            "halving 500 to 250 roughly doubles them: {anniversary} against {ordinary}"
+        );
+    }
+
     /// One surface-night zombie in three is a size variant of itself.
     ///
     /// `if (Main.rand.Next(3) == 0) { type8 = ((Main.rand.Next(2) != 0) ? num55 : num54); }`
@@ -9930,7 +9993,16 @@ mod tests {
         let window = |ground_y: i32| {
             (0..40_000u64).any(|seed| {
                 let mut rng = SmallRng::seed_from_u64(seed);
-                underground_fairy(&cave, true, false, ground_y, &|| false, 0.0, &mut rng)
+                underground_fairy(
+                    &cave,
+                    true,
+                    false,
+                    false,
+                    ground_y,
+                    &|| false,
+                    0.0,
+                    &mut rng,
+                )
             })
         };
         assert!(
@@ -9948,7 +10020,7 @@ mod tests {
         assert!(
             !(0..40_000u64).any(|seed| {
                 let mut rng = SmallRng::seed_from_u64(seed);
-                underground_fairy(&cave, true, false, 200, &|| true, 0.0, &mut rng)
+                underground_fairy(&cave, true, false, false, 200, &|| true, 0.0, &mut rng)
             }),
             "a second fairy while one was already leading somebody"
         );
@@ -9959,7 +10031,7 @@ mod tests {
             (0..500_000u64)
                 .filter(|seed| {
                     let mut rng = SmallRng::seed_from_u64(*seed);
-                    underground_fairy(&cave, true, hard_mode, 200, &|| false, 0.0, &mut rng)
+                    underground_fairy(&cave, true, false, hard_mode, 200, &|| false, 0.0, &mut rng)
                 })
                 .count()
         };
@@ -13886,6 +13958,7 @@ mod tests {
                 sink += u32::from(underground_fairy(
                     std::hint::black_box(&world),
                     std::hint::black_box(fairy_log),
+                    std::hint::black_box(false),
                     std::hint::black_box(false),
                     std::hint::black_box(200 + i % 4),
                     &|| false,

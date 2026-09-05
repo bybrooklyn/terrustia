@@ -5754,8 +5754,8 @@ impl GameServer {
     ///
     /// Only the first branch can clear the `> 3f` the Enchanted Nightcrawler's spawn asks for, and
     /// only where it rolled 301 or above (`300 * 0.01f` is exactly 3 and does not), so a
-    /// meteor-shower night is a shade under one in ten. `Main.tenthAnniversaryWorld` is not
-    /// modelled anywhere in this server, so the ordinary 10 and 3 are the whole of the two rolls.
+    /// meteor-shower night is a shade under one in ten - or one in five in an anniversary world,
+    /// where `Main.tenthAnniversaryWorld` halves both denominators (`Star.cs:46-50`).
     ///
     /// **The second branch is drawn now, where it used to be skipped.** It tops out at 1.5 and so
     /// can never make a meteor-shower night, and the old comment here said its result "feeds only
@@ -5768,9 +5768,16 @@ impl GameServer {
     /// asks how much of one it is.
     fn roll_starfall_boost(&mut self) {
         use rand::Rng;
-        self.starfall_boost = if self.rng.random_range(0..10) == 0 {
+        // `int maxValue = 10; int maxValue2 = 3; if (Main.tenthAnniversaryWorld) { maxValue = 5;
+        // maxValue2 = 2; }` - unlike the fairy's own arm, this one has no `!getGoodWorld` half.
+        let (shower, modest) = if self.world.secret_seeds.tenth_anniversary {
+            (5, 2)
+        } else {
+            (10, 3)
+        };
+        self.starfall_boost = if self.rng.random_range(0..shower) == 0 {
             self.rng.random_range(300..501) as f32 * 0.01
-        } else if self.rng.random_range(0..3) == 0 {
+        } else if self.rng.random_range(0..modest) == 0 {
             self.rng.random_range(100..151) as f32 * 0.01
         } else {
             1.0
@@ -7666,6 +7673,8 @@ impl GameServer {
                 && self.weather.cloud_bg_active == 0.0,
             // `NPC.Spawner.fairyLog`, kept by `scan_for_fallen_logs` at load and at every dusk.
             fairy_log: self.fairy_log,
+            tenth_anniversary: self.world.secret_seeds.tenth_anniversary
+                && !self.world.secret_seeds.get_good,
             downed_plantera: progress.downed_plantera,
             hard_mode: progress.hard_mode,
             downed_mech_any: progress.downed_mech_any,
@@ -13884,6 +13893,36 @@ mod falling_stars {
                 .iter()
                 .any(|(_, item)| item.item.id == FALLEN_STAR),
             "only a natural star drops one"
+        );
+    }
+
+    /// An anniversary world halves both of `Star.NightSetup`'s denominators (`Star.cs:46-50`), so
+    /// a meteor-shower night is one in five rather than one in ten. Its own `getGoodWorld` half
+    /// is absent from *this* arm, unlike the fairy's - checked rather than assumed from the
+    /// neighbouring one.
+    #[test]
+    fn an_anniversary_world_has_twice_as_many_meteor_showers() {
+        let showers = |anniversary: bool| {
+            let mut server = night_server();
+            server.world.secret_seeds.tenth_anniversary = anniversary;
+            let mut count = 0;
+            for _ in 0..20_000 {
+                server.roll_starfall_boost();
+                if server.starfall_boost > 3.0 {
+                    count += 1;
+                }
+            }
+            count
+        };
+        let ordinary = showers(false);
+        let anniversary = showers(true);
+        assert!(
+            (1_500..2_500).contains(&ordinary),
+            "one night in ten: {ordinary} of 20000"
+        );
+        assert!(
+            (3_200..4_800).contains(&anniversary),
+            "and one in five on the anniversary: {anniversary} of 20000"
         );
     }
 
