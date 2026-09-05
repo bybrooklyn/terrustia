@@ -59,9 +59,45 @@ pub struct TownCombat {
     pub kind: AttackKind,
     /// How far a hostile has to be before this NPC notices it, from `NPCID.Sets.DangerDetectRange`.
     pub range: f32,
-    /// Ticks between attacks. Approximates vanilla's `AttackTime[type]` windup plus an
-    /// `AttackAverageChance[type]`-driven random gate as one flat number, per the module doc.
-    pub cooldown: i32,
+    /// `NPCID.Sets.AttackAverageChance[type]`: the denominator of vanilla's own per-tick gate on
+    /// starting an attack, `Main.rand.Next(AttackAverageChance[type]) == 0` (`NPC.cs:56012`).
+    ///
+    /// A real geometric roll rather than the flat cooldown this used to carry. The module doc said
+    /// this project had "no equivalent scheduling primitive" for it, which was never true: the
+    /// routine is handed an rng. The flat number was also wrong for the Dye Trader, whose gate is
+    /// `1` - it swings on every tick it can - and was modelled at a nine-tick gap.
+    pub average_chance: i32,
+    /// Which frames *within* the attack state a shot leaves on, in order — vanilla's `localAI[3]`
+    /// marks (`NPC.cs:55049`, `:55372`, and the state-14 sibling), read straight off source.
+    ///
+    /// A shot does not leave on the tick the decision is made. The NPC enters the state, slows to
+    /// a stop (`velocity.X *= 0.8f`), and the projectile leaves `windup` frames later; that gap is
+    /// the whole telegraph, and it was the largest of the module's standing narrowings.
+    ///
+    /// Several types fire *more than once* per state, through a cascade of
+    /// `if (localAI[3] > numNN) { numNN = <next>; }` steps. Because `localAI[3]` is read before its
+    /// own increment and the shot fires on `localAI[3] == numNN` after it, each rung is one shot:
+    /// the marks are exactly the assigned values, in order. The Pirate's six is the longest, and
+    /// its absence was called out by name in the module doc.
+    ///
+    /// Melee has none: vanilla's state 15 has no `localAI[3]` gate at all and swings against
+    /// whatever is in the box every tick of the state.
+    pub shots: &'static [i32],
+    /// `NPCID.Sets.AttackTime[type]`: how long the attack state itself lasts, which is the real
+    /// floor on how often this NPC can attack. It cannot re-roll until the state ends.
+    pub attack_time: i32,
+}
+
+/// The hardmode-only rungs, for the three types whose burst is behind `if (Main.hardMode)`
+/// (`NPC.cs:55129`, `:55190`): the Arms Dealer, the Cyborg, and nobody else. Everything else's
+/// ladder is unconditional, including the Pirate's - checked one block at a time rather than
+/// assumed from the pattern the first two set.
+pub fn hardmode_shots(npc_type: u16) -> Option<&'static [i32]> {
+    Some(match npc_type {
+        19 => &[1, 10, 20, 30],
+        227 => &[1, 12, 24],
+        _ => return None,
+    })
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -98,7 +134,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 7.0,
             },
             range: 300.0,
-            cooldown: 74,
+            average_chance: 40,
+            shots: &[10],
+            attack_time: 34,
         },
         // Bestiary Girl. NPC.cs state-10 block, `type == 633`: projectile 880, damage 15, speed 24,
         // knockback 7 (the "lycantrope" full-moon variant, projectile 929 with 1.5x damage, is not
@@ -114,7 +152,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 7.0,
             },
             range: 100.0,
-            cooldown: 13,
+            average_chance: 1,
+            shots: &[1],
+            attack_time: 12,
         },
         // DD2 Bartender (Tavernkeep). NPC.cs state-10 block, `type == 550`: projectile 669, damage
         // 24, speed 6, knockback 9. AttackTime[550]=34, AttackAverageChance[550]=40,
@@ -128,7 +168,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 9.0,
             },
             range: 120.0,
-            cooldown: 74,
+            average_chance: 40,
+            shots: &[10],
+            attack_time: 34,
         },
         // Golfer. NPC.cs state-10 block, `type == 588`: projectile 721, damage 15, speed 8,
         // knockback 9. AttackTime[588]=20, AttackAverageChance[588]=20,
@@ -142,7 +184,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 9.0,
             },
             range: 120.0,
-            cooldown: 40,
+            average_chance: 20,
+            shots: &[5],
+            attack_time: 20,
         },
         // Party Girl. NPC.cs state-10 block, `type == 208`: projectile 588, damage 30, speed 6,
         // knockback 6. AttackTime[208]=34, AttackAverageChance[208]=50,
@@ -156,7 +200,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 6.0,
             },
             range: 400.0,
-            cooldown: 84,
+            average_chance: 50,
+            shots: &[10],
+            attack_time: 34,
         },
         // Merchant. NPC.cs:54969-54977: projectile 48, speed 9, damage 12, knockback 1.5.
         // AttackTime[17]=34, AttackAverageChance[17]=30, DangerDetectRange[17]=320
@@ -171,7 +217,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 1.5,
             },
             range: 320.0,
-            cooldown: 64,
+            average_chance: 30,
+            shots: &[10],
+            attack_time: 34,
         },
         // Angler. NPC.cs state-10 block, `type == 369`: projectile 520, damage 10, speed 12,
         // knockback 3. AttackTime[369]=34, AttackAverageChance[369]=50,
@@ -185,7 +233,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 3.0,
             },
             range: 300.0,
-            cooldown: 84,
+            average_chance: 50,
+            shots: &[10],
+            attack_time: 34,
         },
         // Skeleton Merchant. NPC.cs state-10 block, `type == 453`: projectile 21, damage 14, speed
         // 14, knockback 3. AttackTime[453]=34, AttackAverageChance[453]=30,
@@ -199,7 +249,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 3.0,
             },
             range: 300.0,
-            cooldown: 64,
+            average_chance: 30,
+            shots: &[10],
+            attack_time: 34,
         },
         // Goblin Tinkerer. NPC.cs state-10 block, `type == 107`: projectile 24, damage 15, speed 5,
         // knockback 1. AttackTime[107]=60, AttackAverageChance[107]=60,
@@ -213,7 +265,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 1.0,
             },
             range: 300.0,
-            cooldown: 120,
+            average_chance: 60,
+            shots: &[10],
+            attack_time: 60,
         },
         // Mechanic. NPC.cs state-10 block, `type == 124`: projectile 582, damage 11, speed 10,
         // knockback 3.5. AttackTime[124]=34, AttackAverageChance[124]=30,
@@ -227,7 +281,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 3.5,
             },
             range: 800.0,
-            cooldown: 64,
+            average_chance: 30,
+            shots: &[1],
+            attack_time: 34,
         },
         // Nurse. NPC.cs state-10 block, `type == 18`: projectile 583, damage 8, speed 8, knockback
         // 2. AttackTime[18]=34, AttackAverageChance[18]=60, DangerDetectRange[18]=300.
@@ -240,7 +296,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 2.0,
             },
             range: 300.0,
-            cooldown: 94,
+            average_chance: 60,
+            shots: &[1],
+            attack_time: 34,
         },
         // Santa Claus. NPC.cs state-10 block, `type == 142`: projectile 589, damage 22, speed 7,
         // knockback 2. AttackTime[142]=34, AttackAverageChance[142]=50,
@@ -254,7 +312,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 2.0,
             },
             range: 500.0,
-            cooldown: 84,
+            average_chance: 50,
+            shots: &[1],
+            attack_time: 34,
         },
 
         // ---- AttackType 1, state 12: ranged, aimed at the target's centre ----
@@ -269,7 +329,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 3.0,
             },
             range: 900.0,
-            cooldown: 70,
+            average_chance: 30,
+            shots: &[1],
+            attack_time: 40,
         },
         // Painter. NPC.cs state-12 block, `type == 227`, non-hardmode: projectile 587, damage 8,
         // speed 10, knockback 1.75. AttackTime[227]=60, AttackAverageChance[227]=30,
@@ -283,7 +345,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 1.75,
             },
             range: 800.0,
-            cooldown: 90,
+            average_chance: 30,
+            shots: &[1],
+            attack_time: 60,
         },
         // Travelling Merchant. NPC.cs state-12 block, `type == 368`, non-hardmode: projectile 14,
         // damage 24, speed 13, knockback 2. AttackTime[368]=60, AttackAverageChance[368]=40,
@@ -297,7 +361,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 2.0,
             },
             range: 900.0,
-            cooldown: 100,
+            average_chance: 40,
+            shots: &[1],
+            attack_time: 60,
         },
         // Guide. NPC.cs state-12 block, `type == 22`, non-hardmode: projectile 1, damage 12, speed
         // 10, knockback 2.75. AttackTime[22]=30, AttackAverageChance[22]=30,
@@ -311,7 +377,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 2.75,
             },
             range: 700.0,
-            cooldown: 60,
+            average_chance: 30,
+            shots: &[1],
+            attack_time: 30,
         },
         // Witch Doctor. NPC.cs state-12 block, `type == 228`: projectile 267, damage 20, speed 14,
         // knockback 3. AttackTime[228]=40, AttackAverageChance[228]=50,
@@ -325,7 +393,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 3.0,
             },
             range: 800.0,
-            cooldown: 90,
+            average_chance: 50,
+            shots: &[1],
+            attack_time: 40,
         },
         // Steampunker. NPC.cs state-12 block, `type == 178`, non-hardmode: projectile 242, damage
         // 11, speed 13, knockback 2. AttackTime[178]=24, AttackAverageChance[178]=50,
@@ -339,7 +409,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 2.0,
             },
             range: 900.0,
-            cooldown: 74,
+            average_chance: 50,
+            shots: &[1, 8, 16],
+            attack_time: 24,
         },
         // Pirate. NPC.cs state-12 block, `type == 229`, base shot only (see module doc — the
         // escalating burst and close-range special are not modelled): projectile 14, damage 24,
@@ -354,7 +426,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 2.0,
             },
             range: 1000.0,
-            cooldown: 100,
+            average_chance: 40,
+            shots: &[1, 16, 24, 32, 40, 48],
+            attack_time: 60,
         },
         // Cyborg. NPC.cs state-12 block, `type == 209`, `case 135` only (see module doc — vanilla
         // picks one of three projectiles per shot): projectile 135, damage 30, speed 12, knockback
@@ -368,7 +442,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 7.0,
             },
             range: 1000.0,
-            cooldown: 90,
+            average_chance: 30,
+            shots: &[1],
+            attack_time: 60,
         },
 
         // ---- AttackType 2, state 14: ranged, aimed with a slight downward lead ----
@@ -384,7 +460,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 2.0,
             },
             range: 700.0,
-            cooldown: 90,
+            average_chance: 30,
+            shots: &[30],
+            attack_time: 60,
         },
         // Wizard. NPC.cs:55428-55438: projectile 15, speed 6, damage 18, knockback 3.
         // AttackTime[108]=30, AttackAverageChance[108]=30, DangerDetectRange[108]=700
@@ -400,7 +478,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 3.0,
             },
             range: 700.0,
-            cooldown: 60,
+            average_chance: 30,
+            shots: &[15],
+            attack_time: 30,
         },
         // Truffle. NPC.cs state-14 block, `type == 160` — spawns near the target rather than being
         // thrown, see module doc: projectile 590, damage 40, speed approximated at 6 (vanilla has
@@ -415,7 +495,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 3.0,
             },
             range: 700.0,
-            cooldown: 120,
+            average_chance: 60,
+            shots: &[15],
+            attack_time: 60,
         },
         // Princess. NPC.cs state-14 block, `type == 663`, non-hardmode — spawns near the target
         // rather than being thrown, see module doc: projectile 950, damage 15, speed approximated
@@ -430,7 +512,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 3.0,
             },
             range: 700.0,
-            cooldown: 61,
+            average_chance: 1,
+            shots: &[15],
+            attack_time: 60,
         },
         // Dryad. NPC.cs state-14 block, `type == 20` — real vanilla zero-damage attack, see module
         // doc: projectile 586, damage 0, speed approximated at 6, knockback 3.
@@ -444,7 +528,9 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 knockback: 3.0,
             },
             range: 1200.0,
-            cooldown: 660,
+            average_chance: 60,
+            shots: &[24],
+            attack_time: 600,
         },
 
         // ---- AttackType 3, state 15: melee, a hitbox swung at anything it overlaps ----
@@ -459,7 +545,11 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 reach: (32.0, 32.0),
             },
             range: 60.0,
-            cooldown: 24,
+            average_chance: 1,
+            // Melee has no `localAI[3]` gate at all: state 15 swings against whatever is
+            // in the box every tick it runs (`NPC.cs:55632-55676`).
+            shots: &[],
+            attack_time: 15,
         },
         // Tax Collector. NPC.cs state-15 block, `type == 441`: damage 9, knockback 3.5, hitbox
         // 28x28 (the "Andrew" easter egg, see module doc, not carried over). AttackTime[441]=15,
@@ -472,7 +562,11 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 reach: (28.0, 28.0),
             },
             range: 50.0,
-            cooldown: 16,
+            average_chance: 1,
+            // Melee has no `localAI[3]` gate at all: state 15 swings against whatever is
+            // in the box every tick it runs (`NPC.cs:55632-55676`).
+            shots: &[],
+            attack_time: 15,
         },
         // Stylist. NPC.cs state-15 block, `type == 353`: damage 10, knockback 5, hitbox 32x32.
         // AttackTime[353]=12, AttackAverageChance[353]=1, DangerDetectRange[353]=60. The block
@@ -488,7 +582,11 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
                 reach: (32.0, 32.0),
             },
             range: 60.0,
-            cooldown: 13,
+            average_chance: 1,
+            // Melee has no `localAI[3]` gate at all: state 15 swings against whatever is
+            // in the box every tick it runs (`NPC.cs:55632-55676`).
+            shots: &[],
+            attack_time: 12,
         },
         _ => return None,
     })
@@ -550,7 +648,14 @@ mod tests {
                 "npc {npc_type}"
             );
             assert!(combat.range > 0.0, "npc {npc_type}");
-            assert!(combat.cooldown > 0, "npc {npc_type}");
+            assert!(combat.average_chance > 0, "npc {npc_type}");
+            assert!(combat.attack_time > 0, "npc {npc_type}");
+            // Melee has no shot marks; every ranged type has at least one.
+            assert_eq!(
+                combat.shots.is_empty(),
+                expect_melee,
+                "npc {npc_type}'s shot marks"
+            );
         }
     }
 
@@ -634,9 +739,12 @@ mod tests {
         for (npc_type, attack_time, average_chance, detect_range) in RANGED {
             let combat = town_combat(npc_type).unwrap_or_else(|| panic!("npc {npc_type}"));
             assert_eq!(
-                combat.cooldown,
-                attack_time + average_chance,
-                "npc {npc_type}'s cooldown"
+                combat.attack_time, attack_time,
+                "npc {npc_type}'s AttackTime"
+            );
+            assert_eq!(
+                combat.average_chance, average_chance,
+                "npc {npc_type}'s AttackAverageChance"
             );
             assert_eq!(combat.range, detect_range, "npc {npc_type}'s detect range");
         }

@@ -1220,35 +1220,47 @@ crates/terrustia/src/game/ai/swimmer.rs	mod tests :: fn daylight_turns_an_eyebal
 crates/terrustia/src/game/ai/town.rs	fn drowning	Collision.cs	1387-1398	6f1cf7c124ad	f450b2a8548a
 crates/terrustia/src/game/ai/town.rs	fn drowning	Collision.cs	1418	b37381c51352	f450b2a8548a
 crates/terrustia/src/game/ai/town.rs	fn drowning	NPC.cs	54361	b60780c82463	f450b2a8548a
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54033	3715da670796	76bca649c0e4
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54892-55087	c04d158f1240	76bca649c0e4
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55632-55676	792f7b809c16	76bca649c0e4
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56012-56109	6cd2a7fd610c	76bca649c0e4
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54033	3715da670796	cea23c5bd00c
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54892-55087	c04d158f1240	cea23c5bd00c
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55045-55049	9d1457f3d51f	cea23c5bd00c
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55632-55676	792f7b809c16	cea23c5bd00c
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56012	46bba6010785	cea23c5bd00c
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56012-56109	6cd2a7fd610c	cea23c5bd00c
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56030-56033	80e4a233b1a6	cea23c5bd00c
 crates/terrustia/src/game/ai/town.rs	fn walk	NPC.cs	54393	c72281eb17de	a0f03becbeea
 crates/terrustia/src/game/ai/town.rs	fn walk	NPC.cs	54467-54473	e303394cb105	a0f03becbeea
 crates/terrustia/src/game/ai/town.rs	fn walk	NPC.cs	54612-54614	bffb252e1522	a0f03becbeea
-crates/terrustia/src/game/ai/town.rs	mod tests :: fn a_dye_trader_swings_at_a_hostile_within_reach	NPC.cs	55637	452b22ac0245	500d632aeb3e
+crates/terrustia/src/game/ai/town.rs	mod tests :: fn a_dye_trader_swings_at_a_hostile_within_reach	NPC.cs	55637	452b22ac0245	f620031895b3
+crates/terrustia/src/game/ai/town.rs	mod tests :: fn a_pirate_fires_a_six_shot_burst_within_one_attack_state	NPC.cs	55245-55279	54293f19a96b	de35eb0bac86
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn a_resident_in_danger_drops_the_table_and_hurries	NPC.cs	54467-54473	e303394cb105	82067ec2bc53
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn a_resident_in_danger_drops_the_table_and_hurries	NPC.cs	54473-54477	330f75306018	82067ec2bc53
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn a_resident_pulls_the_door_shut_behind_it	NPC.cs	54393-54406	980123982ddd	90cdd7f65042
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn a_resident_pulls_the_door_shut_behind_it	NPC.cs	54612-54614	bffb252e1522	90cdd7f65042
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn a_town_npc_with_no_combat_profile_still_does_not_fight	NPCID.cs	4855	9af2e8b7621c	684c77eb4218
+crates/terrustia/src/game/ai/town.rs	mod tests :: fn attack_within	NPC.cs	55049	809b0c4bf80c	add254e7b6cd
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn residents_notice_trouble_at_their_own_ranges	NPCID.cs	4841	369488ec653d	5fc3aedecb06
+crates/terrustia/src/game/ai/town.rs	mod tests :: fn the_arms_dealers_burst_is_hardmode_only	NPC.cs	55129-55147	1dde1f7f3777	6df35dc9adec
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn wading_is_not_drowning	Collision.cs	1387-1398	6f1cf7c124ad	46a973cfa0a5
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn wading_is_not_drowning	Collision.cs	1418	b37381c51352	46a973cfa0a5
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn wading_is_not_drowning	NPC.cs	54361	b60780c82463	46a973cfa0a5
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	54969-54977	bf79f14ff8ac	d82310e41db9
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55114-55123	b1294ab408cb	d82310e41db9
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55428-55438	d365428a5b24	d82310e41db9
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55611-55617	dbb630139c12	d82310e41db9
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55618	92a9554dadf3	d82310e41db9
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPCID.cs	4851,4853,4841	a2103a1676cd	d82310e41db9
-crates/terrustia/src/game/ai/town_combat.rs	mod tests :: fn every_ranged_cooldown_is_its_own_attack_time_plus_average_chance	NPC.cs	55581-55609,55641-55686	9d1e20c7b9e9	99a09bb10c63
-crates/terrustia/src/game/ai/town_combat.rs	mod tests :: fn every_ranged_cooldown_is_its_own_attack_time_plus_average_chance	NPCID.cs	4841	369488ec653d	99a09bb10c63
-crates/terrustia/src/game/ai/town_combat.rs	mod tests :: fn every_ranged_cooldown_is_its_own_attack_time_plus_average_chance	NPCID.cs	4851	2c0bd80c1384	99a09bb10c63
-crates/terrustia/src/game/ai/town_combat.rs	mod tests :: fn every_ranged_cooldown_is_its_own_attack_time_plus_average_chance	NPCID.cs	4853	79f3ff01deb5	99a09bb10c63
-crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPC.cs	53515-56130	507f8306f218	e7ebf9e7c287
-crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPCID.cs	4855	9af2e8b7621c	e7ebf9e7c287
+crates/terrustia/src/game/ai/town_combat.rs	fn hardmode_shots	NPC.cs	55129	7cd599ac6a7d	4d8c237ae12b
+crates/terrustia/src/game/ai/town_combat.rs	fn hardmode_shots	NPC.cs	55190	61b1f7ec13dd	4d8c237ae12b
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	54969-54977	bf79f14ff8ac	9b0ca05ff259
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55114-55123	b1294ab408cb	9b0ca05ff259
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55428-55438	d365428a5b24	9b0ca05ff259
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55611-55617	dbb630139c12	9b0ca05ff259
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55618	92a9554dadf3	9b0ca05ff259
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55632-55676	792f7b809c16	9b0ca05ff259
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPCID.cs	4851,4853,4841	a2103a1676cd	9b0ca05ff259
+crates/terrustia/src/game/ai/town_combat.rs	mod tests :: fn every_ranged_cooldown_is_its_own_attack_time_plus_average_chance	NPC.cs	55581-55609,55641-55686	9d1e20c7b9e9	b5f90171a39d
+crates/terrustia/src/game/ai/town_combat.rs	mod tests :: fn every_ranged_cooldown_is_its_own_attack_time_plus_average_chance	NPCID.cs	4841	369488ec653d	b5f90171a39d
+crates/terrustia/src/game/ai/town_combat.rs	mod tests :: fn every_ranged_cooldown_is_its_own_attack_time_plus_average_chance	NPCID.cs	4851	2c0bd80c1384	b5f90171a39d
+crates/terrustia/src/game/ai/town_combat.rs	mod tests :: fn every_ranged_cooldown_is_its_own_attack_time_plus_average_chance	NPCID.cs	4853	79f3ff01deb5	b5f90171a39d
+crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPC.cs	53515-56130	507f8306f218	a2cf32356ddf
+crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPC.cs	55049	809b0c4bf80c	a2cf32356ddf
+crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPC.cs	55372	b4bc67326b6b	a2cf32356ddf
+crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPC.cs	56012	46bba6010785	a2cf32356ddf
+crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPCID.cs	4855	9af2e8b7621c	a2cf32356ddf
 crates/terrustia/src/game/ai/track.rs	fn wheel	NPC.cs	24743	20db8144f6b0	e481021ef211
 crates/terrustia/src/game/ai/track.rs	mod tests :: fn a_blazing_wheel_sets_off_toward_whoever_is_there	NPC.cs	24743	20db8144f6b0	1e435f1385f7
 crates/terrustia/src/game/ai/tumbleweed.rs	(file)	NPC.cs	63012-63573	0f4605aedd6e	02d0f9615365

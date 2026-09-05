@@ -570,6 +570,12 @@ fn try_combat<T: TileView>(
 ) -> Option<TownUpdate> {
     let combat = town_combat::town_combat(npc.npc_type)?;
     let hostile = world.hostile.filter(|h| h.alive)?;
+    // The hardmode burst, for the two types whose ladder is behind `if (Main.hardMode)`.
+    let shots = if world.conditions.hardmode {
+        town_combat::hardmode_shots(npc.npc_type).unwrap_or(combat.shots)
+    } else {
+        combat.shots
+    };
 
     let already_fighting = npc.ai[0] == combat.state;
     if !already_fighting {
@@ -587,15 +593,39 @@ fn try_combat<T: TileView>(
             return None;
         }
         npc.ai[0] = combat.state;
-        npc.ai[1] = 0.0;
+        npc.local_ai[2] = -1.0;
     }
 
-    if npc.ai[1] > 0.0 {
-        npc.ai[1] -= 1.0;
+    // Between attacks: vanilla's own gate, `Main.rand.Next(AttackAverageChance[type]) == 0` per
+    // tick (`NPC.cs:56012`) - a geometric wait rather than a fixed one, which is why two Merchants
+    // side by side do not fire in lockstep without anything having to jitter them.
+    // The frame counter is vanilla's `localAI[3]`, kept in `local_ai[2]` here because this
+    // module's own pause timer already owns `local_ai[3]` and decrements it every tick - which is
+    // exactly what a frame counter must not have happen to it.
+    if npc.local_ai[2] < 0.0 {
+        if rng.random_range(0..combat.average_chance.max(1)) != 0 {
+            return Some(TownUpdate::default());
+        }
+        // The state opens. `ai[1] = AttackTime[type]` and `localAI[3] = 0`
+        // (`NPC.cs:56030-56033`); the attack now runs for that long and cannot be re-rolled.
+        npc.ai[1] = combat.attack_time as f32;
+        npc.local_ai[2] = 0.0;
+    }
+
+    // `velocity.X *= 0.8f`, `ai[1]--`, `localAI[3]++`, and then the shot gate
+    // (`NPC.cs:55045-55049`). A town NPC winding up visibly stops, which is the telegraph.
+    npc.velocity.0 *= 0.8;
+    npc.ai[1] -= 1.0;
+    npc.local_ai[2] += 1.0;
+    let frame = npc.local_ai[2] as i32;
+    // The state ends when its own clock runs out, and only then can another be rolled for.
+    if npc.ai[1] <= 0.0 {
+        npc.local_ai[2] = -1.0;
+    }
+    // Melee swings every tick of the state; everything else fires on its own marks.
+    if !shots.is_empty() && !shots.contains(&frame) {
         return Some(TownUpdate::default());
     }
-    // A little jitter so a row of the same NPC type does not fire in lockstep.
-    npc.ai[1] = combat.cooldown as f32 + rng.random_range(0..combat.cooldown.max(1)) as f32;
 
     let (dx, dy) = (
         hostile.center.0 - npc.center().0,
@@ -724,6 +754,30 @@ mod tests {
         }
     }
 
+    /// Drive a town NPC until its attack actually leaves, and say how many ticks that took.
+    ///
+    /// A shot no longer leaves on the tick the decision is made: the NPC enters its attack state,
+    /// slows to a stop, and the projectile leaves on its own `localAI[3]` mark
+    /// (`NPC.cs:55049`) - ten frames later for most types, one for a few, thirty for the Dryad.
+    /// That gap is the telegraph, and it is what every one of these tests used to assert away.
+    fn attack_within(
+        npc: &mut Npc,
+        w: &World<'_, Ground>,
+        rng: &mut SmallRng,
+        ticks: u32,
+    ) -> (TownUpdate, u32) {
+        for _ in 1..=ticks {
+            let out = update(npc, w, None, rng);
+            if out.shot.is_some() || out.melee.is_some() {
+                // `local_ai[2]` is the frame within the attack state, which is the mark the shot
+                // actually left on - not the tick, which also carries the geometric wait for the
+                // state to open in the first place.
+                return (out, npc.local_ai[2] as u32);
+            }
+        }
+        panic!("nothing came out in {ticks} ticks");
+    }
+
     #[test]
     fn a_merchant_fights_back_against_a_nearby_hostile() {
         // Before this pass, `World` had no `hostile` field and `town_combat` did not exist — a
@@ -738,7 +792,18 @@ mod tests {
             velocity: (0.0, 0.0),
             alive: true,
         });
-        let result = update(&mut merchant, &w, None, &mut rng());
+        let mut r = rng();
+        let first = update(&mut merchant, &w, None, &mut r);
+        assert!(
+            first.shot.is_none(),
+            "the shot does not leave on the tick the decision is made: `AttackTime` opens the \
+             state and the projectile waits for its own `localAI[3]` mark"
+        );
+        let (result, mark) = attack_within(&mut merchant, &w, &mut r, 600);
+        assert_eq!(
+            mark, 10,
+            "the Merchant's shot leaves on frame 10 of its attack state (`NPC.cs` state 10)"
+        );
         let shot = result
             .shot
             .expect("a merchant with a hostile in range should open fire");
@@ -851,7 +916,7 @@ mod tests {
             velocity: (0.0, 0.0),
             alive: true,
         });
-        let result = update(&mut trader, &w, None, &mut rng());
+        let (result, _) = attack_within(&mut trader, &w, &mut rng(), 600);
         let hit = result
             .melee
             .expect("a hostile 10px away is well within the 32px reach");
@@ -861,6 +926,98 @@ mod tests {
             result.shot.is_none(),
             "the melee type never fires a projectile"
         );
+    }
+
+    /// The Pirate fires six times per attack state, not once.
+    ///
+    /// `NPC.cs:55245-55279`: `num54` starts at 1 and a cascade of
+    /// `if (localAI[3] > num54) { num54 = <next>; }` walks it to 16, 24, 32, 40 and 48. Because
+    /// `localAI[3]` is read before its own increment and the shot fires on `localAI[3] == num54`
+    /// after it, each rung is one shot. The module doc used to name this burst as unmodelled by
+    /// name; it was the longest of the four ladders and the only one not behind hardmode.
+    #[test]
+    fn a_pirate_fires_a_six_shot_burst_within_one_attack_state() {
+        let tiles = flat(0, 400);
+        let mut pirate = stand_on(229, 200);
+        let mut w = day(&tiles);
+        w.hostile = Some(crate::game::npc_ai::Target {
+            slot: 5,
+            center: (pirate.center().0 + 250.0, pirate.center().1),
+            velocity: (0.0, 0.0),
+            alive: true,
+        });
+        let mut r = rng();
+
+        // One whole attack state: `AttackTime[229]` is 60, so run until it closes and record the
+        // frame each shot left on.
+        let mut marks = Vec::new();
+        let mut opened = false;
+        let mut closed = false;
+        for _ in 0..2_000 {
+            let out = update(&mut pirate, &w, None, &mut r);
+            let in_state = pirate.local_ai[2] >= 0.0;
+            if in_state {
+                opened = true;
+            }
+            if out.shot.is_some() {
+                marks.push(pirate.local_ai[2] as i32);
+            }
+            if opened && !in_state {
+                closed = true;
+                break;
+            }
+        }
+        assert_eq!(
+            marks,
+            vec![1, 16, 24, 32, 40, 48],
+            "vanilla's own ladder, in order, inside a single state"
+        );
+        assert!(
+            closed,
+            "and the state ends when `AttackTime` runs out, rather than running for ever - a \
+             burst that never closes is a Pirate that never stops shooting"
+        );
+    }
+
+    /// ...and the two ladders that *are* behind hardmode really are: the Arms Dealer fires once in
+    /// classic and four times in hardmode (`NPC.cs:55129-55147`).
+    #[test]
+    fn the_arms_dealers_burst_is_hardmode_only() {
+        let shots_in = |hardmode: bool| {
+            let tiles = flat(0, 400);
+            let mut dealer = stand_on(19, 200);
+            let mut w = day(&tiles);
+            w.conditions.hardmode = hardmode;
+            w.hostile = Some(crate::game::npc_ai::Target {
+                slot: 5,
+                center: (dealer.center().0 + 250.0, dealer.center().1),
+                velocity: (0.0, 0.0),
+                alive: true,
+            });
+            let mut r = rng();
+            let mut marks = Vec::new();
+            let mut opened = false;
+            for _ in 0..2_000 {
+                let out = update(&mut dealer, &w, None, &mut r);
+                let in_state = dealer.local_ai[2] >= 0.0;
+                if in_state {
+                    opened = true;
+                }
+                if out.shot.is_some() {
+                    marks.push(dealer.local_ai[2] as i32);
+                }
+                if opened && !in_state {
+                    break;
+                }
+            }
+            marks
+        };
+        assert_eq!(
+            shots_in(false),
+            vec![1],
+            "one shot before the mechanical bosses"
+        );
+        assert_eq!(shots_in(true), vec![1, 10, 20, 30], "and four after them");
     }
 
     #[test]
@@ -878,7 +1035,11 @@ mod tests {
             velocity: (0.0, 0.0),
             alive: true,
         });
-        let result = update(&mut dryad, &w, None, &mut rng());
+        let (result, mark) = attack_within(&mut dryad, &w, &mut rng(), 600);
+        assert_eq!(
+            mark, 24,
+            "her own mark is frame 24, the longest windup on the roster"
+        );
         let shot = result
             .shot
             .expect("a hostile 10px away is well within her 1200px range");
@@ -920,7 +1081,7 @@ mod tests {
             alive: true,
         });
         let mut r = rng();
-        let first = update(&mut merchant, &w, None, &mut r);
+        let (first, _) = attack_within(&mut merchant, &w, &mut r, 600);
         assert!(first.shot.is_some());
         let second = update(&mut merchant, &w, None, &mut r);
         assert!(

@@ -244,8 +244,19 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   floor, and all three trophies. It was not a small divergence: at wave 1 in a classic world every one
   of those fired about ten times too often, which left the event's whole wave progression with nothing
   to offer.
-- **Town-NPC attack windups** are skipped and the Pirate's escalating burst is unmodeled
-  (`crates/terrustia/src/game/ai/town_combat.rs:13-28`).
+- ~~**Town-NPC attack windups** are skipped and the Pirate's escalating burst is unmodeled.~~
+  **Fixed 2026-09-05.** A shot now leaves on its own `localAI[3]` mark rather than on the tick the
+  decision is made (`NPC.cs:55049`), which is the telegraph; and the four burst ladders are
+  transcribed, longest first: the Pirate's six shots at frames 1/16/24/32/40/48, the Arms Dealer's
+  four and the Cyborg's three behind `if (Main.hardMode)`, the Steampunker's three unconditional.
+  Each was read off the state block rather than inferred from the pattern the first one sets.
+  The flat `cooldown` also goes, replaced by vanilla's own per-tick gate
+  `Main.rand.Next(AttackAverageChance[type]) == 0` (`NPC.cs:56012`) - the module doc claimed this
+  project had "no equivalent scheduling primitive" for it, which was never true, and the flat
+  number was wrong for the Dye Trader, whose gate is `1` and was modelled at a nine-tick gap.
+  Still narrowed, and each still disclosed at its own entry: the hardmode *damage* upgrades, the
+  Cyborg's three-way projectile roll, the Pirate's close-range special, and the vertical
+  aim-tolerance check.
 - **Slime Rain** collapses its per-type flags to one case and does not announce start and stop
   instantly (`crates/terrustia/src/game/slime_rain.rs:39,84`).
 - **Lantern Night's** manual-forcing toggle is unmodeled (`crates/terrustia/src/game/lantern_night.rs:43`).

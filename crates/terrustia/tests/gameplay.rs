@@ -2186,6 +2186,17 @@ async fn a_town_npcs_shot_spawns_from_an_outstretched_hand_not_dead_center() {
     let mut alice = join(addr, "alice").await;
     alice.set_timeout(Duration::from_secs(15));
 
+    // Report a real position first. Without this the server's copy of the player sits at the
+    // world's own origin - the client sets its own `position` from the world spawn after the
+    // handshake but never sends a packet 13 with it - so `/spawn`'s "player position + (64, -32)"
+    // puts the NPC at tile 4, on the very edge of the world, wherever the generated terrain there
+    // happens to be. A town NPC that lands there and finds nothing to fight walks, and the world
+    // runs out four tiles later: the NPC steps off the left edge and falls for the rest of the
+    // test, so it never reports the settled vertical velocity this waits on. Nothing about the
+    // combat being tested; a real player is never standing at (0, 0).
+    let (spawn_x, spawn_y) = alice.position();
+    alice.move_to(spawn_x, spawn_y).await.unwrap();
+
     let guide = spawn_npc(&mut alice, "Guide").await;
     spawn_npc(&mut alice, "Zombie").await;
 
@@ -2313,6 +2324,17 @@ async fn every_newly_covered_town_npc_actually_fights() {
         // starts a fight when a hostile is already in range, and a landed town NPC with nothing to
         // fight immediately starts walking — by the time a hostile spawned only afterward finally
         // reaches the ground, the NPC has often already wandered hundreds of pixels away.
+        // Report a real position first. Without this the server's copy of the player sits at the
+        // world's own origin - the client sets its own `position` from the world spawn after the
+        // handshake but never sends a packet 13 with it - so `/spawn`'s "player position + (64, -32)"
+        // puts the NPC at tile 4, on the very edge of the world, wherever the generated terrain there
+        // happens to be. A town NPC that lands there and finds nothing to fight walks, and the world
+        // runs out four tiles later: the NPC steps off the left edge and falls for the rest of the
+        // test, so it never reports the settled vertical velocity this waits on. Nothing about the
+        // combat being tested; a real player is never standing at (0, 0).
+        let (spawn_x, spawn_y) = alice.position();
+        alice.move_to(spawn_x, spawn_y).await.unwrap();
+
         let npc = spawn_npc(&mut alice, &npc_type.to_string()).await;
         assert_eq!(npc.npc_type(), npc_type, "the spawn command resolved by id");
         let hostile = spawn_npc(&mut alice, "Zombie").await;
