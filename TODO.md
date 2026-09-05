@@ -414,8 +414,17 @@ both generators to emit exactly what is committed rather than touching either ta
      `tile_object.rs` now has a real generator (`terrustia-codegen tile_object`, on `just regen`)
      plus a second independent interpreter in `just check-tile-object`. The other two are held by
      `just check-npc-data` and `just check-placed-items`, which is rule 7's protection by the other
-     road: neither can drift from source unseen. Between them they found 70 wrong entries in
-     `placed_items.rs` and a wrong style layout on 374 of 389 entries in `tile_object.rs`.
+     road: neither can drift from source unseen. Between them they found a wrong style layout on
+     374 of 389 entries in `tile_object.rs` and **632 wrong or missing entries in
+     `placed_items.rs`** - every one an object that gave nothing, or the wrong thing, when mined.
+     All three are mutation-tested now (`just check-mutants`): `check_npc_data.py` and
+     `check_tile_object.py` kill 100% of mutants, `check_placed_items.py` 88%.
+     **The remaining 8% is the one open piece.** 237 of that table's 2,962 entries are pairs no
+     source it reads defines: paintings (tiles 240, 242, 245 and 246, 101 of them) carry their
+     drops in their own worldgen arms, and the rest is a tail of statues, campfires and one-offs.
+     Recorded in `mutate_tables.py`'s `BUDGET` with the measured share. It was 58.9% before the
+     checker learned to follow the placement helpers, the `GetItemDrop_*` methods and the banner
+     chain - and each of those three readings found real defects, so the tail is worth finishing.
 
   **The owner's own example, Martian Madness in its own folder, is declined with reasons.**
   `game/ai/mod.rs::run` is a `match npc.stats.ai_style` mirroring vanilla's `NPC.AI()` switch arm for

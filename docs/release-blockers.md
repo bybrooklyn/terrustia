@@ -301,8 +301,17 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   **`placed_items.rs` got the same treatment the same day**, and unlike the NPC table it was not
   already right: `just check-placed-items` re-does the inversion `Item.SetDefaults` supports and
   found **69 (tile, style) pairs missing outright and one wrong** - seventy framed objects that
-  gave nothing back when mined, and a Boreal Wood sofa that gave the wrong bench. All seventy are
-  fixed and all 1,027 pairs the game defines now match.
+  gave nothing back when mined, and a Boreal Wood sofa that gave the wrong bench.
+  **That was the first of four passes, and each of the next three found more**, because the checker
+  was only reading part of its source. Following the placement helpers found 145 more (889 items
+  place through `DefaultToPlaceableTile` rather than by assigning the fields, and all 101 music
+  boxes were absent); reading the game's own `GetItemDrop_*` methods found 256 more and one wrong
+  (a bench giving another bench's item); reading `WorldGen.cs`'s tile-91 arm found 161 missing
+  banners. **632 of the table's 3,026 entries were wrong or absent**, every one an object that gave
+  nothing, or the wrong thing, when a player mined it. Each gap was found by mutation-testing the
+  checker rather than by reading it: `check_placed_items.py` killed 43% of mutants after the first
+  pass and kills 88% now, with the remaining 8% measured and recorded (paintings and a tail of
+  one-offs, whose drops live in their own worldgen arms).
   **`tile_object.rs` got a generator instead**, because its source is not a table to check against
   but a program to run: `TileObjectData.Initialize` mutates one shared object 389 times over 2,900
   lines. `terrustia-codegen tile_object` interprets it, `just regen` rebuilds the file, and

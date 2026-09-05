@@ -170,7 +170,10 @@ def main():
     if len(sys.argv) != 2:
         sys.exit("usage: check_npc_data.py <decompiled tree>")
     root = Path(sys.argv[1])
-    table = Path("crates/terrustia-proto/src/npc_data.rs")
+    # Relative to this file rather than the working directory, so a copy of this checker beside a
+    # copy of the table reads *that* table. `mutate_tables.py` depends on it.
+    repo = Path(__file__).resolve().parent.parent
+    table = repo / "crates/terrustia-proto/src/npc_data.rs"
     source = from_source(root)
     ours = from_table(table)
 

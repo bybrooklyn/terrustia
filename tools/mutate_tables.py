@@ -76,6 +76,15 @@ SITES = {
     "projectile_data.rs": re.compile(r"^(\s*width: )(\d+)(,)$"),
     # `NpcStats { .. life_max: N, .. }`.
     "npc_data.rs": re.compile(r"^(\s*life_max: )(\d+)(,)$"),
+    # `(style, item)` pairs, which come in two shapes: a whole arm on one line for a block with a
+    # single style, and one pair per line for everything else. Only the item moves.
+    "placed_items.rs": (
+        re.compile(r"^(\s*\(\d+, )(\d+)(\),)$"),
+        re.compile(r"^(\s*\d+ => &\[\(\d+, )(\d+)(\)\],)$"),
+    ),
+    # `TileObject { .. full_height: N, .. }`: the field the hand-written table got wrong on 348 of
+    # its 389 entries, and one every row has.
+    "tile_object.rs": re.compile(r"^(\s*full_height: )(\d+)(,)$"),
 }
 
 # Which checker is supposed to catch a corruption of each table, and what it costs to run.
@@ -83,7 +92,13 @@ PYTHON_TARGETS = [
     ("npc_drops.rs", "check_drops.py"),
     ("conditional_drops.rs", "check_drops.py"),
     ("recipes.rs", "check_recipes.py"),
+    ("npc_data.rs", "check_npc_data.py"),
+    ("placed_items.rs", "check_placed_items.py"),
+    ("tile_object.rs", "check_tile_object.py"),
 ]
+# The checkers the sandbox needs a copy of, derived rather than listed, so adding a target above is
+# the only edit a new checker needs.
+PYTHON_CHECKERS = sorted({checker for _, checker in PYTHON_TARGETS})
 # A checker's known, written-down blind spot, as the share of mutants it is allowed to miss.
 #
 # Zero unless there is a reason here. This is not a place to park a survival rate that has gone up:
@@ -100,6 +115,16 @@ BUDGET: dict[tuple[str, str], tuple[float, str]] = {
         "from arrays. Mutating one of those rows is invisible, so about a sixth of random mutants "
         "survive for that reason alone. Closing it means teaching the checker to substitute a "
         "helper's arguments into its body - worth doing, not done here.",
+    ),
+    ("placed_items.rs", "check_placed_items.py"): (
+        0.12,
+        "check_placed_items.py reads three sources - the `Item.SetDefaults` inversion, the two "
+        "dozen `GetItemDrop_*` methods, and `WorldGen.cs`'s own tile-91 banner chain - and holds "
+        "every pair any of them defines. 237 of the 2962 mutation sites (8.0%) are pairs none of "
+        "them define and nothing therefore checks: paintings (tiles 240/242/245/246, 101 of them) "
+        "have their drops written into their own worldgen arms, and the rest is a long tail of "
+        "statues, campfires and one-off objects. Measured, not assumed: every survivor of a run "
+        "has been confirmed to be in that class. It was 58.9% when only the inversion was read.",
     ),
     ("conditional_drops.rs", "check_drops.py"): (
         0.10,
@@ -219,14 +244,14 @@ def python_phase(decompiled: Path, limit: int, seed: int) -> int:
         sandbox = Path(tmp)
         (sandbox / "tools").mkdir()
         (sandbox / "crates" / "terrustia-proto" / "src").mkdir(parents=True)
-        for checker in ("check_drops.py", "check_recipes.py"):
+        for checker in PYTHON_CHECKERS:
             shutil.copy2(REPO / "tools" / checker, sandbox / "tools" / checker)
         for table in {t for t, _ in PYTHON_TARGETS}:
             shutil.copy2(PROTO / table, sandbox / "crates" / "terrustia-proto" / "src" / table)
 
         # A mutation run against a checker that is already failing proves nothing: every mutant
         # would be "caught" by the pre-existing failure. Establish the green baseline first.
-        for checker in ("check_drops.py", "check_recipes.py"):
+        for checker in PYTHON_CHECKERS:
             if run_python_checker(sandbox, checker, decompiled):
                 print(f"BASELINE FAILS: {checker} does not pass on the committed tables.")
                 print("Fix that first; mutation testing on a red baseline measures nothing.")
@@ -264,8 +289,8 @@ def rust_phase(limit: int, seed: int) -> int:
     Always returns 0: this phase measures rather than gates. `tests/generated_tables.rs` is twelve
     named spot checks ("every slime drops Gel", "Bone drops from the Angry Bones family") and was
     never a table verifier, so a random row corrupted anywhere else in a 3000-row table is expected
-    to sail past it. The number is the point. `banners.rs`, `travel_shop.rs`, `projectile_data.rs`
-    and `npc_data.rs` have no Python cross-checker at all, so this suite is the *only* thing
+    to sail past it. The number is the point. `banners.rs`, `travel_shop.rs` and
+    `projectile_data.rs` have no Python cross-checker at all, so this suite is the *only* thing
     standing between them and a silently wrong table, and this is what that is worth.
     """
     # Once, not per table: the failure this guards against is a property of the build, not of one

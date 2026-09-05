@@ -16,9 +16,17 @@ by the method's own braces, accept alternations and ranges as well as bare arms,
 type test as narrowing rather than as a new arm, and skip assignments inside a conditional that is
 not a type test.
 
-**The table is not purely this inversion, and is not meant to be.** Where the game keeps its own
-drop table - `GetItemDrop_Chair` and its siblings - that wins, because it is the authority on what
-mining gives back. Those differences are on the record below.
+**The table is not purely this inversion, and is not meant to be.** The game also keeps its own
+answer for "what does breaking this give", in two places, and where they speak they win, because
+they are what it actually runs:
+
+* the two dozen `GetItemDrop_*` methods (`WorldGen.cs:40125-43497`), one per furniture family, and
+* the tile-91 arm at `WorldGen.cs:46572`, which is banners' whole drop table.
+
+Reading only the inversion left more than half the table unchecked, and reading only the *literal*
+half of the inversion left more than half of *that*: 889 items place through
+`DefaultToPlaceableTile` and its siblings rather than by assigning `createTile` themselves. Both
+gaps were found by mutation-testing this checker (`just check-mutants`) rather than by reading it.
 
 Exit 0 when every pair matches or is on the record; 1 otherwise.
 """
@@ -41,9 +49,113 @@ ALTS = re.compile(r"^type == \d+(?: \|\| type == \d+)*$")
 RANGE = re.compile(r"^type >= (\d+) && type <= (\d+)$")
 FIELD = re.compile(r"^\s*(createTile|placeStyle) = (-?\d+);")
 
+# **Most items do not write those two fields at all.** They call a helper that writes them, and
+# there are 889 `DefaultToPlaceableTile` calls against 1,103 literal `createTile =` assignments, so
+# a reader that only sees the literals sees a little over half the source. That is how a first
+# version of this checker decided 1,414 of the table's 2,401 pairs came from somewhere else.
+#
+# The helpers that place, both directly and through each other. `DefaultToBanner` and
+# `DefaultToMonolith` reach `createTile` only by calling `DefaultToPlaceableTile`, so a scan that
+# greps helper bodies for the field name misses them; the transitive closure in
+# [`placing_helpers`] finds them, and anything it finds that is not handled here stops the run.
+CALL = re.compile(r"^\s*(DefaultTo\w+)\((.*)\);$")
+# `(tile expression, style expression or None)` for each, given the call's argument text.
+HELPERS = {
+    "DefaultToPlaceableTile": lambda a: (a[0], a[1] if len(a) > 1 else "0"),
+    "DefaultToMonolith": lambda a: (a[0], a[1] if len(a) > 1 else "0"),
+    "DefaultToMusicBox": lambda a: ("139", a[0]),
+    "DefaultToBanner": lambda a: ("91", a[0] if a and a[0] else "0"),
+    # These two set `createTile` and leave `placeStyle` at the preamble's 0.
+    "DefaultToKite": lambda a: ("723", None),
+    "DefaultToCapturedCritter": lambda a: ("724", None),
+}
+# A shared case body covering a run of item types computes its tile or style from `type`:
+# `DefaultToPlaceableTile(179 + type - 4349)`, `(ushort)(type - 4327 + 521)`, `376, 18 + type -
+# 4405`. Every one is linear in `type`, so the arithmetic is evaluated rather than pattern-matched,
+# on a string first checked to hold nothing but digits, `type` and `+-()`.
+SAFE_EXPR = re.compile(r"^[\d\s+\-()]*(?:type[\d\s+\-()]*)*$")
+
 # Pairs where the game's own `GetItemDrop_*` table disagrees with the inversion and wins, plus
 # anything else deliberate. Keyed by (tile, style).
+# Nothing is on it: the three pairs the two sources disagree about are resolved in favour of the
+# drop method, which is what the game actually calls, rather than recorded as exceptions. They are
+# `(13, 1)` and `(13, 2)`, where items 5320 and 5321 place the bottles that `GetItemDrop_Bottles`
+# gives back as 28 and 110 (`WorldGen.cs:41628-41633`), and `(89, 23)`, where items 2413 and 2539
+# both declare `createTile = 89; placeStyle = 23;` and `GetItemDrop_Benches(23)` names 2539.
 EXPECTED = {}
+
+
+def expression(text, item):
+    """A helper argument: a literal, or arithmetic on the item's own type."""
+    text = text.strip().removeprefix("(ushort)").strip()
+    if re.fullmatch(r"-?\d+", text):
+        return int(text)
+    if not SAFE_EXPR.match(text):
+        sys.exit("unhandled helper argument %r" % text)
+    return int(eval(text, {"__builtins__": {}}, {"type": item}))  # noqa: S307
+
+
+def split_args(text):
+    """A call's arguments, split on the commas that are not inside parentheses."""
+    out, depth, current = [], 0, ""
+    for ch in text:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append(current)
+            current = ""
+            continue
+        current += ch
+    if current.strip():
+        out.append(current)
+    return [a.strip() for a in out]
+
+
+def placing_helpers(text):
+    """Every `Item` method that reaches `createTile` or `placeStyle`, transitively.
+
+    Written as a closure rather than a list because the shallow version of this check is what let
+    `DefaultToBanner` through: its body never names either field, it just calls
+    `DefaultToPlaceableTile`, and 130 banner styles went missing as a result. Anything this finds
+    that `HELPERS` does not model stops the run rather than being silently skipped.
+    """
+    bodies = {}
+    lines = text.split("\n")
+    signature = re.compile(r"^\tpublic void (\w+)\(")
+    for i, line in enumerate(lines):
+        m = signature.match(line)
+        if not m:
+            continue
+        depth, seen, body = 0, False, []
+        for j in range(i, len(lines)):
+            depth += lines[j].count("{") - lines[j].count("}")
+            if lines[j].count("{"):
+                seen = True
+            body.append(lines[j])
+            if seen and depth == 0:
+                break
+        bodies[m.group(1)] = body
+
+    reaching = {
+        name
+        for name, body in bodies.items()
+        if any("createTile" in l or "placeStyle" in l for l in body)
+    }
+    while True:
+        grown = {
+            name
+            for name, body in bodies.items()
+            if name not in reaching
+            and any(re.search(r"\b(%s)\(" % "|".join(reaching), l) for l in body)
+        }
+        if not grown:
+            break
+        reaching |= grown
+    # The machinery that reaches the fields by resetting or re-entering `SetDefaults`, rather than
+    # by being one item's placement. None of these is ever called from inside a `case` arm.
+    return {n for n in reaching if n.startswith("DefaultTo")}
 
 
 def arm_types(condition):
@@ -74,7 +186,15 @@ def from_source(root):
     share a body. Nothing about the NPC chain's nesting applies here, and pretending it did read
     21 pairs out of 1,190.
     """
-    lines = (root / "Terraria" / "Item.cs").read_text(errors="replace").split("\n")
+    text = (root / "Terraria" / "Item.cs").read_text(errors="replace")
+    lines = text.split("\n")
+    unmodelled = placing_helpers(text) - set(HELPERS)
+    if unmodelled:
+        sys.exit(
+            "these Item helpers set createTile or placeStyle and this checker does not model "
+            "them, so every item that uses one would read as placing nothing: %s"
+            % ", ".join(sorted(unmodelled))
+        )
     case = re.compile(r"^\s*case (\d+):\s*$")
     items = {}
     for method in METHODS:
@@ -120,6 +240,17 @@ def from_source(root):
                 for t in narrow if narrow is not None else pending:
                     items[t][fm.group(1)] = int(fm.group(2))
                 continue
+            cm = CALL.match(line)
+            if cm and pending and cm.group(1) in HELPERS:
+                tile_expr, style_expr = HELPERS[cm.group(1)](split_args(cm.group(2)))
+                for t in narrow if narrow is not None else pending:
+                    items[t]["createTile"] = expression(tile_expr, t)
+                    # A one-argument `DefaultToPlaceableTile` is `tileStyleToPlace = 0`, and the
+                    # helper assigns it either way: a style set before the call is overwritten,
+                    # not kept. Only the two that never touch the field pass None.
+                    if style_expr is not None:
+                        items[t]["placeStyle"] = expression(style_expr, t)
+                continue
             if line.strip() in ("break;", "return;"):
                 pending = []
                 narrow = rest = None
@@ -133,6 +264,325 @@ def from_source(root):
             continue
         placed.setdefault((tile, fields.get("placeStyle", 0)), item)
     return placed
+
+
+# ---------------------------------------------------------------------------------------------
+# The other source: the game's own `GetItemDrop_*` methods.
+#
+# The inversion above says which item *places* a tile and style. For 26 tiles the game also keeps a
+# method saying what breaking one *gives*, and where the two differ that one wins, because it is
+# the one `KillTile_GetItemDrops` and the `Check*` shape validators actually call. Reading only the
+# inversion left 1,414 of the table's entries unchecked; reading both leaves 479.
+#
+# Each method is a small program over `style`, so it is interpreted rather than pattern-matched:
+# a `switch` statement with stacked cases and a `default`, a `switch` *expression* with `N => M`
+# arms, range tests, and offsets like `2591 + style - 8`.
+# ---------------------------------------------------------------------------------------------
+
+# Which tile each method answers for, read off the nearest enclosing `if (type == N)` (or `case N:`)
+# at its call site in `WorldGen.cs`. Two of them take a `secondType` flag choosing between a pair of
+# tiles: chests 21/467 (`WorldGen.cs:64499`) and fake chests 441/468 (`:52879`, `:52888`).
+DROP_TILES = {
+    ("Bottles", None): 13,
+    ("Tables", False): 14,
+    ("Tables", True): 469,
+    ("Chair", None): 15,
+    ("Workbenches", None): 18,
+    ("Platforms", None): 19,
+    ("Chests", False): 21,
+    ("Chests", True): 467,
+    ("Candles", None): 33,
+    ("Chandeliers", None): 34,
+    ("Lanterns", None): 42,
+    ("Beds", None): 79,
+    ("Pianos", None): 87,
+    ("Dressers", None): 88,
+    ("Benches", None): 89,
+    ("Bathtubs", None): 90,
+    ("Lamps", None): 93,
+    ("Candelabras", None): 100,
+    ("Bookcases", None): 101,
+    ("Clocks", None): 104,
+    ("MusicBoxes", None): 139,
+    ("Sinks", None): 172,
+    ("FakeChests", False): 441,
+    ("FakeChests", True): 468,
+    ("PicnicTables", None): 487,
+    ("Toilet", None): 497,
+}
+
+DROP_SIG = r"^\t(?:public|private) static int GetItemDrop_%s\(int style"
+CASE = re.compile(r"^\s*case (\d+):\s*$")
+DEFAULT = re.compile(r"^\s*default:\s*$")
+ARROW = re.compile(r"^\s*(\d+) => (\d+),?\s*$")
+ARROW_DEFAULT = re.compile(r"^\s*_ => (\d+),?\s*$")
+SWITCH_EXPR = re.compile(r"^\s*return style switch\s*$")
+SWITCH_STMT = re.compile(r"^\s*switch \(style\)\s*$")
+DROP_ASSIGN = re.compile(r"^\s*(?:int )?\w+ = ([-+ 0-9a-z]+);$")
+DROP_RETURN = re.compile(r"^\s*return ([-+ 0-9a-z]+);$")
+DROP_IF = re.compile(r"^\s*(?:else )?if \((.+)\)\s*$")
+STYLE_EXPR = re.compile(r"^[\d\s+\-]*(?:style[\d\s+\-]*)*$")
+DROP_RANGE = re.compile(r"^style >= (\d+) && style <= (\d+)$")
+DROP_GE = re.compile(r"^style >= (\d+)$")
+DROP_LE = re.compile(r"^style <= (\d+)$")
+DROP_LT = re.compile(r"^style < (\d+)$")
+DROP_EQ = re.compile(r"^style == (\d+)$")
+# `GetItemDrop_PicnicTables`' whole body: `if (style == 0 || style != 1)`, i.e. everything but 1.
+DROP_NOT = re.compile(r"^style == (\d+) \|\| style != (\d+)$")
+
+
+class Returned(Exception):
+    """A `return` reached while interpreting one of these methods."""
+
+    def __init__(self, result):
+        self.result = result
+
+
+def style_value(text, style, state):
+    """A literal, arithmetic on `style`, or the single local the method accumulates into."""
+    text = text.strip()
+    if re.fullmatch(r"\w+", text) and not text.isdigit():
+        return state["value"]
+    if not STYLE_EXPR.match(text):
+        sys.exit("unhandled drop-method expression %r" % text)
+    return int(eval(text, {"__builtins__": {}}, {"style": style}))  # noqa: S307
+
+
+def style_condition(text, style, second):
+    text = text.strip()
+    if text == "secondType":
+        return bool(second)
+    for pattern, test in (
+        (DROP_RANGE, lambda m: int(m.group(1)) <= style <= int(m.group(2))),
+        (DROP_GE, lambda m: style >= int(m.group(1))),
+        (DROP_LE, lambda m: style <= int(m.group(1))),
+        (DROP_LT, lambda m: style < int(m.group(1))),
+        (DROP_NOT, lambda m: style == int(m.group(1)) or style != int(m.group(2))),
+        (DROP_EQ, lambda m: style == int(m.group(1))),
+    ):
+        m = pattern.match(text)
+        if m:
+            return test(m)
+    sys.exit("unhandled drop-method condition %r" % text)
+
+
+def take_block(lines, i):
+    """The statements of the `{ ... }` opening at `i`, and the index just past its close."""
+    depth, j = 0, i
+    while j < len(lines):
+        depth += lines[j].count("{") - lines[j].count("}")
+        if depth == 0:
+            return lines[i + 1 : j], j + 1
+        j += 1
+    sys.exit("unbalanced block in a GetItemDrop_ method")
+
+
+def run_drop_block(block, style, second, state):
+    """Interpret one block of a drop method for a single style."""
+    i = 0
+    while i < len(block):
+        line = block[i]
+        text = line.strip()
+
+        if SWITCH_EXPR.match(line):
+            body, i = take_block(block, i + 1)
+            fallback = None
+            for entry in body:
+                m = ARROW.match(entry)
+                if m and int(m.group(1)) == style:
+                    raise Returned(int(m.group(2)))
+                m = ARROW_DEFAULT.match(entry)
+                if m:
+                    fallback = int(m.group(1))
+            raise Returned(fallback)
+
+        if SWITCH_STMT.match(line):
+            body, i = take_block(block, i + 1)
+            run_drop_switch(body, style, second, state)
+            continue
+
+        m = DROP_IF.match(line)
+        if m:
+            body, i = take_block(block, i + 1)
+            taken = style_condition(m.group(1), style, second)
+            if taken:
+                run_drop_block(body, style, second, state)
+            # Trailing `else` / `else if` chains, tried in order until one is taken.
+            while i < len(block):
+                head = block[i].strip()
+                if head == "else":
+                    other, i = take_block(block, i + 1)
+                    if not taken:
+                        run_drop_block(other, style, second, state)
+                    break
+                if head.startswith("else if ("):
+                    condition = DROP_IF.match(block[i]).group(1)
+                    other, i = take_block(block, i + 1)
+                    if not taken and style_condition(condition, style, second):
+                        run_drop_block(other, style, second, state)
+                        taken = True
+                    continue
+                break
+            continue
+
+        m = DROP_RETURN.match(line)
+        if m:
+            raise Returned(style_value(m.group(1), style, state))
+
+        m = DROP_ASSIGN.match(line)
+        if m:
+            state["value"] = style_value(m.group(1), style, state)
+            i += 1
+            continue
+
+        if text in ("break;", "{", "}", ""):
+            i += 1
+            continue
+        sys.exit("unhandled drop-method statement %r" % text)
+
+
+def run_drop_switch(body, style, second, state):
+    """The `case`/`default` arms of a `switch (style)`, for one style."""
+    arms, pending, current = [], [], None
+    depth = 0
+    for line in body:
+        # Only labels at this switch's own level are its arms: `GetItemDrop_Clocks` nests another
+        # `switch (style)` inside one, and reading its labels as this one's tears the arms apart.
+        inner = depth > 0
+        depth += line.count("{") - line.count("}")
+        if inner:
+            current = current or []
+            current.append(line)
+            continue
+        if CASE.match(line) or DEFAULT.match(line):
+            if current is not None:
+                arms.append((pending, current))
+                pending, current = [], None
+            m = CASE.match(line)
+            pending.append(int(m.group(1)) if m else None)
+            continue
+        current = current if current is not None else []
+        current.append(line)
+    if current is not None:
+        arms.append((pending, current))
+
+    fallback = None
+    for labels, statements in arms:
+        if style in labels:
+            run_drop_block(statements, style, second, state)
+            return
+        if None in labels:
+            fallback = statements
+    if fallback is not None:
+        run_drop_block(fallback, style, second, state)
+
+
+def drop_method(lines, name):
+    signature = re.compile(DROP_SIG % name)
+    start = next((i for i, l in enumerate(lines) if signature.match(l)), None)
+    if start is None:
+        sys.exit("no GetItemDrop_%s in WorldGen.cs" % name)
+    depth, seen = 0, False
+    for j in range(start, len(lines)):
+        depth += lines[j].count("{") - lines[j].count("}")
+        if lines[j].count("{"):
+            seen = True
+        if seen and depth == 0:
+            return lines[start + 1 : j]
+    sys.exit("GetItemDrop_%s never closes" % name)
+
+
+def highest_style(body):
+    """The largest style a method actually names.
+
+    Every one of them falls through to a default for any integer, so "what did it answer" cannot be
+    the bound: it would claim hundreds of styles per tile. What a method *names* - in a `case`, an
+    `N =>` arm, or a comparison against `style` - is the real extent of the family.
+    """
+    top = 0
+    for line in body:
+        m = CASE.match(line) or ARROW.match(line)
+        if m:
+            top = max(top, int(m.group(1)))
+            continue
+        m = DROP_IF.match(line)
+        if m and "style" in m.group(1):
+            top = max([top] + [int(n) for n in re.findall(r"\d+", m.group(1))])
+    return top
+
+
+def from_drop_methods(root):
+    """`(tile, style) -> item` for every style the game's own drop methods answer for."""
+    lines = (root / "Terraria" / "WorldGen.cs").read_text(errors="replace").split("\n")
+    out = {}
+    for (name, second), tile in DROP_TILES.items():
+        body = drop_method(lines, name)
+        for style in range(highest_style(body) + 1):
+            state = {"value": None}
+            try:
+                run_drop_block(body, style, second, state)
+                result = state["value"]
+            except Returned as done:
+                result = done.result if done.result is not None else state["value"]
+            # `GetItemDrop_FakeChests` answers -1 for a style that gives nothing, and its call sites
+            # guard on it (`WorldGen.cs:52880`, `:52889`). That is "no item", not an item.
+            if result is not None and result >= 0:
+                out[(tile, style)] = result
+    return out
+
+
+# Banners are neither: tile 91 is dropped by its own if-chain over the style, inline in
+# `WorldGen.cs`, and `BannerSystem.BannerToItem` is a *different* mapping (banner index to item, not
+# style to item) that does not answer this question. 316 styles, 125 of which nothing else defines.
+BANNER_TILE = 91
+BANNER_CHAIN = re.compile(r"^\t\tif \(type == 91\)$", re.M)
+
+
+def from_banner_chain(root):
+    """`(91, style) -> item`, from `WorldGen.cs`'s own tile-91 arm.
+
+    The chain is the same shape the `GetItemDrop_*` methods use - `==`, `>=`, a range, and
+    `base + style` - so it is rewritten into that vocabulary and handed to the same interpreter
+    rather than getting a parser of its own. `num4` there is `frameX / 18 + frameY / 54 * 111`,
+    which is exactly the style.
+    """
+    lines = (root / "Terraria" / "WorldGen.cs").read_text(errors="replace").split("\n")
+    start = next((i for i, l in enumerate(lines) if BANNER_CHAIN.match(l)), None)
+    if start is None:
+        sys.exit("no `if (type == 91)` drop chain in WorldGen.cs")
+    depth, seen, end = 0, False, None
+    for j in range(start, len(lines)):
+        depth += lines[j].count("{") - lines[j].count("}")
+        if lines[j].count("{"):
+            seen = True
+        if seen and depth == 0:
+            end = j
+            break
+    if end is None:
+        sys.exit("the tile-91 drop chain never closes")
+
+    rewritten = []
+    for line in lines[start + 1 : end]:
+        # The two lines that compute `num4` from the frame are the definition of "style" here, so
+        # they are dropped rather than interpreted.
+        if re.match(r"^\s*(?:int )?num4 (?:=|\+=) ", line):
+            continue
+        text = line.replace("num4", "style")
+        # `Item.NewItem(source, x, y, 32, 32, EXPR);` is the whole payload of every arm.
+        item = re.search(r"Item\.NewItem\(.*?, 32, 32, ([^)]+)\);", text)
+        rewritten.append("\t\t\treturn %s;" % item.group(1) if item else text)
+
+    out = {}
+    for style in range(316):
+        state = {"value": None}
+        try:
+            run_drop_block(rewritten, style, None, state)
+            result = state["value"]
+        except Returned as done:
+            result = done.result
+        if result is not None and result >= 0:
+            out[(BANNER_TILE, style)] = result
+    return out
 
 
 def from_table(path):
@@ -154,8 +604,18 @@ def main():
     if len(sys.argv) != 2:
         sys.exit("usage: check_placed_items.py <decompiled tree>")
     root = Path(sys.argv[1])
-    source = from_source(root)
-    ours = from_table(Path("crates/terrustia-proto/src/placed_items.rs"))
+    inversion = from_source(root)
+    drops = from_drop_methods(root)
+    drops.update(from_banner_chain(root))
+    # The drop side wins where both speak: it is what `KillTile_GetItemDrops`, the `Check*`
+    # validators and the tile-91 arm actually run, and the inversion is a derivation of what places
+    # rather than of what is given back. They disagree on three pairs, named above `EXPECTED`.
+    source = dict(inversion)
+    source.update(drops)
+    # Relative to this file rather than the working directory, so a copy of this checker beside a
+    # copy of the table reads *that* table. `mutate_tables.py` depends on it.
+    repo = Path(__file__).resolve().parent.parent
+    ours = from_table(repo / "crates/terrustia-proto/src/placed_items.rs")
 
     missing = sorted(set(source) - set(ours))
     wrong = sorted(
@@ -164,22 +624,25 @@ def main():
         if source[k] != ours[k] and k not in EXPECTED
     )
 
+    both = set(inversion) & set(drops)
     print(
-        "%d (tile, style) pairs in Item.SetDefaults, %d in placed_items.rs"
-        % (len(source), len(ours))
+        "%d pairs in Item.SetDefaults, %d in the GetItemDrop_* methods, %d in placed_items.rs"
+        % (len(inversion), len(drops), len(ours))
     )
-    # Only one direction is a contract. `placed_items.rs` also merges the game's own
-    # `GetItemDrop_*` tables, which are a different source and legitimately carry pairs no item
-    # places, so a pair being here and not in the inversion says nothing. A pair the inversion
-    # defines being absent or different does.
-    print("%d pairs are ours alone, from the `GetItemDrop_*` merge" % len(set(ours) - set(source)))
+    print(
+        "%d pairs both sources define, disagreeing on %d"
+        % (len(both), sum(1 for k in both if inversion[k] != drops[k]))
+    )
+    # Only one direction is a contract. `placed_items.rs` carries pairs from neither source -
+    # banners come from `BannerSystem.BannerToItem`, paintings from their own worldgen - so a pair
+    # being here and in neither says nothing. A pair a source defines being absent or different does.
+    print("%d pairs are ours alone, from neither source" % len(set(ours) - set(source)))
     print("%d shared pairs agree" % (len(set(source) & set(ours)) - len(wrong)))
 
     problems = []
     for k in missing:
         problems.append(
-            "  tile %d style %d places item %d in source and is absent here"
-            % (k[0], k[1], source[k])
+            "  tile %d style %d gives item %d in source and is absent here" % (k[0], k[1], source[k])
         )
     for k, a, b in wrong:
         problems.append(
@@ -192,12 +655,12 @@ def main():
         if len(problems) > 60:
             print("  ... and %d more" % (len(problems) - 60))
         print(
-            "\nEach is either a wrong entry or a `GetItemDrop_*` table winning over the\n"
-            "inversion. Read the item in Item.cs; if the difference is deliberate, put the pair\n"
-            "in EXPECTED with why."
+            "\nEach is a wrong or missing entry. Read the item's arm in `Item.SetDefaults` and the\n"
+            "tile's own `GetItemDrop_*` method in `WorldGen.cs`; where the two disagree the drop\n"
+            "method wins. If the difference is deliberate, put the pair in EXPECTED with why."
         )
         return 1
-    print("\nevery pair in placed_items.rs matches Item.SetDefaults.")
+    print("\nevery pair in placed_items.rs matches the source that defines it.")
     return 0
 
 
