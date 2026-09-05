@@ -290,6 +290,7 @@ Traps World, is done). Both are v0.0.2 scope.
 | | Feature | Notes |
 |---|---|---|
 | ✅ | Buffs and debuffs, item entities, shimmer | |
+| ✅ | **Player luck** | The whole of `Player.RecalculateLuck` from packet 134, and all four things vanilla routes through it: ambient spawn rolls (gold critters, the Gnome, the Lacewing, the bound NPCs), every luck-scaling drop rule, the money-rain roll and the falling-star aim. Which of `Luck`'s three rolls a drop uses is decided per rule by the constructor source built it with, so `NotScalingWithLuck` really does ignore luck |
 | ✅ | Wiring, logic gates, timers, teleporters | |
 | ✅ | Chests, signs, tile entities, pylons | |
 | ✅ | Boss summon items, Angler quests, fishing NPCs | |

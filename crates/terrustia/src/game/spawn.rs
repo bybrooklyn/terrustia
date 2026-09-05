@@ -158,6 +158,31 @@ fn rolls_lucky(luck: f32, range: u32, rng: &mut SmallRng) -> bool {
     terrustia_proto::luck::roll_luck(luck, range, &mut Bridge(rng)) == 0
 }
 
+/// `Luck.RollOnlyBadLuckExtreme(luck, range) == 0` (`Terraria.GameContent/Luck.cs:53-60`):
+///
+/// ```csharp
+/// if (luck < 0f && Main.rand.NextFloat() < 0f - luck) { return Main.rand.Next(range / 10); }
+/// return -1;
+/// ```
+///
+/// Unlike every other roll in `Luck`, this one has no fallthrough to the ordinary odds: at or
+/// above zero luck it returns `-1`, which no caller's `== 0` can ever match. So the arms behind it
+/// are genuinely unreachable for an ordinary player, in the game as much as here, and reachable
+/// only by being unlucky. The Moss Zombie and the spawn-rate bonus in [`rates`] are the spawner's
+/// two callers.
+fn rolls_extremely_unlucky_only(luck: f32, range: u32, rng: &mut SmallRng) -> bool {
+    if luck >= 0.0 || rng.random::<f32>() >= -luck {
+        return false;
+    }
+    let Ok(range) = i32::try_from(range) else {
+        return false;
+    };
+    // `Main.rand.Next(range / 10)`, and `UnifiedRandom.Next(0)` is 0, which the caller's `== 0`
+    // then matches - so a `range` under ten is a certainty once the outer test passes.
+    let narrowed = range / 10;
+    narrowed <= 0 || rng.random_range(0..narrowed) == 0
+}
+
 /// `Luck.RollLuck(luck, range) < numerator` — the same roll, for the handful of callers that
 /// compare against something other than zero. `NPC.cs:4378`'s `RollLuck(100) < 40` is the
 /// spawner's one, and reading it as `== 0` would have turned a four-in-ten choice into a
@@ -1531,11 +1556,6 @@ pub fn zombie_settings(
 ///   hardmode night would answer with a Wolf where the game had already answered with an armour.
 ///   (The line numbers here were `:4636` and `:4640` and named the wrong arm; both are corrected.)
 /// * `NPC.cs:4691-4711` the Skyblock arm, for a world shape this server does not generate.
-/// * `NPC.cs:4712` the Moss Zombie, which is gated on `RollOnlyBadLuckExtreme(30) == 0`. That
-///   returns `-1` for any player whose luck is not negative (`Luck.cs:53-60`), and this server
-///   models no luck at all, so the arm cannot fire here any more than it fires for a vanilla player
-///   with no luck effects. Same reasoning, and the same citation, as the `rate * 0.85` bonus
-///   [`rates`] declines to transcribe. NPC 691 therefore stays in `docs/spawn-gaps.tsv` on purpose.
 ///
 /// The chain's own last arm answers rather than handing back, which is the one place this differs
 /// in shape from [`cavern_seasonal_pick`]: vanilla's surface night ends in a zombie
@@ -1669,6 +1689,24 @@ pub fn seasonal_night_pick(
     // `Next(2)` collapse away.
     if at.raining && one_in(rng, 2) {
         return Some(223); // ZombieRaincoat
+    }
+    // NPC.cs:4712, and it answers ahead of the Maggot Zombie below it:
+    //
+    // ```csharp
+    // if (ZoneGraveyard && RollOnlyBadLuckExtreme(30) == 0) {
+    //     SpawnNPC(spawnTileX * 16 + 8, spawnTileY * 16, 691);
+    //     return;
+    // }
+    // ```
+    //
+    // `RollOnlyBadLuckExtreme` returns `-1` outright for anybody whose luck is not negative
+    // (`Terraria.GameContent/Luck.cs:53-60`), so this is a graveyard arm that only an *unlucky*
+    // player ever sees - a broken Magic Mirror, a squashed ladybug, a Stinkbug. It was left out
+    // while this server modelled no luck at all, on the reasoning that it could not fire; NPC 691
+    // was the last of three entries in `docs/spawn-gaps.tsv` and the only one of them that was
+    // ever going to move.
+    if at.graveyard && rolls_extremely_unlucky_only(luck, 30, rng) {
+        return Some(691); // MossZombie
     }
     // NPC.cs:4717: the graveyard's own zombie. `maggotZombieChance` is 20 and nothing in
     // `GetZombieSettings` (`NPC.cs:5595-5619`) ever moves it.
@@ -7313,20 +7351,29 @@ mod tests {
                                             party: false,
                                         };
                                         for ground_block in [2u16, 147] {
-                                            for seed in 0..4_000u64 {
-                                                let mut rng = SmallRng::seed_from_u64(seed);
-                                                let zombie = zombie_settings(
-                                                    seed % 2 == 0,
-                                                    (seed % 8) as u32,
-                                                    &mut rng,
-                                                );
-                                                set.extend(seasonal_night_pick(
-                                                    at,
-                                                    zombie,
-                                                    ground_block,
-                                                    0.0,
-                                                    &mut rng,
-                                                ));
+                                            // Both signs of luck, because one arm of this chain is
+                                            // reachable only by being unlucky: the Moss Zombie's
+                                            // `RollOnlyBadLuckExtreme(30)` (`NPC.cs:4712`) has no
+                                            // fallthrough and returns `-1` at or above zero. A
+                                            // roster probed at neutral luck alone would report it
+                                            // unreachable, which is what `docs/spawn-gaps.tsv`
+                                            // said for as long as the server had no luck at all.
+                                            for luck in [0.0f32, -0.7] {
+                                                for seed in 0..4_000u64 {
+                                                    let mut rng = SmallRng::seed_from_u64(seed);
+                                                    let zombie = zombie_settings(
+                                                        seed % 2 == 0,
+                                                        (seed % 8) as u32,
+                                                        &mut rng,
+                                                    );
+                                                    set.extend(seasonal_night_pick(
+                                                        at,
+                                                        zombie,
+                                                        ground_block,
+                                                        luck,
+                                                        &mut rng,
+                                                    ));
+                                                }
                                             }
                                         }
                                     }
@@ -9487,6 +9534,51 @@ mod tests {
         assert!(
             TWINS.iter().any(|twin| seen.contains(twin)),
             "no gold critter in six million ticks: {seen:?}"
+        );
+    }
+
+    /// The Moss Zombie, the last of the three types `docs/spawn-gaps.tsv` carried as unreachable
+    /// and the only one of them that was ever going to move.
+    ///
+    /// `if (ZoneGraveyard && RollOnlyBadLuckExtreme(30) == 0)` (`NPC.cs:4712`), and
+    /// `RollOnlyBadLuckExtreme` has no fallthrough: at or above zero luck it returns `-1`
+    /// (`Luck.cs:53-60`), which the `== 0` can never match. So this is a spawn only an unlucky
+    /// player ever sees, and the arm was correctly absent while every player here was at zero.
+    ///
+    /// The other two entries stay where they are: 450 and 451 are dead in the game's own shipped
+    /// source, and no amount of luck reaches them.
+    #[test]
+    fn an_unlucky_player_in_a_graveyard_meets_the_moss_zombie() {
+        const MOSS_ZOMBIE: u16 = 691;
+        let graveyard_night = |luck: f32| {
+            let at = Seasonal {
+                graveyard: true,
+                ..Seasonal::default()
+            };
+            let mut rng = SmallRng::seed_from_u64(4);
+            let mut seen = 0;
+            for _ in 0..200_000 {
+                let zombie = zombie_settings(true, 1, &mut rng);
+                // Tile 2 is grass, which is what the other tests of this chain stand on.
+                if seasonal_night_pick(at, zombie, 2, luck, &mut rng) == Some(MOSS_ZOMBIE) {
+                    seen += 1;
+                }
+            }
+            seen
+        };
+        assert_eq!(
+            graveyard_night(0.0),
+            0,
+            "no ordinary player ever meets one, which is what `RollOnlyBadLuckExtreme` means"
+        );
+        assert_eq!(
+            graveyard_night(1.0),
+            0,
+            "and being *lucky* does not help either: there is no good-luck branch at all"
+        );
+        assert!(
+            graveyard_night(-0.7) > 0,
+            "a cursed player in a graveyard does"
         );
     }
 

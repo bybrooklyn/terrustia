@@ -812,8 +812,14 @@ The unreachable list itself went 88 -> 3 over 2026-09-03/04 (seven merged lanes:
 ordinary critters, water/beach critters, the hornet families, the underground fairies, the
 Halloween/graveyard/night roster, and the Palworld encounter). What is left is three types that are
 *correctly* unreachable and will stay that way: 450 and 451 are dead in the game's own shipped source
-(`num56` drawn once, tested against zero three times, `NPC.cs:5120-5138`), and 691 sits behind
-`RollOnlyBadLuckExtreme`, which never fires at the luck this server does not model.
+(`num56` drawn once, tested against zero three times, `NPC.cs:5120-5138`).
+
+**691 came off the list on 2026-09-05**, and the note it came off with is worth keeping: it was
+never wrong, it just stopped being true. The Moss Zombie sits behind `RollOnlyBadLuckExtreme(30)`
+(`NPC.cs:4712`), which returns `-1` outright at or above zero luck, and while this server modelled
+no luck at all no player could reach it. Player luck is modelled now, so a cursed player in a
+graveyard meets one, and `ambient_roster` probes both signs of luck for exactly this reason: a
+roster asked at neutral luck alone would keep reporting it unreachable for ever.
 
 - **NIGHTZOMBIE**: ~~the whole Halloween/Graveyard/full-moon night roster is unwired~~ **done.** Two
   lanes, and the note above was wrong about the second half of it in two ways worth recording. The
@@ -830,8 +836,9 @@ Halloween/graveyard/night roster, and the Palworld encounter). What is left is t
   (`NPC.cs:3772`). `progress.rs`'s `downed_halloween_king`/`_tree` are Frost Moon boss flags, not
   calendar tracking, and must not be confused with this. Three types stay in `docs/spawn-gaps.tsv`
   on purpose: 450 and 451 are dead in the game's own source (`num56` is drawn once and tested
-  against zero three times, `NPC.cs:5120-5138`), and 691 is behind `RollOnlyBadLuckExtreme`, which
-  never fires for a player whose luck this server does not model.
+  against zero three times, `NPC.cs:5120-5138`). 691 was the third until 2026-09-05, when player
+  luck was modelled and its `RollOnlyBadLuckExtreme(30)` arm became reachable for an unlucky
+  player; see the paragraph above.
 - **DESERT**: ~~the entire hardmode Underground Desert roster is missing~~ **done.** DesertGhoul x4
   (including the corruption/crimson/hallow-tainted variants), DesertLamia x2, SandShark x4,
   SandElemental, DesertDjinn, the giant antlions and TombCrawlerHead are all off
