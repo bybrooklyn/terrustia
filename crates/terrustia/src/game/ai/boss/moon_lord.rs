@@ -24,14 +24,14 @@ use terrustia_proto::npc_params::{
     EYE_SOCKET_LID_STEP_HEAD, FREE_EYE_ABOVE, FREE_EYE_SMOOTH, FREE_EYE_SPEED, LEECH_HEAL,
     LEECH_MARKS, LEECH_TICKS, MOON_LORD_ACCEL, MOON_LORD_BELOW, MOON_LORD_CORE,
     MOON_LORD_DEATH_TICKS, MOON_LORD_FIGHTING_DISTANCE, MOON_LORD_FREE_EYE, MOON_LORD_HAND,
-    MOON_LORD_HAND_OUT, MOON_LORD_HAND_UP, MOON_LORD_HEAD, MOON_LORD_HEAD_UP, MOON_LORD_LEECH,
-    MOON_LORD_OPENING, MOON_LORD_RAY_SWEEP, MOON_LORD_SCRIPTS, MOON_LORD_SPEED,
-    PHANTASMAL_BOLT_DAMAGE, PHANTASMAL_DEATHRAY_DAMAGE, PHANTASMAL_EYE_DAMAGE,
-    PHANTASMAL_SPHERE_DAMAGE, TRUE_EYE_BOLT_DAMAGE, TRUE_EYE_DEATHRAY_DAMAGE, TRUE_EYE_SCRIPT,
-    TRUE_EYE_SPHERE_DAMAGE, TRUE_EYE_SPRAY_DAMAGE,
+    MOON_LORD_HAND_OUT, MOON_LORD_HAND_UP, MOON_LORD_HEAD, MOON_LORD_HEAD_UP, MOON_LORD_OPENING,
+    MOON_LORD_RAY_SWEEP, MOON_LORD_SCRIPTS, MOON_LORD_SPEED, PHANTASMAL_BOLT_DAMAGE,
+    PHANTASMAL_DEATHRAY_DAMAGE, PHANTASMAL_EYE_DAMAGE, PHANTASMAL_SPHERE_DAMAGE,
+    TRUE_EYE_BOLT_DAMAGE, TRUE_EYE_DEATHRAY_DAMAGE, TRUE_EYE_SCRIPT, TRUE_EYE_SPHERE_DAMAGE,
+    TRUE_EYE_SPRAY_DAMAGE,
 };
 use terrustia_proto::projectile::ids::{
-    PHANTASMAL_BOLT, PHANTASMAL_DEATHRAY, PHANTASMAL_EYE, PHANTASMAL_SPHERE,
+    MOON_LEECH_BRAND, PHANTASMAL_BOLT, PHANTASMAL_DEATHRAY, PHANTASMAL_EYE, PHANTASMAL_SPHERE,
 };
 
 use super::skeletron::Parent;
@@ -90,17 +90,23 @@ pub struct MoonLordOutcome {
     pub healed: i32,
     /// Set on the one tick the death drama clears the stage.
     pub cleared_stage: bool,
+    /// Where the target player is, on the tick the leech step opens and every living player in
+    /// range is branded.
+    pub brands_players: Option<(f32, f32)>,
+    /// ...and on each of the three marks, when every live brand becomes a leech there.
+    pub harvests_brands: Option<(f32, f32)>,
 }
 
 /// The projectile types the death drama sweeps out of the air (`NPC.cs:41755-41758`): the eye
-/// stream, the sphere barrage, the deathray and the bolt spread. Vanilla's list also carries 456,
-/// the leech brand, which this server never puts up (the brand-then-blob plumbing is the narrowing
-/// [`run_head_attack`] already discloses), so there is nothing of that type to sweep.
-pub const MOON_LORD_SHOTS: [u16; 4] = [
+/// stream, the sphere barrage, the deathray, the bolt spread and the leech brand. The brand is in
+/// vanilla's list and is in this one now that the fight actually puts one up; before the
+/// brand-then-blob chain was modelled there was nothing of that type to sweep.
+pub const MOON_LORD_SHOTS: [u16; 5] = [
     PHANTASMAL_EYE,
     PHANTASMAL_SPHERE,
     PHANTASMAL_DEATHRAY,
     PHANTASMAL_BOLT,
+    MOON_LEECH_BRAND,
 ];
 
 /// How far into the death drama the stage is cleared (`NPC.cs:41752`, `ai[1] == 60f`).
@@ -494,25 +500,30 @@ fn run_head_attack(
             }
         }
         2 => {
-            // BS3-M2: the leech attack. The head brands each player in range with proj 456 at the
-            // start of the step, and then at three fixed marks - 120, 180 and 240 - turns each live
-            // brand into a leech *on the branded player* (`NPC.cs:42718-42755`,
-            // `NewNPC(..., Main.player[target].Center, 401)`). Against one player that is three
-            // leeches a cycle. This fired one every sixty ticks over a 435-tick step, so eight came
-            // out per cycle instead of three - almost three times the healing throughput - and they
-            // were made at the boss, where nobody is standing to kill them.
+            // BS3-M2: the leech attack, and the whole of it is a chain rather than a timer
+            // (`NPC.cs:42719-42755`).
             //
-            // The brand-then-blob plumbing itself is not modelled: with no proj 456 and no buff 145
-            // there is nothing to filter on, so every mark produces its leech.
+            // At `num == 0` the head brands *every* living player within 3,000 px of
+            // `Center + (0, 216)` with one projectile 456 apiece. Then at three fixed marks - 120,
+            // 180 and 240 - each brand that is still in the air and whose branded player is still
+            // carrying `BuffID.MoonLeech` (145) turns into a leech, spawned on the *target*
+            // player. So a lone player who never sheds the debuff sees three a cycle, four players
+            // see up to twelve, and a player who cures it or outruns their brand sees fewer.
+            //
+            // Neither half of that is decidable here: which players are alive and where they are
+            // is the server's to know, and so is whether a brand is still up. Both marks are
+            // reported and `GameServer::brand_for_the_moon_lord` /
+            // `harvest_the_moon_lords_brands` do the enumerating, the same split
+            // `spawn_falling_objects` uses for the same reason.
+            //
+            // What this replaced: one leech every sixty ticks over a 435-tick step, so eight a
+            // cycle against the game's three, and made at the boss rather than at the player -
+            // almost three times the healing throughput, in a place nobody is standing to stop it.
+            if within == 0.0 {
+                out.brands_players = Some(target);
+            }
             if LEECH_MARKS.contains(&within) {
-                out.spawn.push(Spawn {
-                    handle: None,
-                    npc_type: MOON_LORD_LEECH,
-                    position: target,
-                    velocity: (0.0, 0.0),
-                    parent: Some(Spawn::OWN_PARENT),
-                    ai: [None; 4],
-                });
+                out.harvests_brands = Some(target);
             }
         }
         3 => fire_spread(npc, out, target, within, dur),
@@ -733,6 +744,7 @@ mod tests {
     use super::*;
     use crate::game::npc_ai::Target;
     use std::collections::HashMap;
+    use terrustia_proto::npc_params::MOON_LORD_LEECH;
     use terrustia_proto::tile::Tile;
 
     struct Sky(HashMap<(i32, i32), Tile>);
@@ -793,19 +805,21 @@ mod tests {
         let core_part = core_at((0.0, 0.0), state::WAITING);
         let mut head = piece(MOON_LORD_HEAD);
 
-        let mut leeches = Vec::new();
+        let mut brands = 0;
+        let mut harvests = 0;
         // One full loop of the head's row, which is 1200 ticks.
         for _ in 0..1200 {
-            for spawn in eye_socket(&mut head, &w, Some(core_part)).spawn {
-                if spawn.npc_type == MOON_LORD_LEECH {
-                    leeches.push(spawn.position);
-                }
-            }
+            let out = eye_socket(&mut head, &w, Some(core_part));
+            brands += usize::from(out.brands_players == Some(player));
+            harvests += usize::from(out.harvests_brands == Some(player));
+            assert!(
+                !out.spawn.iter().any(|s| s.npc_type == MOON_LORD_LEECH),
+                "a leech is never made from here any more: the server makes one per surviving \
+                 brand, and this routine cannot know how many that is"
+            );
         }
-        assert_eq!(leeches.len(), 3, "three a cycle, one per mark");
-        for at in leeches {
-            assert_eq!(at, player, "and each one arrives on the player");
-        }
+        assert_eq!(brands, 1, "one branding a cycle, at the step's own start");
+        assert_eq!(harvests, 3, "and three marks, at 120, 180 and 240");
     }
 
     /// BS3-M3: the eye shuts, and while it is shut the part cannot be hurt.
@@ -1148,13 +1162,15 @@ mod tests {
         let fired = |npc_type: u16| {
             let mut e = piece(npc_type);
             let mut projectiles = std::collections::HashSet::new();
+            // The leech step no longer makes an NPC from here: it reports its marks and the server
+            // makes one leech per surviving brand. Counting the marks is counting the step.
             let mut leeches = 0;
             for _ in 0..4000 {
                 let out = eye_socket(&mut e, &w, Some(core_at((0.0, 0.0), state::WAITING)));
                 for shot in out.shots {
                     projectiles.insert(shot.projectile);
                 }
-                leeches += out.spawn.len();
+                leeches += usize::from(out.harvests_brands.is_some());
             }
             (projectiles, leeches)
         };

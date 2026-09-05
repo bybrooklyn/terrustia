@@ -213,6 +213,10 @@ pub struct AiOutput {
     /// A buff the NPC just updated wants put straight onto a player, as (player slot, buff id,
     /// ticks) — see [`super::ai::Effects::player_buff`].
     pub player_buff: Option<(u8, u16, i32)>,
+    /// The Moon Lord's leech step — see [`super::ai::Effects::brands_players`] and
+    /// [`super::ai::Effects::harvests_brands`].
+    pub brands_players: Option<(f32, f32)>,
+    pub harvests_brands: Option<(f32, f32)>,
     /// An item to put into the world where this NPC stands, outside the kill path: see
     /// [`super::ai::Effects::reward`].
     pub reward: Option<i16>,
@@ -344,6 +348,8 @@ pub fn update_with(
         out.carry = effects.carry;
         out.roared = effects.roared;
         out.player_buff = effects.player_buff;
+        out.brands_players = effects.brands_players;
+        out.harvests_brands = effects.harvests_brands;
         out.reward = effects.reward;
         npc.was_hurt = false;
 

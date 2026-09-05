@@ -633,6 +633,13 @@ pub struct Effects {
     pub teleport_to: Option<(f32, f32)>,
     /// Set on the tick the Cultists' tablet finishes breaking, which is what raises their master.
     pub ritual_complete: bool,
+    /// Set on the tick the Moon Lord's leech step opens: every living player within 3,000 px of
+    /// the head is branded (`NPC.cs:42723-42738`). The enumerating is the server's, because which
+    /// players are alive and where they are is not something an AI routine is handed.
+    pub brands_players: Option<(f32, f32)>,
+    /// Set on each of the leech step's three marks: every brand still in the air whose player is
+    /// still carrying `BuffID.MoonLeech` becomes a leech (`NPC.cs:42740-42754`).
+    pub harvests_brands: Option<(f32, f32)>,
     /// Set on the one tick the Moon Lord's death drama clears the stage: every True Eye still
     /// hunting is killed and every shot the fight left in the air is dropped
     /// (`NPC.cs:41752-41764`).
@@ -1318,6 +1325,8 @@ pub fn run<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallRng)
             effects.shots.extend(out.shots);
             effects.spawn.extend(out.spawn);
             effects.expired = out.spent;
+            effects.brands_players = out.brands_players;
+            effects.harvests_brands = out.harvests_brands;
         }
         81 => {
             let out = boss::moon_lord::free_eye(npc, world, world.parent);

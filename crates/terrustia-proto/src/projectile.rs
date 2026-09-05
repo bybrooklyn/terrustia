@@ -205,6 +205,14 @@ pub mod ids {
     /// The antlion's sand ball. Its speed, damage and reload are `npc_params::ANTLION_*`.
     pub const ANTLION_SHOT_TYPE: u16 = 31;
 
+    /// `ProjectileID.MoonLeech`, the Moon Lord's brand.
+    ///
+    /// Not a weapon: it does no damage (`NewProjectile(..., 456, 0, 0f, ...)`,
+    /// `ItemDropDatabase`'s neighbour at `NPC.cs:42737`), and its whole job is to fly to one
+    /// player, put `BuffID.MoonLeech` on them, and fly home. `aiStyle 85` is that round trip, and
+    /// the boss reads the surviving brands three times a step to decide how many leeches to make.
+    pub const MOON_LEECH_BRAND: u16 = 456;
+
     /// A night's falling star, in its two halves.
     ///
     /// `FALLING_STAR_SPAWNER` is what `WorldGen.SpawnFallingObjects` puts in the sky: it does not

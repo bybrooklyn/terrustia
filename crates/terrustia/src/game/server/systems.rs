@@ -15,6 +15,10 @@ use super::*;
 /// `ItemID.FallenStar`, the one item this file spawns from nothing but the passage of a night.
 const FALLEN_STAR: i32 = 75;
 
+/// One Moon Lord branding a tick collected: the head's slot, where the head is, and where the
+/// player it is aiming at is.
+type Branding = (u8, (f32, f32), (f32, f32));
+
 /// `BuffID.Stinky` (`BuffID.cs:393`), the one buff `Player.RecalculateLuck` reads.
 pub(super) const STINKY: u16 = 120;
 
@@ -362,6 +366,12 @@ impl GameServer {
         // a latched nebula headcrab's Obstructed is currently the only source of these
         // (`Effects::player_buff`'s own doc comment, `NPC.cs:37508-37526`).
         let mut player_buffs: Vec<(u8, u16, i32)> = Vec::new();
+        // The Moon Lord's leech step, as (head slot, its centre, the player it is aiming at) for a
+        // branding and (head slot, the target) for each of the three marks. Collected here rather
+        // than acted on in the loop because both need to walk the player table, which is borrowed
+        // for the length of it.
+        let mut brandings: Vec<Branding> = Vec::new();
+        let mut harvests: Vec<(u8, (f32, f32))> = Vec::new();
         // Items a routine wants left in the world without anything having been killed for them, as
         // (item id, where). A pal's pet is the only source (`Effects::reward`).
         let mut rewards: Vec<(i16, (f32, f32))> = Vec::new();
@@ -830,6 +840,14 @@ impl GameServer {
                 if let Some(buff) = ai_out.player_buff.take() {
                     player_buffs.push(buff);
                 }
+                // The Moon Lord's leech step: a branding at its start and a harvest at each of its
+                // three marks. Both want the player table, which is borrowed here.
+                if let Some(at) = ai_out.brands_players.take() {
+                    brandings.push((index, npc.center(), at));
+                }
+                if let Some(at) = ai_out.harvests_brands.take() {
+                    harvests.push((index, at));
+                }
                 // A pal handing over its pet. Not a drop and not loot: `AI_127_Pal_GiveRewerd`
                 // (`NPC.cs:43481-43489`) is a bare `Item.NewItem` at the pal's own centre, and the
                 // `life = 0; active = false;` that follows it is a removal rather than a kill, so
@@ -1018,6 +1036,16 @@ impl GameServer {
         // than catching everyone in a radius. `!player22.creativeGodMode` (`NPC.cs:37522`) is
         // this server's own `journey.is_godmode` gate, the same one `hurt_player` uses for the
         // one other place this server decides something on a player's behalf.
+        // The brandings first and the harvests after, which is the order within one tick they can
+        // never both be in: a branding is `num == 0` and a mark is 120 or more, so a brand can
+        // never be harvested on the tick it was made. Ordered anyway, because relying on that
+        // would make a future change to the marks silently wrong.
+        for (head, centre, at) in brandings {
+            self.brand_for_the_moon_lord(head, centre, at);
+        }
+        for (head, at) in harvests {
+            self.harvest_the_moon_lords_brands(head, at);
+        }
         for (slot, buff, ticks) in player_buffs {
             let alive = self.players[slot as usize]
                 .as_ref()
@@ -1488,6 +1516,242 @@ impl GameServer {
         (*free[at]).to_string()
     }
 
+    /// `BuffID.MoonLeech` (145), the debuff a Moon Lord brand leaves on whoever it reaches.
+    ///
+    /// The boss reads it back off the branded player three times a step to decide how many leeches
+    /// to make, so shedding it is the counter-play - and reading the player's own reported buff
+    /// list is exactly how vanilla's server sees it, because packet 50 overwrites the server's
+    /// `buffType` array (`MessageBuffer.cs:2467-2477`).
+    const MOON_LEECH_BUFF: u16 = 145;
+
+    /// `NPC.cs:42723-42738`: the head brands every living player in range.
+    ///
+    /// ```csharp
+    /// Vector2 vector4 = base.Center + new Vector2(0f, 216f);
+    /// for (int l = 0; l < 255; l++) {
+    ///     Player player = Main.player[l];
+    ///     if (player.active && !player.dead && Vector2.Distance(player.Center, vector4) <= 3000f) {
+    ///         Vector2 vector5 = Main.player[target].Center - vector4;
+    ///         if (vector5 != Vector2.Zero) { vector5.Normalize(); }
+    ///         Projectile.NewProjectile(..., vector4.X, vector4.Y, vector5.X, vector5.Y, 456, 0,
+    ///                                  0f, Main.myPlayer, whoAmI + 1, l);
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// One brand per player, all of them launched in the direction of the *target* player rather
+    /// than of the one they are for - `aiStyle 85` steers each to its own player on the next tick,
+    /// so the initial aim is a flourish. `ai[0]` is the head's index plus one (the sign of it is
+    /// the outbound/homebound flag, which is why it cannot be a bare index) and `ai[1]` is the
+    /// branded player's slot.
+    fn brand_for_the_moon_lord(&mut self, head: u8, centre: (f32, f32), target: (f32, f32)) {
+        let mouth = (centre.0, centre.1 + 216.0);
+        let aim = (target.0 - mouth.0, target.1 - mouth.1);
+        let length = aim.0.hypot(aim.1);
+        let velocity = if length > 0.0 {
+            (aim.0 / length, aim.1 / length)
+        } else {
+            (0.0, 0.0)
+        };
+        let branded: Vec<u8> = self
+            .players
+            .iter()
+            .flatten()
+            .filter(|p| p.is_playing() && p.life > 0)
+            .filter(|p| {
+                let centre = (
+                    p.position.0 + PLAYER_HALF_WIDTH,
+                    p.position.1 + PLAYER_HEIGHT / 2.0,
+                );
+                (centre.0 - mouth.0).hypot(centre.1 - mouth.1) <= 3000.0
+            })
+            .map(|p| p.slot)
+            .collect();
+        for slot in branded {
+            let Some(index) = self.projectiles.launch(
+                terrustia_proto::projectile::ids::MOON_LEECH_BRAND,
+                mouth,
+                velocity,
+                0,
+                0,
+            ) else {
+                return;
+            };
+            if let Some(p) = self.projectiles.get_mut(index) {
+                p.ai[0] = f32::from(head) + 1.0;
+                p.ai[1] = f32::from(slot);
+            }
+            self.broadcast_projectile(index);
+        }
+    }
+
+    /// `Projectile.AI_085`, the brand's round trip (`Projectile.cs:32327-32393`).
+    ///
+    /// Outbound while `ai[0] > 0`: fly at the branded player at up to 16 a tick, and within 20 px,
+    /// once, put `BuffID.MoonLeech` on them for 840 ticks (960 in expert). The sign flips at 330
+    /// ticks, or the moment the branded player leaves or dies; homebound it flies back to the
+    /// head's own mouth and dies there.
+    ///
+    /// Two things this does *not* do, and neither is a narrowing. The brand's buff lands on the
+    /// client from the client's own copy of the projectile (`AddBuff`'s `Main.myPlayer == whoAmI`
+    /// branch, `Player.cs:5261`), so the packet the server sends is the projectile itself and not a
+    /// buff; and the server's own record of who is branded is the buff list that client reports
+    /// back, which is exactly what vanilla's server reads at the marks. The one thing this server
+    /// sends that vanilla's does not is packet 55, which makes the debuff land even for a client
+    /// that has somehow not been told about the projectile - a strictly-more-reliable version of
+    /// the same effect, and the mechanism `Effects::player_buff` already uses.
+    fn tick_moon_leech_brands(&mut self) {
+        use terrustia_proto::projectile::ids::MOON_LEECH_BRAND;
+
+        let brands: Vec<u16> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == MOON_LEECH_BRAND)
+            .map(|(index, _)| index)
+            .collect();
+        if brands.is_empty() {
+            return;
+        }
+        let expert = self.is_expert();
+        let mut spent = Vec::new();
+        let mut buffs = Vec::new();
+        for index in brands {
+            let Some(brand) = self.projectiles.get(index).copied() else {
+                continue;
+            };
+            // `if (!Main.npc[num734].active || Main.npc[num734].type != 396) { Kill(); return; }`
+            let head = (brand.ai[0].abs() - 1.0) as i64;
+            let head_alive = u8::try_from(head).ok().and_then(|slot| {
+                self.npcs
+                    .get(slot)
+                    .filter(|n| {
+                        n.is_alive() && n.npc_type == terrustia_proto::npc_params::MOON_LORD_HEAD
+                    })
+                    .map(crate::game::npc::Npc::center)
+            });
+            let Some(mouth) = head_alive.map(|(x, y)| (x, y + 216.0)) else {
+                spent.push(index);
+                continue;
+            };
+            let slot = brand.ai[1] as i64;
+            let player = u8::try_from(slot)
+                .ok()
+                .and_then(|slot| self.player(slot))
+                .filter(|p| p.is_playing() && p.life > 0)
+                .map(|p| {
+                    (
+                        p.slot,
+                        (
+                            p.position.0 + PLAYER_HALF_WIDTH,
+                            p.position.1 + PLAYER_HEIGHT / 2.0,
+                        ),
+                    )
+                });
+
+            let Some(brand) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            brand.local_ai[0] += 1.0;
+            // Turned for home at 330 ticks, or the moment the player it was for is gone.
+            if brand.ai[0] > 0.0 && (brand.local_ai[0] >= 330.0 || player.is_none()) {
+                brand.ai[0] *= -1.0;
+                brand.dirty = true;
+            }
+            let (destination, arriving_home) = if brand.ai[0] > 0.0 {
+                (player.map_or(mouth, |(_, at)| at), false)
+            } else {
+                (mouth, true)
+            };
+            let centre = brand.center();
+            let to = (destination.0 - centre.0, destination.1 - centre.1);
+            let distance = to.0.hypot(to.1);
+            brand.velocity = if distance > 0.0 {
+                let speed = distance.min(16.0);
+                (to.0 / distance * speed, to.1 / distance * speed)
+            } else {
+                (0.0, 0.0)
+            };
+            if distance < 20.0 {
+                if arriving_home {
+                    spent.push(index);
+                } else if brand.local_ai[1] == 0.0 {
+                    brand.local_ai[1] = 1.0;
+                    if let Some((slot, _)) = player {
+                        buffs.push((slot, if expert { 960 } else { 840 }));
+                    }
+                }
+            }
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+        for (slot, ticks) in buffs {
+            if !self.journey.is_godmode(slot)
+                && let Ok(frame) =
+                    terrustia_proto::packets::add_player_buff(slot, Self::MOON_LEECH_BUFF, ticks)
+            {
+                self.broadcast(frame, None);
+            }
+        }
+    }
+
+    /// `NPC.cs:42740-42754`: each of the three marks turns every *surviving, still-effective* brand
+    /// into a leech on the target player.
+    ///
+    /// ```csharp
+    /// for (int m = 0; m < 1000; m++) {
+    ///     Projectile projectile = Main.projectile[m];
+    ///     if (projectile.active && projectile.type == 456
+    ///         && Main.player[(int)projectile.ai[1]].FindBuffIndex(145) != -1) {
+    ///         Vector2 center2 = Main.player[target].Center;
+    ///         int num16 = NewNPC(..., (int)center2.X, (int)center2.Y, 401);
+    ///         ...
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// Both halves of the filter are the fight: a brand that has not reached its player yet has
+    /// not applied the debuff, and one whose player has since shed it produces nothing. So the
+    /// count is three a cycle for a lone player who stands still and takes it, fewer for one who
+    /// cures it or is far enough away to outrun the first mark, and up to three *per player* on a
+    /// crowded arena.
+    fn harvest_the_moon_lords_brands(&mut self, head: u8, target: (f32, f32)) {
+        use terrustia_proto::projectile::ids::MOON_LEECH_BRAND;
+
+        let effective: usize = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == MOON_LEECH_BRAND)
+            .filter(|(_, p)| (p.ai[0].abs() - 1.0) as i64 == i64::from(head))
+            .filter(|(_, p)| {
+                u8::try_from(p.ai[1] as i64)
+                    .ok()
+                    .and_then(|slot| self.player(slot))
+                    .is_some_and(|player| player_has_buff(player, Self::MOON_LEECH_BUFF))
+            })
+            .count();
+        for _ in 0..effective {
+            // The same slot guard the ordinary summon path carries: vanilla has none here, and a
+            // boss that can fill the NPC table on a crowded arena is this server's problem rather
+            // than the game's.
+            if self.npcs.used_slots() >= MAX_MINION_SLOTS {
+                break;
+            }
+            if let Some(index) = self
+                .npcs
+                .spawn(terrustia_proto::npc_params::MOON_LORD_LEECH, target)
+            {
+                if let Some(leech) = self.npcs.get_mut(index) {
+                    // `Main.npc[num16].ai[0] = whoAmI + 1` in the game; here the link is
+                    // `follows_boss`, which is what `boss::moon_lord::leech` reads as its parent
+                    // and what every other Moon Lord part is bound by.
+                    leech.follows_boss = Some(head);
+                }
+                self.broadcast_npc(index);
+            }
+        }
+    }
+
     /// `Projectile.AI_148_StarSpawner` (`Projectile.cs:54028-54061`), and the one line of
     /// `aiStyle == 5` that is not dust (`Projectile.cs:24093-24096`):
     ///
@@ -1582,6 +1846,10 @@ impl GameServer {
         // Before the movement below, matching `Projectile.Update`'s own order: the AI runs, and
         // then what survives it moves.
         self.tick_falling_stars();
+        // The Moon Lord brand's round trip, for the same reason and in the same place: it steers
+        // at a *particular* player and dies on the boss that made it, neither of which a projectile
+        // can see from inside its own tick.
+        self.tick_moon_leech_brands();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -13769,6 +14037,237 @@ mod money_rain {
             purse_on_the_ground(&server),
             0,
             "twenty-four showers in twenty-five are just rain"
+        );
+    }
+}
+
+/// The Moon Lord's brand-then-blob chain, which used to be a timer.
+///
+/// `NPC.cs:42723-42754` is three linked steps, not one: the head brands every living player in
+/// range with projectile 456, each brand flies to its own player and leaves `BuffID.MoonLeech` on
+/// them, and then at three fixed marks every brand still in the air whose player still carries the
+/// debuff becomes a leech on the *target*. Curing it, or being far enough away that your brand has
+/// not landed yet, is the counter-play, and none of it existed here: a leech came out every sixty
+/// ticks regardless, at the boss rather than at anybody.
+#[cfg(test)]
+mod moon_lord_leech_brands {
+    use super::*;
+    use crate::config::Config;
+    use terrustia_proto::npc_params::{MOON_LORD_HEAD, MOON_LORD_LEECH};
+    use terrustia_proto::projectile::ids::MOON_LEECH_BRAND;
+
+    const MOON_LEECH_BUFF: u16 = 145;
+
+    fn arena() -> GameServer {
+        GameServer::new(
+            Config::default(),
+            crate::world::World::empty(800, 600, "moon lord brand probe"),
+        )
+    }
+
+    fn seat(server: &mut GameServer, slot: u8, at: (f32, f32)) {
+        let (tx, rx) = tokio::sync::mpsc::channel(4096);
+        std::mem::forget(rx);
+        let mut player = Player::new(slot, "127.0.0.1:1".parse().expect("loopback"), tx);
+        player.state = ConnState::Playing;
+        player.life = 400;
+        player.position = at;
+        server.players[usize::from(slot)] = Some(player);
+    }
+
+    /// Packet 50's body: a slot byte, then `u16` buff ids, then a zero.
+    fn give_buff(server: &mut GameServer, slot: u8, buff: u16) {
+        let mut body = vec![slot];
+        body.extend_from_slice(&buff.to_le_bytes());
+        body.extend_from_slice(&0u16.to_le_bytes());
+        if let Some(player) = server.player_mut(slot) {
+            player.buffs = Some(Bytes::from(body));
+        }
+    }
+
+    fn brands(server: &GameServer) -> Vec<crate::game::projectile::Projectile> {
+        server
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == MOON_LEECH_BRAND)
+            .map(|(_, p)| *p)
+            .collect()
+    }
+
+    fn leeches(server: &GameServer) -> usize {
+        server
+            .npcs
+            .iter()
+            .filter(|(_, n)| n.npc_type == MOON_LORD_LEECH)
+            .count()
+    }
+
+    /// One brand per living player inside 3,000 px of the head's mouth, and none for anybody
+    /// outside it or dead.
+    #[test]
+    fn the_branding_reaches_every_living_player_in_range() {
+        let mut server = arena();
+        let head = server
+            .npcs
+            .spawn(MOON_LORD_HEAD, (4000.0, 4000.0))
+            .expect("a slot");
+        let centre = server.npcs.get(head).expect("seated").center();
+        let mouth = (centre.0, centre.1 + 216.0);
+
+        seat(&mut server, 0, (mouth.0 + 100.0, mouth.1));
+        seat(&mut server, 1, (mouth.0 + 2_000.0, mouth.1));
+        seat(&mut server, 2, (mouth.0 + 4_000.0, mouth.1));
+        seat(&mut server, 3, (mouth.0 + 200.0, mouth.1));
+        if let Some(dead) = server.player_mut(3) {
+            dead.life = 0;
+        }
+
+        server.brand_for_the_moon_lord(head, centre, (mouth.0 + 100.0, mouth.1));
+
+        let mut branded: Vec<u8> = brands(&server).iter().map(|p| p.ai[1] as u8).collect();
+        branded.sort_unstable();
+        assert_eq!(
+            branded,
+            vec![0, 1],
+            "the two in range and alive, and neither the distant one nor the dead one"
+        );
+        for brand in brands(&server) {
+            assert_eq!(
+                brand.ai[0],
+                f32::from(head) + 1.0,
+                "`whoAmI + 1`, and positive because it is outbound"
+            );
+            assert_eq!(brand.damage, 0, "a brand is not a weapon");
+        }
+    }
+
+    /// The round trip: out to the player, the debuff on arrival, then home and gone.
+    #[test]
+    fn a_brand_flies_out_marks_its_player_and_comes_home() {
+        let mut server = arena();
+        let head = server
+            .npcs
+            .spawn(MOON_LORD_HEAD, (4000.0, 4000.0))
+            .expect("a slot");
+        let centre = server.npcs.get(head).expect("seated").center();
+        let mouth = (centre.0, centre.1 + 216.0);
+        seat(&mut server, 0, (mouth.0 + 400.0, mouth.1));
+        server.brand_for_the_moon_lord(head, centre, (mouth.0 + 400.0, mouth.1));
+        assert_eq!(brands(&server).len(), 1);
+
+        // Out: 400 px at up to 16 a tick is about twenty-five ticks, and the arrival is what sets
+        // `localAI[1]`. Through `tick_projectiles`, because the brand pass sets the velocity and
+        // the ordinary projectile step is what moves on it.
+        for _ in 0..40 {
+            server.tick_projectiles();
+        }
+        let brand = brands(&server).pop().expect("still in the air");
+        assert_eq!(
+            brand.local_ai[1], 1.0,
+            "it reached its player and marked them"
+        );
+        assert!(brand.ai[0] > 0.0, "and is still outbound");
+
+        // `localAI[0] >= 330f` turns it round, and then it dies on the mouth it came from.
+        for _ in 0..400 {
+            server.tick_projectiles();
+            if brands(&server).is_empty() {
+                break;
+            }
+        }
+        assert!(
+            brands(&server).is_empty(),
+            "a brand that has turned for home dies there rather than hanging about"
+        );
+    }
+
+    /// The head going away takes every brand with it: `if (!Main.npc[num734].active ||
+    /// Main.npc[num734].type != 396) { Kill(); return; }`.
+    #[test]
+    fn a_brand_dies_with_the_head_that_made_it() {
+        let mut server = arena();
+        let head = server
+            .npcs
+            .spawn(MOON_LORD_HEAD, (4000.0, 4000.0))
+            .expect("a slot");
+        let centre = server.npcs.get(head).expect("seated").center();
+        seat(&mut server, 0, (centre.0 + 400.0, centre.1 + 216.0));
+        server.brand_for_the_moon_lord(head, centre, (centre.0 + 400.0, centre.1 + 216.0));
+        assert_eq!(brands(&server).len(), 1);
+
+        server.npcs.remove(head);
+        server.tick_projectiles();
+        assert!(brands(&server).is_empty());
+    }
+
+    /// The harvest, and the whole of the mechanic: one leech per brand whose player still carries
+    /// the debuff, on the target rather than on the boss.
+    #[test]
+    fn a_mark_makes_one_leech_per_still_marked_player() {
+        let mut server = arena();
+        let head = server
+            .npcs
+            .spawn(MOON_LORD_HEAD, (4000.0, 4000.0))
+            .expect("a slot");
+        let centre = server.npcs.get(head).expect("seated").center();
+        let mouth = (centre.0, centre.1 + 216.0);
+        let target = (mouth.0 + 100.0, mouth.1);
+        seat(&mut server, 0, target);
+        seat(&mut server, 1, (mouth.0 + 300.0, mouth.1));
+        server.brand_for_the_moon_lord(head, centre, target);
+        assert_eq!(brands(&server).len(), 2);
+
+        // Nobody is carrying the debuff yet: the brands are still in the air.
+        server.harvest_the_moon_lords_brands(head, target);
+        assert_eq!(
+            leeches(&server),
+            0,
+            "a brand that has not landed produces nothing, which is what makes distance matter"
+        );
+
+        give_buff(&mut server, 0, MOON_LEECH_BUFF);
+        server.harvest_the_moon_lords_brands(head, target);
+        assert_eq!(leeches(&server), 1, "one marked player, one leech");
+
+        give_buff(&mut server, 1, MOON_LEECH_BUFF);
+        server.harvest_the_moon_lords_brands(head, target);
+        assert_eq!(leeches(&server), 3, "two marked players, two more");
+
+        for (_, leech) in server.npcs.iter() {
+            if leech.npc_type == MOON_LORD_LEECH {
+                assert_eq!(
+                    leech.position, target,
+                    "made on the target player, not at the boss where nobody is standing"
+                );
+                assert_eq!(leech.follows_boss, Some(head), "and bound to the head");
+            }
+        }
+    }
+
+    /// Shedding the debuff stops the leeches, which is the counter-play the timer had no room for.
+    #[test]
+    fn curing_the_debuff_stops_the_leeches() {
+        let mut server = arena();
+        let head = server
+            .npcs
+            .spawn(MOON_LORD_HEAD, (4000.0, 4000.0))
+            .expect("a slot");
+        let centre = server.npcs.get(head).expect("seated").center();
+        let target = (centre.0 + 100.0, centre.1 + 216.0);
+        seat(&mut server, 0, target);
+        server.brand_for_the_moon_lord(head, centre, target);
+        give_buff(&mut server, 0, MOON_LEECH_BUFF);
+
+        server.harvest_the_moon_lords_brands(head, target);
+        assert_eq!(leeches(&server), 1);
+
+        // The client reports a buff list without it, exactly as it would after a cure.
+        give_buff(&mut server, 0, 1);
+        server.harvest_the_moon_lords_brands(head, target);
+        assert_eq!(
+            leeches(&server),
+            1,
+            "no more once it is gone, however many marks are left in the step"
         );
     }
 }

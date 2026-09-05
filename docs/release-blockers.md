@@ -221,8 +221,18 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   in twenty-five is a money rain in vanilla (`Main.cs:65638-65652`) and nothing here set
   `Main.coinRain`, so `SpawnFallingObjects`' coin arm had no input. 75 to 150 gold scaled by world
   width is not a cosmetic omission.
-- **Moon Lord's** hand brand-then-blob mechanic and its true countdown timer are unmodeled
-  (`crates/terrustia/src/game/ai/boss/moon_lord.rs:299,505`).
+- ~~**Moon Lord's** hand brand-then-blob mechanic~~ **modelled 2026-09-05.** It was not a missing
+  flourish: the leech step is a three-link chain (`NPC.cs:42723-42754`) and this server had it as a
+  timer. The head brands every living player within 3,000 px with projectile 456, each brand flies
+  to its own player and leaves `BuffID.MoonLeech` on them (`aiStyle 85`, `Projectile.cs:32327-32393`),
+  and at three fixed marks every brand still up whose player still carries the debuff becomes a
+  leech *on the target*. Shedding it, or being far enough away that your brand has not landed, is
+  the counter-play, and none of it existed. The timer also fired one leech every sixty ticks over a
+  435-tick step - eight a cycle against the game's three, made at the boss rather than at anybody.
+  **Moon Lord's true countdown timer** is still unmodelled
+  (`crates/terrustia/src/game/ai/boss/moon_lord.rs:299`).
+- **A hand holds its station** through its attacks rather than being pulled off it by each one
+  (the sphere barrage's `SmoothStep` swing to `400 * side, -60`, for instance).
 - ~~Old One's Army has no client-visible progress bar.~~ **Fixed 2026-09-05**: it rides packet 78
   with its own icon 3 and its wave number, as `DD2Event.cs:185`/`:191` do.
 - ~~**Frost and Pumpkin Moon wave-gated drops** are flattened to guaranteed picks rather than gated on
