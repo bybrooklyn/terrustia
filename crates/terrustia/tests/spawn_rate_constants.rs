@@ -60,6 +60,9 @@ fn plain() -> Conditions {
         graveyard: false,
         meteor: false,
         lihzahrd_temple: false,
+        // These constants are the rates a player with no luck effects sees, which is what every
+        // number in this file was measured against.
+        luck: 0.0,
     }
 }
 

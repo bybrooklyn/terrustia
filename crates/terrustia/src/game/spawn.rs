@@ -115,6 +115,107 @@ pub struct Conditions {
     /// jungle zone tiles (`SceneMetrics.cs:613`), so this rate modifier stacks on the jungle's
     /// exactly as vanilla's does: `NPC.cs:641-650` is a separate `if` below the biome chain.
     pub lihzahrd_temple: bool,
+    /// `NPC.Spawner.luck`, copied straight off the player this attempt is for
+    /// (`SetSpawnFlags`, `NPC.cs:370`).
+    ///
+    /// The spawner rolls `RollLuck` in seventy-three places, and every one of them was written
+    /// here as "a plain `Main.rand.Next(n)` at luck zero", which is what a vanilla player with no
+    /// luck effects gets and what every player on this server got, because the server had no luck
+    /// figure at all. It has one now (`Player::luck`, from packet 134), and this is how it reaches
+    /// the spawner: one field, filled in per player inside [`try_spawn`], exactly as
+    /// `SetSpawnFlags` fills in its own.
+    pub luck: f32,
+}
+
+/// `Luck.RollLuck(luck, range) == 0` — the shape every luck-gated spawn roll in `NPC.Spawner`
+/// takes, and the only shape any of them takes.
+///
+/// A free function beside the pools rather than a method, because the pick routines take a loose
+/// `luck` and an `rng` rather than the whole of [`Conditions`]: what a rare-critter roll needs is
+/// the number, not the biome it is standing in.
+fn rolls_lucky(luck: f32, range: u32, rng: &mut SmallRng) -> bool {
+    struct Bridge<'a>(&'a mut SmallRng);
+    impl terrustia_proto::luck::LuckRng for Bridge<'_> {
+        fn next_f32(&mut self) -> f32 {
+            self.0.random::<f32>()
+        }
+        fn next_max(&mut self, max: i32) -> i32 {
+            if max <= 0 {
+                return 0;
+            }
+            self.0.random_range(0..max)
+        }
+        fn next_range(&mut self, min: i32, max: i32) -> i32 {
+            if max <= min {
+                return min;
+            }
+            self.0.random_range(min..max)
+        }
+    }
+    let Ok(range) = i32::try_from(range) else {
+        return false;
+    };
+    terrustia_proto::luck::roll_luck(luck, range, &mut Bridge(rng)) == 0
+}
+
+/// `Luck.RollLuck(luck, range) < numerator` — the same roll, for the handful of callers that
+/// compare against something other than zero. `NPC.cs:4378`'s `RollLuck(100) < 40` is the
+/// spawner's one, and reading it as `== 0` would have turned a four-in-ten choice into a
+/// one-in-a-hundred one.
+fn rolls_lucky_under(luck: f32, range: u32, numerator: i32, rng: &mut SmallRng) -> bool {
+    struct Bridge<'a>(&'a mut SmallRng);
+    impl terrustia_proto::luck::LuckRng for Bridge<'_> {
+        fn next_f32(&mut self) -> f32 {
+            self.0.random::<f32>()
+        }
+        fn next_max(&mut self, max: i32) -> i32 {
+            if max <= 0 {
+                return 0;
+            }
+            self.0.random_range(0..max)
+        }
+        fn next_range(&mut self, min: i32, max: i32) -> i32 {
+            if max <= min {
+                return min;
+            }
+            self.0.random_range(min..max)
+        }
+    }
+    let Ok(range) = i32::try_from(range) else {
+        return false;
+    };
+    terrustia_proto::luck::roll_luck(luck, range, &mut Bridge(rng)) < numerator
+}
+
+/// `Luck.RollOnlyBadLuck(luck, range) == 0` (`Terraria.GameContent/Luck.cs:31-38`): bad luck
+/// narrows the range, and good luck does nothing at all. The Groom's and the Bride's own arm is
+/// the spawner's one caller (`NPC.cs:4623`, `:4628`).
+fn rolls_only_unlucky(luck: f32, range: u32, rng: &mut SmallRng) -> bool {
+    rolls_lucky(luck.min(0.0), range, rng)
+}
+
+/// `Luck.RollBadLuckExtreme(luck, range) == 0` (`Terraria.GameContent/Luck.cs:40-51`): good luck
+/// multiplies the range by *ten*, which is the game's way of saying a lucky player almost never
+/// gets this. Only the Statue Mimic's own branch uses it (`NPC.cs:1571`).
+fn rolls_extremely_unlucky(luck: f32, range: u32, rng: &mut SmallRng) -> bool {
+    let Ok(range) = i32::try_from(range) else {
+        return false;
+    };
+    if luck > 0.0 && rng.random::<f32>() < luck {
+        // `Main.rand.Next(range * 10)`.
+        return rng.random_range(0..range.saturating_mul(10)) == 0;
+    }
+    if luck < 0.0 && rng.random::<f32>() < -luck {
+        // `Main.rand.Next(Main.rand.Next(range / 2, range))`, the same narrowing `RollLuck`'s good
+        // branch takes.
+        let narrowed = if range > range / 2 {
+            rng.random_range(range / 2..range)
+        } else {
+            range / 2
+        };
+        return narrowed <= 0 || rng.random_range(0..narrowed) == 0;
+    }
+    rng.random_range(0..range.max(1)) == 0
 }
 
 /// Which rate band a *player* is in, which is not the same question [`depth_at`] answers.
@@ -394,11 +495,27 @@ pub fn rates(at: Conditions, rng: &mut SmallRng) -> (u32, f32, bool) {
         }
     }
 
-    // `NPC.cs:925-929` ends the function with a `RollOnlyBadLuckExtreme(50) == 0` bonus of
-    // `rate * 0.85` and `cap * 1.15`. It is deliberately not transcribed, because it can never
-    // fire here: `Luck.RollOnlyBadLuckExtreme` (`Terraria.GameContent/Luck.cs:53-60`) returns -1
-    // unless `luck < 0`, and this server does not model player luck at all, so its players are at
-    // luck 0 exactly as a vanilla player with no luck effects is. Vanilla skips it for them too.
+    // `NPC.cs:925-929`: an unlucky player's world is busier, which is the one place bad luck does
+    // something a player might actually want.
+    //
+    // ```csharp
+    // if (!spawnFriendly && RollOnlyBadLuckExtreme(50) == 0) {
+    //     spawnRate = (int)((float)spawnRate * 0.85f);
+    //     maxSpawns = (int)((float)maxSpawns * 1.15f);
+    // }
+    // ```
+    //
+    // `Luck.RollOnlyBadLuckExtreme` (`Terraria.GameContent/Luck.cs:53-60`) returns `-1` outright
+    // unless `luck < 0`, so this cannot fire for anybody at or above zero - which used to be
+    // everybody on this server, and was the stated reason the arm was left out. A `rate` that is
+    // *lower* is faster: it is the denominator of the per-tick attempt.
+    if !spawn_friendly && at.luck < 0.0 && rng.random::<f32>() < -at.luck {
+        // `Main.rand.Next(range / 10)` with `range` 50, so one in five once the outer test passes.
+        if rng.random_range(0..5) == 0 {
+            rate *= 0.85;
+            max *= 1.15;
+        }
+    }
 
     (rate as u32, max.max(1.0), spawn_friendly)
 }
@@ -494,6 +611,7 @@ mod rate_tests {
             graveyard: false,
             meteor: false,
             lihzahrd_temple: false,
+            luck: 0.0,
         }
     }
 
@@ -501,6 +619,49 @@ mod rate_tests {
     /// event overruling it) and so does not care which one it gets.
     fn any_rng() -> SmallRng {
         SmallRng::seed_from_u64(0)
+    }
+
+    /// The spawn *rate* itself has a luck arm, and it is the one place bad luck does something a
+    /// player might want: `if (!spawnFriendly && RollOnlyBadLuckExtreme(50) == 0) { spawnRate =
+    /// (int)(spawnRate * 0.85f); maxSpawns = (int)(maxSpawns * 1.15f); }` (`NPC.cs:925-929`).
+    ///
+    /// It cannot fire at or above zero luck - `RollOnlyBadLuckExtreme` returns -1 outright
+    /// (`Luck.cs:53-60`) - which is why it was left out entirely while every player here was at
+    /// zero. A *lower* rate is faster: it is the denominator of the per-tick attempt.
+    #[test]
+    fn an_unlucky_players_world_is_busier() {
+        let mean = |luck: f32| {
+            let mut rng = SmallRng::seed_from_u64(3);
+            let mut rate_total = 0u64;
+            let mut cap_total = 0.0f64;
+            const RUNS: u32 = 20_000;
+            for _ in 0..RUNS {
+                let (rate, cap, _) = rates(Conditions { luck, ..plain() }, &mut rng);
+                rate_total += u64::from(rate);
+                cap_total += f64::from(cap);
+            }
+            (
+                rate_total as f64 / f64::from(RUNS),
+                cap_total / f64::from(RUNS),
+            )
+        };
+        let (neutral_rate, neutral_cap) = mean(0.0);
+        let (lucky_rate, lucky_cap) = mean(1.0);
+        let (cursed_rate, cursed_cap) = mean(-0.7);
+
+        assert_eq!(
+            (neutral_rate, neutral_cap),
+            (lucky_rate, lucky_cap),
+            "good luck cannot reach this arm at all, which is what `RollOnlyBadLuckExtreme` means"
+        );
+        assert!(
+            cursed_rate < neutral_rate,
+            "a cursed world spawns faster: {cursed_rate:.1} against {neutral_rate:.1}"
+        );
+        assert!(
+            cursed_cap > neutral_cap,
+            "and holds more at once: {cursed_cap:.2} against {neutral_cap:.2}"
+        );
     }
 
     /// Going down makes the world busier, which is most of what depth is for.
@@ -1398,6 +1559,7 @@ pub fn seasonal_night_pick(
     at: Seasonal,
     zombie: ZombieSettings,
     ground_block: u16,
+    luck: f32,
     rng: &mut SmallRng,
 ) -> Option<u16> {
     let one_in = |rng: &mut SmallRng, n: u32| rng.random_ratio(1, n);
@@ -1448,10 +1610,10 @@ pub fn seasonal_night_pick(
     // NPC.cs:4623 and :4628. `RollOnlyBadLuck(300)` is a plain `Main.rand.Next(300)` at luck zero
     // (`Luck.cs:31-37`), unlike its `Extreme` sibling. The pair are the only wedding a blood moon
     // ever throws, and a graveyard has them on an ordinary night.
-    if (at.blood_moon || at.graveyard) && one_in(rng, 300) {
+    if (at.blood_moon || at.graveyard) && rolls_only_unlucky(luck, 300, rng) {
         return Some(53); // TheGroom
     }
-    if (at.blood_moon || at.graveyard) && one_in(rng, 300) {
+    if (at.blood_moon || at.graveyard) && rolls_only_unlucky(luck, 300, rng) {
         return Some(536); // TheBride
     }
     // NPC.cs:4633. The full moon, and note the third condition: this is *two* attempts in three, not
@@ -1805,6 +1967,9 @@ pub fn cavern_seasonal_pick(
 ///
 /// `alive` is vanilla's `AnyNPCs`. Both uses of it are real gates rather than politeness: one
 /// Lacewing at a time is what stops a hallow night raining Empresses.
+// Eight, one over the lint's line, and every one of them is a flag `SetSpawnFlags` sets: the same
+// allow the other long pick routines in this file carry, for the same reason.
+#[allow(clippy::too_many_arguments)]
 pub fn hallow_ground_pick(
     downed_plant_boss: bool,
     day_time: bool,
@@ -1812,6 +1977,7 @@ pub fn hallow_ground_pick(
     surface_spawn: bool,
     raining: bool,
     alive: &dyn Fn(u16) -> bool,
+    luck: f32,
     rng: &mut SmallRng,
 ) -> Option<u16> {
     // NPC.cs:4041.
@@ -1819,13 +1985,13 @@ pub fn hallow_ground_pick(
         && !day_time
         && time < LACEWING_LATEST
         && surface_spawn
-        && rng.random_range(0..LACEWING_ODDS) == 0
+        && rolls_lucky(luck, LACEWING_ODDS, rng)
         && !alive(PRISMATIC_LACEWING)
     {
         return Some(PRISMATIC_LACEWING);
     }
     // NPC.cs:4045.
-    if raining && !alive(244) && rng.random_range(0..RAINBOW_SLIME_ODDS) == 0 {
+    if raining && !alive(244) && rolls_lucky(luck, RAINBOW_SLIME_ODDS, rng) {
         return Some(244); // RainbowSlime
     }
     // NPC.cs:4049, the Gastropod, which [`hardmode_pool`] already carries: the roll is made and the
@@ -1916,7 +2082,7 @@ const GOLD_CRITTER_CHANCE: u32 = 400;
 ///
 /// The roll is made only once a type with a twin has actually been drawn, so an ordinary attempt
 /// pays one `match` and no `rng` draw at all.
-fn gold_variant(npc_type: u16, depth: Depth, rng: &mut SmallRng) -> u16 {
+fn gold_variant(npc_type: u16, depth: Depth, luck: f32, rng: &mut SmallRng) -> u16 {
     let gold = match npc_type {
         74 | 297 | 298 => 442,                 // Bird, BirdBlue, BirdRed -> GoldBird
         46 => 443,                             // Bunny -> GoldBunny
@@ -1928,7 +2094,7 @@ fn gold_variant(npc_type: u16, depth: Depth, rng: &mut SmallRng) -> u16 {
         299 if depth == Depth::Surface => 539, // Squirrel -> SquirrelGold
         _ => return npc_type,
     };
-    if rng.random_range(0..GOLD_CRITTER_CHANCE) == 0 {
+    if rolls_lucky(luck, GOLD_CRITTER_CHANCE, rng) {
         gold
     } else {
         npc_type
@@ -2493,7 +2659,7 @@ const PAL_FOXSPARKS_CHANCE: u32 = 40;
 /// (`Player.cs:56554-56564`) scans slots 0 to 57, the main inventory with its coins and ammo, and
 /// nothing worn, banked or in a piggy bank; the slot bound is transcribed rather than flattened to
 /// "anywhere on the player".
-fn pal_type(player: &Player, rng: &mut SmallRng) -> u16 {
+fn pal_type(player: &Player, luck: f32, rng: &mut SmallRng) -> u16 {
     let carrying = |item: i32| {
         player
             .inventory
@@ -2502,7 +2668,7 @@ fn pal_type(player: &Player, rng: &mut SmallRng) -> u16 {
     };
     let has_cattiva = carrying(i32::from(terrustia_proto::npc_params::PAL_REWARD_CATTIVA));
     let has_foxsparks = carrying(i32::from(terrustia_proto::npc_params::PAL_REWARD_FOXSPARKS));
-    let mut foxsparks = rng.random_range(0..100) < PAL_FOXSPARKS_CHANCE;
+    let mut foxsparks = rolls_lucky_under(luck, 100, PAL_FOXSPARKS_CHANCE as i32, rng);
     if !has_foxsparks && has_cattiva {
         foxsparks = true;
     }
@@ -2947,8 +3113,8 @@ const OWL_MIMIC_ODDS: u32 = 100;
 /// (`NPC.cs:2381-2407`), so control cannot reach here in the rain and the explicit test is belt and
 /// braces. [`friendly_pool`] already declares that it does not model weather, so no gate of our own
 /// is invented for it.
-fn spawn_owl(rng: &mut SmallRng) -> u16 {
-    if rng.random_range(0..OWL_MIMIC_ODDS) == 0 {
+fn spawn_owl(luck: f32, rng: &mut SmallRng) -> u16 {
+    if rolls_extremely_unlucky(luck, OWL_MIMIC_ODDS, rng) {
         OWL_MIMIC
     } else {
         OWL
@@ -2969,11 +3135,11 @@ fn spawn_owl(rng: &mut SmallRng) -> u16 {
 /// Bunny, the Gold Butterfly and the rest of the ordinary-critter roster, which is still gapped in
 /// `docs/spawn-gaps.tsv`, and taking one of them out of order would leave that list saying less
 /// than it does now.
-fn spawn_frog(world: &World, alive: &dyn Fn(u16) -> bool, rng: &mut SmallRng) -> u16 {
+fn spawn_frog(world: &World, alive: &dyn Fn(u16) -> bool, luck: f32, rng: &mut SmallRng) -> u16 {
     // `RollLuck(30)` is `Main.rand.Next(30)` at luck zero (`Luck.cs:5-16`). The `alive` scan is
     // last on purpose: `&&` short-circuits, so an ordinary frog draw never walks the NPC table.
     if !world.progress.unlocked_slime_yellow
-        && rng.random_range(0..30) == 0
+        && rolls_lucky(luck, 30, rng)
         && !alive(BOUND_TOWN_SLIME_YELLOW)
     {
         return BOUND_TOWN_SLIME_YELLOW;
@@ -3411,6 +3577,7 @@ pub fn friendly_chain(
     wet: bool,
     x_range: bool,
     wind: f32,
+    luck: f32,
     rng: &mut SmallRng,
 ) -> Option<Vec<(u16, (f32, f32))>> {
     let surface = f64::from(world.surface);
@@ -3451,7 +3618,7 @@ pub fn friendly_chain(
                     .unwrap_or_default(),
                 // `:2160-2186`. These two fall back to the candidate's own row instead.
                 2 => {
-                    let seahorse = if rng.random_range(0..GOLD_CRITTER_CHANCE) == 0 {
+                    let seahorse = if rolls_lucky(luck, GOLD_CRITTER_CHANCE, rng) {
                         GOLD_SEAHORSE
                     } else {
                         SEAHORSE
@@ -3477,7 +3644,7 @@ pub fn friendly_chain(
     {
         let px = cattail_x as f32 * 16.0;
         let py = (cattail_y - 1) as f32 * 16.0;
-        let lead = if rng.random_range(0..GOLD_CRITTER_CHANCE) == 0 {
+        let lead = if rolls_lucky(luck, GOLD_CRITTER_CHANCE, rng) {
             GOLD_DRAGONFLY
         } else {
             dragonfly_type(ground_block, rng)
@@ -3508,7 +3675,7 @@ pub fn friendly_chain(
             let striders = |rng: &mut SmallRng| {
                 (0..rng.random_range(1..4))
                     .map(|_| {
-                        let strider = if rng.random_range(0..GOLD_CRITTER_CHANCE) == 0 {
+                        let strider = if rolls_lucky(luck, GOLD_CRITTER_CHANCE, rng) {
                             GOLD_WATER_STRIDER
                         } else {
                             WATER_STRIDER
@@ -3550,7 +3717,7 @@ pub fn friendly_chain(
         return Some(vec![(
             if ground_block == SAND && x > BEACH_DISTANCE && x < world.width() - BEACH_DISTANCE {
                 PUPFISH
-            } else if rng.random_range(0..GOLD_CRITTER_CHANCE) == 0 {
+            } else if rolls_lucky(luck, GOLD_CRITTER_CHANCE, rng) {
                 GOLD_GOLDFISH
             } else {
                 GOLDFISH
@@ -3571,11 +3738,11 @@ pub fn friendly_chain(
         && spawn_tile_y > surface);
     if grass_case && world.raining && ground_y <= world.height() - UNDERWORLD_DEPTH {
         return Some(vec![(
-            if rng.random_range(0..GOLD_CRITTER_CHANCE) == 0 {
+            if rolls_lucky(luck, GOLD_CRITTER_CHANCE, rng) {
                 GOLD_WORM
             } else if rng.random_range(0..3) != 0 {
                 WORM
-            } else if rng.random_range(0..GOLD_CRITTER_CHANCE) == 0 {
+            } else if rolls_lucky(luck, GOLD_CRITTER_CHANCE, rng) {
                 GOLD_GOLDFISH_WALKER
             } else {
                 GOLDFISH_WALKER
@@ -3610,11 +3777,11 @@ pub fn friendly_chain(
 /// out for the same reason [`friendly_pool`] drops the butterfly's own two, so a windy meadow is
 /// thinner here than in the game rather than differently populated. The Gold Butterfly (444) is the
 /// calm arm's own `RollLuck` and belongs to the ordinary-critter roster rather than this one.
-fn spawn_butterfly(too_windy: bool, rng: &mut SmallRng) -> u16 {
+fn spawn_butterfly(too_windy: bool, luck: f32, rng: &mut SmallRng) -> u16 {
     if !too_windy {
         return BUTTERFLY;
     }
-    if rng.random_range(0..GOLD_CRITTER_CHANCE) == 0 {
+    if rolls_lucky(luck, GOLD_CRITTER_CHANCE, rng) {
         GOLD_LADY_BUG
     } else {
         LADY_BUG
@@ -3670,6 +3837,7 @@ fn underground_fairy(
     hard_mode: bool,
     ground_y: i32,
     any_helpful_fairies: &dyn Fn() -> bool,
+    luck: f32,
     rng: &mut SmallRng,
 ) -> bool {
     if !fairy_log {
@@ -3680,7 +3848,7 @@ fn underground_fairy(
     } else {
         FAIRY_CHANCE
     };
-    if rng.random_range(0..chance) != 0 {
+    if !rolls_lucky(luck, chance, rng) {
         return false;
     }
     let halfway = (f64::from(world.surface) + f64::from(world.rock_layer)) / 2.0;
@@ -3726,12 +3894,13 @@ fn underground_gnome(
     ground_y: i32,
     valid_zone_and_tile: bool,
     alive: &dyn Fn(u16) -> usize,
+    luck: f32,
     rng: &mut SmallRng,
 ) -> bool {
     if !valid_zone_and_tile || world.eclipse || world.blood_moon {
         return false;
     }
-    if rng.random_range(0..GNOME_CHANCE) != 0 {
+    if !rolls_lucky(luck, GNOME_CHANCE, rng) {
         return false;
     }
     let surface = f64::from(world.surface);
@@ -4585,10 +4754,15 @@ fn hard_dungeon_pick(
 ///
 /// The three fifths of `num43` below this chain that fall to the plain Angry Bones remain the pool's
 /// business (`:2767-2795`), because that is a draw rather than a chain.
-fn dungeon_pick(style: u8, near_spike_ball: &dyn Fn() -> bool, rng: &mut SmallRng) -> Option<u16> {
+fn dungeon_pick(
+    style: u8,
+    near_spike_ball: &dyn Fn() -> bool,
+    luck: f32,
+    rng: &mut SmallRng,
+) -> Option<u16> {
     // `:2723`. `RollLuck(35)` is a plain `Main.rand.Next(35)` at luck zero (`Luck.cs:5-16`), the
     // same narrowing every other `Roll*Luck` call site in this file takes.
-    if rng.random_range(0..DUNGEON_SLIME_ODDS) == 0 {
+    if rolls_lucky(luck, DUNGEON_SLIME_ODDS, rng) {
         return Some(DUNGEON_SLIME);
     }
     // `:2728`, slab only. `NearSpikeBall` is asked last because `&&` short-circuits and it is the
@@ -4773,7 +4947,13 @@ pub const MUSHROOM_BLOCK: u16 = 190;
 /// standing water below the surface line with a Blue Jellyfish on *every* attempt, missing vanilla's
 /// own `Main.rand.Next(3) == 0` gate at `:1988`, so nothing wet ever reached this function at all.
 /// [`water_pick`] declines properly now, and 256 is reachable.
-pub fn mushroom_pick(surface: bool, hard_mode: bool, wet: bool, rng: &mut SmallRng) -> Option<u16> {
+pub fn mushroom_pick(
+    surface: bool,
+    hard_mode: bool,
+    wet: bool,
+    luck: f32,
+    rng: &mut SmallRng,
+) -> Option<u16> {
     let one_in = |rng: &mut SmallRng, n: u32| rng.random_ratio(1, n);
 
     // NPC.cs:3633. Above both arms below, and it takes the whole attempt when it holds.
@@ -4823,7 +5003,7 @@ pub fn mushroom_pick(surface: bool, hard_mode: bool, wet: bool, rng: &mut SmallR
     // NPC.cs:3676, the Truffle Worm, and the only thing in the game that summons Duke Fishron.
     // `RollLuck(5)` is a plain one in five at luck zero (`Luck.cs:5-16`), which is where every
     // player on this server sits.
-    if one_in(rng, 5) {
+    if rolls_lucky(luck, 5, rng) {
         return Some(374); // TruffleWorm
     }
     // NPC.cs:3680.
@@ -4930,6 +5110,7 @@ fn sky_pick(
     world: &World,
     no_worms: bool,
     alive: &dyn Fn(u16) -> bool,
+    luck: f32,
     rng: &mut SmallRng,
 ) -> u16 {
     // `NPC.cs:1400-1404`. `maxValue2`/`maxValue3` are 8 and 30 (`:1384-1385`); the water-candle
@@ -4955,7 +5136,7 @@ fn sky_pick(
     // gets high enough to be in the sky in the first place. `RollLuck(25)` is `Main.rand.Next(25)`
     // at luck zero (`Luck.cs:5-16`), which is what this server models.
     if !world.progress.unlocked_slime_purple
-        && rng.random_range(0..25) == 0
+        && rolls_lucky(luck, 25, rng)
         && !alive(BOUND_TOWN_SLIME_PURPLE)
     {
         return BOUND_TOWN_SLIME_PURPLE;
@@ -5556,6 +5737,9 @@ pub fn try_spawn(
             graveyard: player.in_graveyard(),
             meteor: zones.meteor,
             lihzahrd_temple: temple_zone,
+            // `SetSpawnFlags` copies this off the player whose attempt this is (`NPC.cs:370`), so
+            // two people standing in the same forest roll different odds for a gold critter.
+            luck: player.luck,
         };
         // The season and the graveyard, read once per player per attempt: two bools off the world
         // and one bit off the zone packet this player last sent, so nothing here walks a tile.
@@ -5787,7 +5971,15 @@ pub fn try_spawn(
                         && !events.any_danger;
                     let alive =
                         |ty: u16| npcs.iter().any(|(_, n)| n.npc_type == ty && n.is_alive());
-                    sky_pick(events.hard_mode, probe_gate, world, no_worms, &alive, rng)
+                    sky_pick(
+                        events.hard_mode,
+                        probe_gate,
+                        world,
+                        no_worms,
+                        &alive,
+                        conditions.luck,
+                        rng,
+                    )
                 }
                 // A graveyard's Statue Mimic (`NPC.cs:1571-1574`):
                 //
@@ -5811,7 +6003,7 @@ pub fn try_spawn(
                 None if world.progress.downed_boss3
                     && seasonal.graveyard
                     && !no_worms
-                    && rng.random_range(0..STATUE_MIMIC_ODDS) == 0
+                    && rolls_extremely_unlucky(conditions.luck, STATUE_MIMIC_ODDS, rng)
                     && !npcs
                         .iter()
                         .any(|(_, n)| n.npc_type == STATUE_MIMIC && n.is_alive())
@@ -5851,7 +6043,7 @@ pub fn try_spawn(
                     && !wet
                     && f64::from(y + 1) <= f64::from(world.surface)
                     && spawn_wall_type(world, x, y) == LIVING_WOOD_WALL
-                    && rng.random_range(0..1 + GNOME_CHANCE / 10) == 0 =>
+                    && rolls_lucky(conditions.luck, 1 + GNOME_CHANCE / 10, rng) =>
                 {
                     GNOME
                 }
@@ -5940,6 +6132,7 @@ pub fn try_spawn(
                                 wet,
                                 x_range,
                                 events.wind_target,
+                                conditions.luck,
                                 rng,
                             )
                         {
@@ -5978,12 +6171,12 @@ pub fn try_spawn(
                             let alive = |ty: u16| {
                                 npcs.iter().any(|(_, n)| n.npc_type == ty && n.is_alive())
                             };
-                            spawn_frog(world, &alive, rng)
+                            spawn_frog(world, &alive, conditions.luck, rng)
                         } else if critter == OWL {
                             // The owl is the other chain in this pool, for the same reason
                             // (`NPC.cs:2442-2448` -> `spawn_owl`): one draw in a hundred is the Owl
                             // Mimic instead. No holiday costume applies here either.
-                            spawn_owl(rng)
+                            spawn_owl(conditions.luck, rng)
                         } else if critter == FIREFLY && ground_block == Some(HALLOWED_GRASS) {
                             // ...and the firefly is a two-way fork on the tile underfoot rather than
                             // a single type (`NPC.cs:2416-2420`, see [`LIGHTNING_BUG`]).
@@ -5995,14 +6188,19 @@ pub fn try_spawn(
                             // [`spawn_butterfly`]). Its own gold twin is [`gold_variant`]'s below;
                             // the ladybug's is not, because a ladybug is not a butterfly by the
                             // time that swap is made.
-                            spawn_butterfly(events.wind_target.abs() >= 0.4, rng)
+                            spawn_butterfly(events.wind_target.abs() >= 0.4, conditions.luck, rng)
                         } else {
                             critter
                         };
                         // Gold first and the costume second, which is vanilla's own order: the gold
                         // bunny's arm (`NPC.cs:2580`) sits above the Halloween one (`:2588`), and a
                         // gold critter is never dressed up because it is no longer a bunny by then.
-                        holiday_costume(gold_variant(drawn, depth, rng), depth, seasonal, rng)
+                        holiday_costume(
+                            gold_variant(drawn, depth, conditions.luck, rng),
+                            depth,
+                            seasonal,
+                            rng,
+                        )
                     }
                 }
                 // Below the dungeon before Skeletron falls, the dungeon answers with the Dungeon
@@ -6071,7 +6269,15 @@ pub fn try_spawn(
                                 && n.ai[2] > 1.0
                         })
                     };
-                    underground_fairy(world, events.fairy_log, events.hard_mode, y + 1, &busy, rng)
+                    underground_fairy(
+                        world,
+                        events.fairy_log,
+                        events.hard_mode,
+                        y + 1,
+                        &busy,
+                        conditions.luck,
+                        rng,
+                    )
                 } =>
                 {
                     FAIRY_CRITTER_PINK + rng.random_range(0..3u16)
@@ -6100,7 +6306,7 @@ pub fn try_spawn(
                     && player_wall == LIVING_WOOD_WALL
                     && !world.eclipse
                     && !world.blood_moon
-                    && rng.random_range(0..GNOME_CHANCE * 3) == 0
+                    && rolls_lucky(conditions.luck, GNOME_CHANCE * 3, rng)
                     && npcs
                         .iter()
                         .filter(|(_, n)| n.npc_type == GNOME && n.is_alive())
@@ -6125,6 +6331,7 @@ pub fn try_spawn(
                         y + 1,
                         !matches!(player_biome, Biome::Corruption | Biome::Crimson) && !wet,
                         &alive,
+                        conditions.luck,
                         rng,
                     )
                 } =>
@@ -6135,8 +6342,13 @@ pub fn try_spawn(
                 // is standing on. It declines one attempt in three, and every attempt at all
                 // underground before hardmode, and the ordinary chain below answers those.
                 None if mushroom_ground
-                    && let Some(npc_type) =
-                        mushroom_pick(depth == Depth::Surface, events.hard_mode, wet, rng) =>
+                    && let Some(npc_type) = mushroom_pick(
+                        depth == Depth::Surface,
+                        events.hard_mode,
+                        wet,
+                        conditions.luck,
+                        rng,
+                    ) =>
                 {
                     npc_type
                 }
@@ -6188,7 +6400,7 @@ pub fn try_spawn(
                     )
                     && rng.random_range(0..WORM_ODDS) == 0 =>
                 {
-                    gold_variant(WORM, depth, rng)
+                    gold_variant(WORM, depth, conditions.luck, rng)
                 }
                 None if depth != Depth::Surface
                     && y + 1 < world.height() - CRITTER_FLOOR
@@ -6203,7 +6415,7 @@ pub fn try_spawn(
                     )
                     && rng.random_range(0..MOUSE_ODDS) == 0 =>
                 {
-                    gold_variant(MOUSE, depth, rng)
+                    gold_variant(MOUSE, depth, conditions.luck, rng)
                 }
                 // The Snail's own gate is not the other two's: it keeps the jungle (`NPC.cs:3802`
                 // omits `!ZoneJungle`) and it stops at the middle of the stone rather than ten rows
@@ -6298,6 +6510,7 @@ pub fn try_spawn(
                         depth == Depth::Surface,
                         world.raining,
                         &|ty| npcs.iter().any(|(_, n)| n.npc_type == ty && n.is_alive()),
+                        conditions.luck,
                         rng,
                     ) =>
                 {
@@ -6507,7 +6720,10 @@ pub fn try_spawn(
                             matches!(n.npc_type, PAL_CATTIVA | PAL_FOXSPARKS) && n.is_alive()
                         })
                     {
-                        out.push((pal_type(player, rng), (x as f32 * 16.0, y as f32 * 16.0)));
+                        out.push((
+                            pal_type(player, conditions.luck, rng),
+                            (x as f32 * 16.0, y as f32 * 16.0),
+                        ));
                         break;
                     }
                     if surface_day
@@ -6591,8 +6807,13 @@ pub fn try_spawn(
                             Biome::Corruption | Biome::Crimson | Biome::Jungle | Biome::Dungeon
                         );
                     if seasonal_ground
-                        && let Some(npc_type) =
-                            seasonal_night_pick(seasonal, zombie, world.tile(x, y + 1).block, rng)
+                        && let Some(npc_type) = seasonal_night_pick(
+                            seasonal,
+                            zombie,
+                            world.tile(x, y + 1).block,
+                            conditions.luck,
+                            rng,
+                        )
                     {
                         out.push((npc_type, (x as f32 * 16.0, y as f32 * 16.0)));
                         break;
@@ -6657,9 +6878,12 @@ pub fn try_spawn(
                                 None => {}
                             }
                         }
-                        if let Some(npc_type) =
-                            dungeon_pick(style, &|| near_spike_ball(npcs, x, y + 1), rng)
-                        {
+                        if let Some(npc_type) = dungeon_pick(
+                            style,
+                            &|| near_spike_ball(npcs, x, y + 1),
+                            conditions.luck,
+                            rng,
+                        ) {
                             out.push((npc_type, (x as f32 * 16.0, y as f32 * 16.0)));
                             break;
                         }
@@ -6861,6 +7085,7 @@ mod tests {
                         &sky,
                         false,
                         &|_| false,
+                        0.0,
                         &mut rng,
                     ));
                 }
@@ -6988,7 +7213,7 @@ mod tests {
         shore.day_time = true;
         let mut rng = SmallRng::seed_from_u64(11);
         let sample = |world: &World, x, ground, wet, wind, rng: &mut SmallRng| {
-            friendly_chain(world, x, 200, ground, wet, false, wind, rng)
+            friendly_chain(world, x, 200, ground, wet, false, wind, 0.0, rng)
                 .unwrap_or_default()
                 .into_iter()
                 .map(|(ty, _)| ty)
@@ -7029,8 +7254,8 @@ mod tests {
         // The butterfly's own chain, which is where the two ladybugs live, and the dragonfly roll,
         // which the cattail arm above calls into.
         for _ in 0..40_000 {
-            set.insert(spawn_butterfly(false, &mut rng));
-            set.insert(spawn_butterfly(true, &mut rng));
+            set.insert(spawn_butterfly(false, 0.0, &mut rng));
+            set.insert(spawn_butterfly(true, 0.0, &mut rng));
             set.insert(dragonfly_type(GRASS, &mut rng));
             set.insert(dragonfly_type(SAND, &mut rng));
         }
@@ -7044,7 +7269,7 @@ mod tests {
         dirt_walled.wall = GNOME_WALLS[0];
         burrow.set_tile(400, 200, dirt_walled);
         for _ in 0..400 {
-            if underground_gnome(&burrow, 400, 200, true, &|_| 0, &mut rng) {
+            if underground_gnome(&burrow, 400, 200, true, &|_| 0, 0.0, &mut rng) {
                 set.insert(GNOME);
             }
         }
@@ -7053,7 +7278,7 @@ mod tests {
         // surface at 200 and its rock layer at 300, so the gate's window is row 250 (their halfway
         // line) up to row 299 (`height - 300`, exclusive), and 275 sits inside it.
         for _ in 0..20_000 {
-            if underground_fairy(&burrow, true, false, 275, &|| false, &mut rng) {
+            if underground_fairy(&burrow, true, false, 275, &|| false, 0.0, &mut rng) {
                 for colour in 0..3u16 {
                     set.insert(FAIRY_CRITTER_PINK + colour);
                 }
@@ -7099,6 +7324,7 @@ mod tests {
                                                     at,
                                                     zombie,
                                                     ground_block,
+                                                    0.0,
                                                     &mut rng,
                                                 ));
                                             }
@@ -7172,6 +7398,7 @@ mod tests {
                                 surface_spawn,
                                 raining,
                                 &|_| false,
+                                0.0,
                                 &mut rng,
                             ));
                         }
@@ -7196,7 +7423,7 @@ mod tests {
         for style in 0..3u8 {
             for seed in 0..4_000u64 {
                 let mut rng = SmallRng::seed_from_u64(seed);
-                set.extend(dungeon_pick(style, &|| false, &mut rng));
+                set.extend(dungeon_pick(style, &|| false, 0.0, &mut rng));
             }
         }
 
@@ -7208,7 +7435,7 @@ mod tests {
                 for wet in [false, true] {
                     for seed in 0..4_000u64 {
                         let mut rng = SmallRng::seed_from_u64(seed);
-                        set.extend(mushroom_pick(surface, hard_mode, wet, &mut rng));
+                        set.extend(mushroom_pick(surface, hard_mode, wet, 0.0, &mut rng));
                     }
                 }
             }
@@ -7246,7 +7473,7 @@ mod tests {
             for depth in [Depth::Surface, Depth::Cavern] {
                 for seed in 0..20_000u64 {
                     let mut rng = SmallRng::seed_from_u64(seed);
-                    set.insert(gold_variant(base, depth, &mut rng));
+                    set.insert(gold_variant(base, depth, 0.0, &mut rng));
                 }
             }
         }
@@ -7277,14 +7504,14 @@ mod tests {
         let jungle = World::empty(800, 600, "roster");
         for seed in 0..200u64 {
             let mut rng = SmallRng::seed_from_u64(seed);
-            set.insert(spawn_frog(&jungle, &|_| false, &mut rng));
+            set.insert(spawn_frog(&jungle, &|_| false, 0.0, &mut rng));
         }
 
         // ...and the owl's, for the same reason again: it is where the Owl Mimic lives, and at one
         // draw in a hundred it needs more seeds than the frog before the rare arm comes up at all.
         for seed in 0..2_000u64 {
             let mut rng = SmallRng::seed_from_u64(seed);
-            set.insert(spawn_owl(&mut rng));
+            set.insert(spawn_owl(0.0, &mut rng));
         }
 
         // The friendly chain below the surface line, which `friendly_pool` deliberately leaves
@@ -9152,7 +9379,7 @@ mod tests {
             let hits = (0..400_000u64)
                 .filter(|seed| {
                     let mut rng = SmallRng::seed_from_u64(*seed);
-                    gold_variant(base, Depth::Cavern, &mut rng) == gold
+                    gold_variant(base, Depth::Cavern, 0.0, &mut rng) == gold
                 })
                 .count();
             // 400,000 draws at one in four hundred is a thousand expected; the band is wide enough
@@ -9168,7 +9395,7 @@ mod tests {
         let surface = (0..400_000u64)
             .filter(|seed| {
                 let mut rng = SmallRng::seed_from_u64(*seed);
-                gold_variant(299, Depth::Surface, &mut rng) == 539
+                gold_variant(299, Depth::Surface, 0.0, &mut rng) == 539
             })
             .count();
         assert!(
@@ -9178,7 +9405,7 @@ mod tests {
         let underground = (0..400_000u64)
             .filter(|seed| {
                 let mut rng = SmallRng::seed_from_u64(*seed);
-                gold_variant(299, Depth::Cavern, &mut rng) == 539
+                gold_variant(299, Depth::Cavern, 0.0, &mut rng) == 539
             })
             .count();
         assert_eq!(underground, 0, "a gold squirrel underground");
@@ -9187,9 +9414,50 @@ mod tests {
         for base in [355u16, OWL, 606, 148] {
             for seed in 0..1_000u64 {
                 let mut rng = SmallRng::seed_from_u64(seed);
-                assert_eq!(gold_variant(base, Depth::Surface, &mut rng), base);
+                assert_eq!(gold_variant(base, Depth::Surface, 0.0, &mut rng), base);
             }
         }
+    }
+
+    /// Luck reaches the spawner, and the gold critters are where a player would first notice.
+    ///
+    /// `NPC.Spawner` rolls `RollLuck` in seventy-three places and every one of them was a plain
+    /// `Main.rand.Next` here, because this server had no luck figure at all. `SetSpawnFlags`
+    /// copies the player's own luck onto the spawner (`NPC.cs:370`), and `Conditions::luck` is
+    /// that; `gold_variant` is the arm people actually farm with a Luck Potion.
+    ///
+    /// Measured over many draws rather than asserted on one: `RollLuck` is a chance of a better
+    /// chance, so a lucky player still draws the ordinary odds most of the time.
+    #[test]
+    fn luck_makes_gold_critters_commoner_and_bad_luck_makes_them_rarer() {
+        let gold_rate = |luck: f32| {
+            let mut rng = SmallRng::seed_from_u64(11);
+            let mut gold = 0;
+            const DRAWS: u32 = 400_000;
+            for _ in 0..DRAWS {
+                if gold_variant(46, Depth::Surface, luck, &mut rng) == 443 {
+                    gold += 1;
+                }
+            }
+            f64::from(gold) / f64::from(DRAWS)
+        };
+        let plain = gold_rate(0.0);
+        let lucky = gold_rate(1.0);
+        let cursed = gold_rate(-0.7);
+
+        // `goldCritterChance` is 400, and at luck zero that is exactly what a draw is worth.
+        assert!(
+            (plain - 1.0 / 400.0).abs() < 0.0005,
+            "no luck is the flat one in four hundred: {plain:.5}"
+        );
+        assert!(
+            lucky > plain * 1.2,
+            "a lucky player finds meaningfully more: {lucky:.5} against {plain:.5}"
+        );
+        assert!(
+            cursed < plain * 0.9,
+            "and an unlucky one finds fewer: {cursed:.5} against {plain:.5}"
+        );
     }
 
     /// ...and the same swap really is reached from a spawn, rather than only from its own function.
@@ -9219,6 +9487,59 @@ mod tests {
         assert!(
             TWINS.iter().any(|twin| seen.contains(twin)),
             "no gold critter in six million ticks: {seen:?}"
+        );
+    }
+
+    /// The luck a player is *carrying* reaches the spawner, which is the one link the two tests
+    /// above cannot show: they call the pick routines directly and hand them a number, so a
+    /// `Conditions { luck: 0.0 }` in `try_spawn` would leave both of them passing while no real
+    /// player's luck did anything at all.
+    ///
+    /// `SetSpawnFlags` is the vanilla line (`NPC.cs:370`, `luck = player.luck;`), and this drives
+    /// the whole spawner with a cursed player: the spawn *rate* arm at `NPC.cs:925-929` only fires
+    /// below zero luck, so a cursed world produces strictly more friendly draws over the same
+    /// number of ticks than a neutral one. Counting draws rather than types, because the arm
+    /// changes how often the spawner acts and not what it picks.
+    #[test]
+    fn a_cursed_player_carries_their_luck_into_the_spawner() {
+        let (world, (px, py)) = forest_surface();
+        let draws = |luck: f32| {
+            // No town NPCs, unlike the friendly-draw harness above: the rate arm is gated on
+            // `!spawnFriendly` (`NPC.cs:925`), and three Guides beside the player is exactly the
+            // town suppression that sets it. With them in place this test cannot see the arm at
+            // all, which is how it read 794 against 796 before they came out.
+            let npcs = NpcStore::new();
+            let (out_tx, out_rx) = tokio::sync::mpsc::channel(1);
+            drop(out_rx);
+            let mut player = Player::new(0, "127.0.0.1:1".parse().unwrap(), out_tx);
+            player.state = crate::game::ConnState::Playing;
+            player.position = (px as f32 * 16.0, py as f32 * 16.0);
+            player.luck = luck;
+            let players = vec![Some(player)];
+            let mut rng = SmallRng::seed_from_u64(689);
+            let mut biomes = BiomeCache::default();
+            let mut total = 0usize;
+            for _ in 0..300_000 {
+                total += try_spawn(
+                    &world,
+                    &npcs,
+                    &players,
+                    &quiet(),
+                    &JourneyPowers::default(),
+                    &mut biomes,
+                    &mut rng,
+                )
+                .len();
+            }
+            total
+        };
+        let neutral = draws(0.0);
+        let cursed = draws(-0.7);
+        assert!(neutral > 0, "the harness must actually be spawning");
+        assert!(
+            cursed > neutral,
+            "a cursed player's world is busier, and the only way that shows here is if their luck \
+             reached `Conditions`: {cursed} draws against {neutral}"
         );
     }
 
@@ -9398,7 +9719,7 @@ mod tests {
         let window = |ground_y: i32| {
             (0..40_000u64).any(|seed| {
                 let mut rng = SmallRng::seed_from_u64(seed);
-                underground_fairy(&cave, true, false, ground_y, &|| false, &mut rng)
+                underground_fairy(&cave, true, false, ground_y, &|| false, 0.0, &mut rng)
             })
         };
         assert!(
@@ -9416,7 +9737,7 @@ mod tests {
         assert!(
             !(0..40_000u64).any(|seed| {
                 let mut rng = SmallRng::seed_from_u64(seed);
-                underground_fairy(&cave, true, false, 200, &|| true, &mut rng)
+                underground_fairy(&cave, true, false, 200, &|| true, 0.0, &mut rng)
             }),
             "a second fairy while one was already leading somebody"
         );
@@ -9427,7 +9748,7 @@ mod tests {
             (0..500_000u64)
                 .filter(|seed| {
                     let mut rng = SmallRng::seed_from_u64(*seed);
-                    underground_fairy(&cave, true, hard_mode, 200, &|| false, &mut rng)
+                    underground_fairy(&cave, true, hard_mode, 200, &|| false, 0.0, &mut rng)
                 })
                 .count()
         };
@@ -9936,7 +10257,16 @@ mod tests {
             (0..40_000u64)
                 .filter_map(|seed| {
                     let mut rng = SmallRng::seed_from_u64(seed);
-                    hallow_ground_pick(downed, day, time, surface, raining, &|_| false, &mut rng)
+                    hallow_ground_pick(
+                        downed,
+                        day,
+                        time,
+                        surface,
+                        raining,
+                        &|_| false,
+                        0.0,
+                        &mut rng,
+                    )
                 })
                 .collect::<std::collections::BTreeSet<u16>>()
         };
@@ -9982,6 +10312,7 @@ mod tests {
                     true,
                     false,
                     &|ty| ty == PRISMATIC_LACEWING,
+                    0.0,
                     &mut rng,
                 )
             })
@@ -10003,7 +10334,7 @@ mod tests {
         let wet = (0..40_000u64)
             .filter_map(|seed| {
                 let mut rng = SmallRng::seed_from_u64(seed);
-                hallow_ground_pick(false, true, 0, false, true, &|ty| ty == 244, &mut rng)
+                hallow_ground_pick(false, true, 0, false, true, &|ty| ty == 244, 0.0, &mut rng)
             })
             .collect::<std::collections::BTreeSet<u16>>();
         assert!(
@@ -10131,7 +10462,7 @@ mod tests {
             (0..40_000u64)
                 .filter_map(|seed| {
                     let mut rng = SmallRng::seed_from_u64(seed);
-                    mushroom_pick(surface, hard_mode, false, &mut rng)
+                    mushroom_pick(surface, hard_mode, false, 0.0, &mut rng)
                 })
                 .collect::<std::collections::BTreeSet<u16>>()
         };
@@ -10189,7 +10520,7 @@ mod tests {
         let declined = (0..40_000u64)
             .filter(|seed| {
                 let mut rng = SmallRng::seed_from_u64(*seed);
-                mushroom_pick(true, false, false, &mut rng).is_none()
+                mushroom_pick(true, false, false, 0.0, &mut rng).is_none()
             })
             .count();
         assert!(
@@ -10471,7 +10802,7 @@ mod tests {
             (0..200_000)
                 .filter(|_| {
                     let zombie = zombie_settings(true, 1, &mut rng);
-                    matches!(seasonal_night_pick(at, zombie, 2, &mut rng), Some(ty) if (190..=194).contains(&ty))
+                    matches!(seasonal_night_pick(at, zombie, 2, 0.0, &mut rng), Some(ty) if (190..=194).contains(&ty))
                 })
                 .count()
         };
@@ -12326,14 +12657,14 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(1);
         for surface in [false, true] {
             for _ in 0..200 {
-                assert_eq!(mushroom_pick(surface, true, true, &mut rng), Some(256));
+                assert_eq!(mushroom_pick(surface, true, true, 0.0, &mut rng), Some(256));
             }
         }
         // Before hardmode the arm cannot fire, and dry mushroom grass is the ordinary roster.
         let mut seen = std::collections::BTreeSet::new();
         for seed in 0..2_000u64 {
             let mut rng = SmallRng::seed_from_u64(seed);
-            seen.extend(mushroom_pick(true, false, true, &mut rng));
+            seen.extend(mushroom_pick(true, false, true, 0.0, &mut rng));
         }
         assert!(
             !seen.contains(&256),
@@ -12562,6 +12893,7 @@ mod tests {
                         std::hint::black_box(at),
                         std::hint::black_box(zombie),
                         std::hint::black_box(2),
+                        0.0,
                         &mut rng,
                     )
                     .unwrap_or(0),
@@ -12612,6 +12944,7 @@ mod tests {
                     std::hint::black_box(world),
                     false,
                     &never,
+                    0.0,
                     &mut rng,
                 ));
             }
@@ -12622,7 +12955,12 @@ mod tests {
             let start = std::time::Instant::now();
             let mut sink = 0u32;
             for _ in 0..n {
-                sink += u32::from(spawn_frog(std::hint::black_box(world), &never, &mut rng));
+                sink += u32::from(spawn_frog(
+                    std::hint::black_box(world),
+                    &never,
+                    0.0,
+                    &mut rng,
+                ));
             }
             let each = start.elapsed().as_secs_f64() / f64::from(n) * 1e9;
             println!("spawn_frog, {name}: {each:.2} ns/call (sink {sink})");
@@ -12824,7 +13162,7 @@ mod tests {
                 &format!("dungeon_pick, style {style}"),
                 Box::new(|_| {
                     u32::from(
-                        dungeon_pick(std::hint::black_box(style), &|| false, &mut rng)
+                        dungeon_pick(std::hint::black_box(style), &|| false, 0.0, &mut rng)
                             .unwrap_or_default(),
                     )
                 }),
@@ -12907,7 +13245,7 @@ mod tests {
             let mut rng = SmallRng::seed_from_u64(1601);
             bench(
                 &format!("pal_type, {name}"),
-                Box::new(|| u32::from(pal_type(std::hint::black_box(player), &mut rng))),
+                Box::new(|| u32::from(pal_type(std::hint::black_box(player), 0.0, &mut rng))),
             );
         }
 
@@ -13158,6 +13496,7 @@ mod tests {
                     std::hint::black_box(true),
                     std::hint::black_box(true),
                     &|_| false,
+                    0.0,
                     &mut rng,
                 )
                 .is_some(),
@@ -13245,6 +13584,7 @@ mod tests {
                 std::hint::black_box(190),
                 std::hint::black_box(true),
                 &|_| 0,
+                0.0,
                 &mut rng,
             ));
         }
@@ -13271,6 +13611,7 @@ mod tests {
                         std::hint::black_box(wet),
                         std::hint::black_box(false),
                         std::hint::black_box(0.0),
+                        0.0,
                         &mut rng,
                     )
                     .is_some(),
@@ -13328,6 +13669,7 @@ mod tests {
                     std::hint::black_box(false),
                     std::hint::black_box(200 + i % 4),
                     &|| false,
+                    0.0,
                     &mut rng,
                 ));
             }
@@ -13702,6 +14044,7 @@ mod tests {
                 sink += u32::from(gold_variant(
                     std::hint::black_box(base),
                     std::hint::black_box(Depth::Surface),
+                    0.0,
                     &mut rng,
                 ));
             }
@@ -14118,7 +14461,8 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(3);
         let seen = (0..2_000)
             .filter(|_| {
-                sky_pick(false, false, &world, false, &never, &mut rng) == BOUND_TOWN_SLIME_PURPLE
+                sky_pick(false, false, &world, false, &never, 0.0, &mut rng)
+                    == BOUND_TOWN_SLIME_PURPLE
             })
             .count();
         assert!(
@@ -14131,7 +14475,7 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(3);
         for _ in 0..2_000 {
             assert_ne!(
-                sky_pick(false, false, &world, false, &already, &mut rng),
+                sky_pick(false, false, &world, false, &already, 0.0, &mut rng),
                 BOUND_TOWN_SLIME_PURPLE,
                 "only one bound Purple Slime is ever in the sky at once"
             );
@@ -14141,7 +14485,7 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(3);
         for _ in 0..2_000 {
             assert_ne!(
-                sky_pick(false, false, &world, false, &never, &mut rng),
+                sky_pick(false, false, &world, false, &never, 0.0, &mut rng),
                 BOUND_TOWN_SLIME_PURPLE,
                 "a freed Purple Slime must not be found again"
             );
@@ -14160,7 +14504,7 @@ mod tests {
 
         let mut rng = SmallRng::seed_from_u64(7);
         let seen = (0..3_000)
-            .filter(|_| spawn_frog(&world, &never, &mut rng) == BOUND_TOWN_SLIME_YELLOW)
+            .filter(|_| spawn_frog(&world, &never, 0.0, &mut rng) == BOUND_TOWN_SLIME_YELLOW)
             .count();
         assert!(seen > 0, "a fresh jungle must be able to offer one");
         assert!(
@@ -14172,7 +14516,7 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(7);
         for _ in 0..3_000 {
             assert_eq!(
-                spawn_frog(&world, &already, &mut rng),
+                spawn_frog(&world, &already, 0.0, &mut rng),
                 FROG,
                 "only one bound Yellow Slime is ever about at once"
             );
@@ -14182,7 +14526,7 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(7);
         for _ in 0..3_000 {
             assert_eq!(
-                spawn_frog(&world, &never, &mut rng),
+                spawn_frog(&world, &never, 0.0, &mut rng),
                 FROG,
                 "a freed Yellow Slime must not be found again"
             );
@@ -14414,7 +14758,7 @@ mod tests {
     /// encounter (`ai::hardmode::fixtures::pal`, its two Goblin Archer guards and the two Palworld
     /// Minion items) was written and unreachable, and both types sat in `docs/spawn-gaps.tsv`.
     ///
-    /// Neutralised by deleting the `out.push((pal_type(player, rng), ...))` block from `try_spawn`:
+    /// Neutralised by deleting the `out.push((pal_type(player, 0.0, rng), ...))` block from `try_spawn`:
     /// the "offered no pal" assertion fails. Neutralised again by dropping the
     /// `(x - world.spawn_x).abs() > world.width() / 8` clause: the near-spawn assertion fails
     /// instead. And a third time by dropping the `matches!(ground_block, ...)` clause: the

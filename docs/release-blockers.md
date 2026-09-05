@@ -197,7 +197,17 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   Bride's Bloody Tear were each registered in *both* the generated and the hand-written table, so
   `drop_loot` rolled them twice - 19 and 36 per cent against the 10 and 20 the game intends.
   `no_item_is_registered_in_both_tables` now guards that seam.
-  **Ambient spawn rates are the one consumer still not wired.**
+  **Ambient spawn rates are wired too**, as of the same day. `SetSpawnFlags` copies the player's
+  luck onto the spawner (`NPC.cs:370`) and `spawn::Conditions::luck` is that. Every roll was
+  checked against the vanilla line its own comment cites rather than converted on the strength of
+  the constant: eleven turned out to be real `RollLuck`/`RollBadLuckExtreme`/`RollOnlyBadLuck`
+  calls (the gold critters, the Gnome's two, the Lacewing, the Rainbow Slime, the Groom and Bride,
+  the Statue Mimic, the Owl-turned-Mimic, the dungeon Slime, the Fungi Bulb, the sky's Purple
+  Slime, the underground fairy, the Gold Frog and the Palworld pair), and five routines that had
+  been given the parameter turned out to roll nothing but `Main.rand.Next` in source and had it
+  taken back out. `rates`' own `RollOnlyBadLuckExtreme(50)` arm (`NPC.cs:925-929`) is transcribed:
+  a cursed player's world genuinely spawns faster and holds more, which is the one thing bad luck
+  buys.
   Two of the ten terms are absent on a server in vanilla too: `usedGalaxyPearl` is a player-file
   field no packet carries, and `stinky` is read off the server's own buff state, so a server's
   figure differs from the client's tooltip by up to those. Disclosed at the module.
