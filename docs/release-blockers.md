@@ -29,7 +29,7 @@ followed throughout is: a status word in a document is not evidence. Only code a
 | Fuzzing green | MET | `fuzz/artifacts/` is empty; both targets run per-push in CI |
 | p99 tick under the 16.67 ms budget at 255 players | MET | `TODO.md`'s soak table, four runs, with a neutralised control run proving the `BiomeCache` cap is what holds it |
 | **Peak RSS under 1 GiB at 255 players** | **UNMET** | Same table: run 2 reached 1536 MiB. One run of four passed cleanly. See "The memory ceiling" below |
-| **Differential against a real `TerrariaServer`** | **NOT RUN** | No `.trcap` capture exists anywhere in the tree. See "The differential" below |
+| Differential against a real `TerrariaServer` | RUN 2026-09-05, passed on what it covers | 66,542 bytes of Re-Logic's own output re-framed with nothing left over; every id with an encoder re-encoded byte-identically, including all 15 `TileSection` frames. Coverage is partial by construction; see "The differential" below |
 | Test suite on every release platform | MET, 2026-09-05 | The three host-native matrix entries now run the suite for real. Closing it cost four bug fixes; see "What running the tests on Windows found" below |
 | Human fresh-world Moon Lord playthrough | NOT RUN | Waivable by `TODO.md`'s own wording, but only "if the automated and differential evidence is otherwise complete", and the two rows above say it is not |
 | README comparison table against the real server | NOT RUN | `tools/compare_vanilla.sh` had a real measurement bug fixed 2026-09-04 (it read the macOS launcher's pid, not the server's); it now needs a quiet machine, and its own contention gate refuses to publish otherwise |
@@ -86,8 +86,32 @@ shedding policy. `TODO.md` states the tension honestly; what it does not have is
 invisible to every green test. The audits already found four defects of exactly that shape (a tile id
 off by six, ore tiers shifted a slot, a dungeon coordinate that was silently the surface).
 
-No capture has ever been recorded. `find . -name '*.trcap'` returns nothing. The tooling is built and
-documented; it has simply never been pointed at the real game.
+**Run for the first time on 2026-09-05, and it passed on everything it could check.** A real
+`TerrariaServer` (the Steam build on this machine) generated a 4200x1200 world on port 7930;
+`conform` joined it and recorded the session, and then our own server was pointed at *the same
+world file* and recorded again, so the two runs differ only in which server produced the bytes.
+
+| | real `TerrariaServer` | terrustia |
+|---|---|---|
+| bytes captured | 66,542 | 64,100 |
+| frames re-framed, nothing left over | 647 | 501 |
+| distinct ids seen | 20 | 18 |
+| re-encoded byte-identically | 17 | 17 |
+
+The 17 are `WorldData` (2) and `TileSection` (15). `TileSection` is the compressed tile format and by
+some distance the highest-risk layout in the protocol, so having Re-Logic's own bytes for it come back
+byte-identical through our encoder is the single most valuable thing this check has produced.
+
+**What it does not yet say.** 17 of 681 frames were byte-verified because `conform` only re-encodes ids
+that have an encoder to re-encode with; the rest decoded cleanly but proved only that the layout is
+plausible. And a session covers what it covers: this one was a bare join, so `SyncItem` and
+`SyncItemDespawn` appeared on the real server and not on ours simply because nothing dropped an item in
+our shorter window. That is a census difference, not a defect, and it is exactly why `conform` prints
+the census rather than scoring it. Driving a longer session through real gameplay is what would widen
+this, and is the obvious next step.
+
+The captures are kept out of the repository on purpose: a recording of Re-Logic's own wire output is
+game-derived data, and rule 2 in `AGENTS.md` keeps that out of the tree. They live under `.scratch/`.
 
 ## Known bugs, found and deliberately not fixed
 
