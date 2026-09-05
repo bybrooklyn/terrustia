@@ -23,9 +23,47 @@ pub struct Conditions {
     /// the Eye of Cthulhu drops the ore of its world's evil wherever it dies.
     pub world_is_crimson: bool,
     /// Where it happened, for the drops that only come from one biome.
+    ///
+    /// These are the *credited player's* zone (`info.player.ZoneHallow` and friends), not the tile
+    /// the NPC died on. The distinction is the game's: a soul or a biome key drops because of where
+    /// the player standing there is, so an enemy dying on a stone tile in the middle of the hallow
+    /// still gives one. They were built from `biome_of(the tile under the corpse)` until
+    /// 2026-09-05, which is a different question with a different answer.
     pub in_hallow: bool,
     pub in_corruption: bool,
     pub in_crimson: bool,
+    /// The other four zones the global rules read: `ZoneJungle`, `ZoneSnow`, `ZoneDesert` and
+    /// `ZoneBeach`. The last is a negative term in the Desert Key's own condition
+    /// (`Conditions.cs:1100-1102`) - a beach is sand too, and the key does not drop there.
+    pub in_jungle: bool,
+    pub in_snow: bool,
+    pub in_desert: bool,
+    pub in_beach: bool,
+    /// `!info.player.ZoneDungeon`, which is the Hel-Fire yoyo's own exclusion.
+    pub in_dungeon: bool,
+    /// `Main.halloween` and `Main.xMas`, the two seasonal windows.
+    pub halloween: bool,
+    pub xmas: bool,
+    /// `NPC.downedBoss3` - Skeletron. The Cascade waits for it.
+    pub downed_skeletron: bool,
+    /// The game's own difficulty slider, for the two thresholds `Conditions.HalloweenWeapons`
+    /// scales by (`Conditions.cs:804-806`).
+    pub difficulty: f32,
+    /// Where the *NPC* was, for the four rules that test its position rather than the player's
+    /// zone. Each is the exact comparison its condition makes, resolved at the call site because
+    /// only the server knows the world's dimensions.
+    ///
+    /// `near_ocean`: within 380 tiles of either edge (`Conditions.PirateMap`, `:394`).
+    pub near_ocean: bool,
+    /// `above_surface`: `position.Y / 16 < worldSurface + 10`, the Pirate Map's other half.
+    pub above_surface: bool,
+    /// `in_underworld`: `position.Y / 16 > UnderworldLayer` (`Conditions.LivingFlames`, `:939`).
+    pub in_underworld: bool,
+    /// `below_cavern_third`: `position.Y / 16 > (rockLayer + maxTilesY * 2) / 3`
+    /// (`Conditions.YoyosHelFire`, `:1228`).
+    pub below_cavern_third: bool,
+    /// `deep_for_cascade`: `position.Y / 16 > maxTilesY - 350` (`Conditions.YoyoCascade`, `:1140`).
+    pub deep_for_cascade: bool,
     /// Below the rock layer, which is where the souls live.
     pub underground: bool,
     /// For the Twins only: whether the *other* one is already dead.
@@ -277,6 +315,130 @@ pub fn lunar_fragment(npc_type: u16) -> Option<u16> {
 
 /// Everything that only drops under some condition.
 ///
+/// `ItemDropDatabase.RegisterToGlobal`: the rules hung off *every* NPC rather than a type.
+///
+/// Sixteen of them, and all sixteen were missing from this server until 2026-09-05. Nothing keys
+/// them by npc, so `check_drops.py`'s per-type comparison could not see them and their absence
+/// never showed up as a gap: the five biome keys and the Desert Key never dropped, so none of the
+/// Dungeon's six biome chests could be opened; the Pirate Map never dropped, so an invasion could
+/// not be summoned by ordinary play; and the four hardmode yoyos, the two Halloween weapons, the
+/// Goodie Bag, the Present and the Living Fire Block had no source at all.
+///
+/// Each rule's own condition class is cited at its arm. They share one preamble: every one of them
+/// wants an NPC worth something, and most want it to be a real enemy rather than a critter or a
+/// townsfolk.
+fn global_rules(npc_type: u16, at: Conditions) -> Vec<Conditional> {
+    let mut out = Vec::new();
+    let Some(stats) = crate::npc_data::npc_stats(npc_type) else {
+        return out;
+    };
+    // `info.npc.value > 0f`, which every one of the sixteen tests.
+    if stats.value <= 0.0 {
+        return out;
+    }
+
+    // The six dungeon biome keys. `Conditions.JungleKeyCondition` and its five siblings
+    // (`Conditions.cs:1008-1106`): hardmode, worth something, not `DontDropDungeonKeysOrSouls`,
+    // and the credited player standing in the zone. 1 in 2500 each. The Desert Key adds one
+    // negative term of its own - a beach is sand too, and it does not count.
+    if at.hard_mode && npc_type != 23 {
+        if at.in_jungle {
+            out.push(a_few(1533, 2500, 1, 1));
+        }
+        if at.in_corruption {
+            out.push(a_few(1534, 2500, 1, 1));
+        }
+        if at.in_crimson {
+            out.push(a_few(1535, 2500, 1, 1));
+        }
+        if at.in_hallow {
+            out.push(a_few(1536, 2500, 1, 1));
+        }
+        if at.in_snow {
+            out.push(a_few(1537, 2500, 1, 1));
+        }
+        if at.in_desert && !at.in_beach {
+            out.push(a_few(4714, 2500, 1, 1));
+        }
+    }
+
+    // The Pirate Map, which is the only way to start an invasion by ordinary play.
+    // `Conditions.PirateMap` (`Conditions.cs:394`): hardmode, worth something, above
+    // `worldSurface + 10`, and within 380 tiles of either edge of the world - the ocean.
+    if at.hard_mode && at.above_surface && at.near_ocean {
+        out.push(a_few(1315, 100, 1, 1));
+    }
+
+    // Living Fire Blocks. `Conditions.LivingFlames` (`:939`): hardmode, more than five hit points,
+    // not friendly, below the underworld layer. 20 to 50 at a time, one roll in fifty.
+    if at.hard_mode && at.in_underworld && stats.life_max > 5 && !stats.friendly {
+        out.push(a_few(2701, 50, 20, 50));
+    }
+
+    // The four hardmode yoyos, each with its own gate (`Conditions.cs:1136-1240`). All four want
+    // an enemy with more than five hit points that is not friendly; `HasPlayerTarget` is implied
+    // here, since nothing reaches this function without a credited player.
+    if stats.life_max > 5 && !stats.friendly {
+        // The Cascade is the odd one: *pre*-hardmode, after Skeletron, deep down.
+        if !at.hard_mode && at.downed_skeletron && at.deep_for_cascade {
+            out.push(a_few(3282, 400, 1, 1));
+        }
+        if at.hard_mode {
+            if at.in_snow {
+                out.push(a_few(3289, 300, 1, 1));
+            }
+            if at.in_jungle && at.downed_mech_any {
+                out.push(a_few(3286, 200, 1, 1));
+            }
+            if !at.in_dungeon && at.below_cavern_third {
+                out.push(a_few(3290, 400, 1, 1));
+            }
+        }
+    }
+
+    // Halloween and Christmas. `Conditions.HalloweenGoodieBagDrop` and `XmasPresentDrop`
+    // (`:895`, `:917`) share a shape: the season, more than one hit point, some damage, not
+    // friendly, worth something, and neither of the two types excluded by name.
+    let festive = stats.life_max > 1
+        && stats.damage > 0
+        && !stats.friendly
+        && npc_type != 121
+        && npc_type != 23;
+    if festive && at.halloween {
+        out.push(a_few(1774, 80, 1, 1));
+    }
+    if festive && at.xmas {
+        out.push(a_few(1869, 13, 1, 1));
+    }
+
+    // The two Halloween weapons, which are one chain rather than two rolls: `ByCondition(
+    // HalloweenWeapons, 1825, 2000).OnFailedRoll(Common(1827, 2000))`
+    // (`ItemDropDatabase.cs:686`). `Conditions.HalloweenWeapons` (`Conditions.cs:804-807`) is the
+    // only rule here whose thresholds move with the difficulty slider: an enemy worth less than
+    // 500 coins, dealing less than 40 damage and with less than 20 defence, the first two scaled.
+    // only rule here whose thresholds move with the difficulty slider. It is a *chain*, not two
+    // rolls, so it lives in `halloween_weapon_chain` below and reaches the caller through
+    // `conditional_chains`: pushing both here would let a single kill give the player two.
+
+    out
+}
+
+/// `Conditions.HalloweenWeapons`: an enemy small enough to be worth one of the two.
+///
+/// Worth less than 500 coins, dealing less than 40 damage and with less than 20 defence, the first
+/// two scaled by the difficulty slider (`Conditions.cs:804-807`). The only rule in this file whose
+/// thresholds move with the slider at all.
+fn is_a_small_halloween_enemy(npc_type: u16, at: Conditions) -> bool {
+    let Some(stats) = crate::npc_data::npc_stats(npc_type) else {
+        return false;
+    };
+    at.halloween
+        && stats.value > 0.0
+        && stats.value < 500.0 * crate::difficulty::money_multiplier(at.difficulty)
+        && (stats.damage as f32) < 40.0 * crate::difficulty::damage_multiplier(at.difficulty)
+        && stats.defense < 20
+}
+
 /// Whether this NPC can drop a Soul of Light or Night at all.
 ///
 /// `Conditions.SoulOfWhateverConditionCanDrop` (`Conditions.cs:1574-1606`), which both soul rules
@@ -422,6 +584,8 @@ pub fn conditional(npc_type: u16, at: Conditions) -> Vec<Conditional> {
             out.push(a_few(521, 5, 1, 1));
         }
     }
+
+    out.extend(global_rules(npc_type, at));
 
     // Plantera's first death gives the Grenade Launcher and its ammunition outright; every death
     // after that offers one weapon out of a pool instead, which needs a draw this table cannot
@@ -1324,6 +1488,18 @@ fn chain(links: Vec<Conditional>) -> ConditionalChain {
 /// chain moved there would keep firing in expert mode instead of yielding to the boss bag. Checked
 /// directly against that constraint rather than routed around it.
 pub fn conditional_chains(npc_type: u16, at: Conditions) -> Vec<ConditionalChain> {
+    // The two Halloween weapons, `ByCondition(HalloweenWeapons, 1825, 2000).OnFailedRoll(
+    // Common(1827, 2000))` (`ItemDropDatabase.cs:686`). A global rule rather than one keyed by
+    // npc, and a chain rather than two rolls: at most one Bladed Glove or Pumpkin Pie per kill,
+    // never both. Checked ahead of this function's blanket expert return, since the rule carries
+    // no `NotExpert` wrapper.
+    if is_a_small_halloween_enemy(npc_type, at) {
+        return vec![chain(vec![
+            a_few(1825, 2000, 1, 1),
+            a_few(1827, 2000, 1, 1),
+        ])];
+    }
+
     // Everscream (344) and Santa-NK1 (345): each registers one `Common(primary, 15).OnFailedRoll(
     // OneFromOptions(1, a, b, c))` chain (`ItemDropDatabase.cs:373-374, 381-382`) — a 1-in-15 shot
     // at the primary item, and only on that roll's failure a *guaranteed* (bare `1` denominator)
@@ -1674,6 +1850,289 @@ mod tests {
         assert!(!drops.contains(&521), "but not Soul of Night");
     }
 
+    /// The six dungeon biome keys, without which none of the Dungeon's six biome chests can ever
+    /// be opened. All six were missing until 2026-09-05.
+    #[test]
+    fn each_biome_key_drops_in_its_own_zone() {
+        let hard = Conditions {
+            hard_mode: true,
+            ..plain()
+        };
+        for (zone, key) in [
+            (
+                Conditions {
+                    in_jungle: true,
+                    ..hard
+                },
+                1533u16,
+            ),
+            (
+                Conditions {
+                    in_corruption: true,
+                    ..hard
+                },
+                1534,
+            ),
+            (
+                Conditions {
+                    in_crimson: true,
+                    ..hard
+                },
+                1535,
+            ),
+            (
+                Conditions {
+                    in_hallow: true,
+                    ..hard
+                },
+                1536,
+            ),
+            (
+                Conditions {
+                    in_snow: true,
+                    ..hard
+                },
+                1537,
+            ),
+            (
+                Conditions {
+                    in_desert: true,
+                    ..hard
+                },
+                4714,
+            ),
+        ] {
+            let drops = conditional(3, zone);
+            let got = drops
+                .iter()
+                .find(|d| d.item == key)
+                .unwrap_or_else(|| panic!("key {key} should drop: {drops:?}"));
+            assert_eq!((got.one_in, got.min, got.max), (2500, 1, 1), "one in 2500");
+            // Before the wall falls, no key at all.
+            let soft = Conditions {
+                hard_mode: false,
+                ..zone
+            };
+            assert!(
+                !conditional(3, soft).iter().any(|d| d.item == key),
+                "key {key} is a hardmode drop"
+            );
+        }
+        // A beach is sand, and the Desert Key does not drop there
+        // (`Conditions.DesertKeyCondition`, `Conditions.cs:1100-1102`).
+        let beach = Conditions {
+            in_desert: true,
+            in_beach: true,
+            ..hard
+        };
+        assert!(
+            !conditional(3, beach).iter().any(|d| d.item == 4714),
+            "not on a beach"
+        );
+    }
+
+    /// The Pirate Map, which is the only way an invasion starts by ordinary play.
+    #[test]
+    fn the_pirate_map_drops_at_the_ocean_in_hardmode() {
+        let ocean = Conditions {
+            hard_mode: true,
+            near_ocean: true,
+            above_surface: true,
+            ..plain()
+        };
+        let got = conditional(3, ocean)
+            .into_iter()
+            .find(|d| d.item == 1315)
+            .expect("the Pirate Map should drop");
+        assert_eq!((got.one_in, got.min, got.max), (100, 1, 1));
+        for wrong in [
+            Conditions {
+                near_ocean: false,
+                ..ocean
+            },
+            Conditions {
+                above_surface: false,
+                ..ocean
+            },
+            Conditions {
+                hard_mode: false,
+                ..ocean
+            },
+        ] {
+            assert!(
+                !conditional(3, wrong).iter().any(|d| d.item == 1315),
+                "all three terms are required"
+            );
+        }
+    }
+
+    /// The four hardmode yoyos, each with its own gate. The Cascade is the odd one: it is a
+    /// *pre*-hardmode drop, after Skeletron, deep down.
+    #[test]
+    fn the_yoyos_keep_to_their_own_gates() {
+        let deep = Conditions {
+            downed_skeletron: true,
+            deep_for_cascade: true,
+            ..plain()
+        };
+        assert!(
+            conditional(3, deep).iter().any(|d| d.item == 3282),
+            "Cascade"
+        );
+        assert!(
+            !conditional(
+                3,
+                Conditions {
+                    hard_mode: true,
+                    ..deep
+                }
+            )
+            .iter()
+            .any(|d| d.item == 3282),
+            "and not once the wall has fallen"
+        );
+
+        let hard = Conditions {
+            hard_mode: true,
+            ..plain()
+        };
+        assert!(
+            conditional(
+                3,
+                Conditions {
+                    in_snow: true,
+                    ..hard
+                }
+            )
+            .iter()
+            .any(|d| d.item == 3289),
+            "Amarok in the snow"
+        );
+        assert!(
+            conditional(
+                3,
+                Conditions {
+                    in_jungle: true,
+                    downed_mech_any: true,
+                    ..hard
+                }
+            )
+            .iter()
+            .any(|d| d.item == 3286),
+            "Yelets in the jungle, after a mechanical boss"
+        );
+        assert!(
+            !conditional(
+                3,
+                Conditions {
+                    in_jungle: true,
+                    ..hard
+                }
+            )
+            .iter()
+            .any(|d| d.item == 3286),
+            "and not before one"
+        );
+        assert!(
+            conditional(
+                3,
+                Conditions {
+                    below_cavern_third: true,
+                    ..hard
+                }
+            )
+            .iter()
+            .any(|d| d.item == 3290),
+            "Hel-Fire deep down"
+        );
+        assert!(
+            !conditional(
+                3,
+                Conditions {
+                    below_cavern_third: true,
+                    in_dungeon: true,
+                    ..hard
+                }
+            )
+            .iter()
+            .any(|d| d.item == 3290),
+            "but not in the dungeon"
+        );
+    }
+
+    /// The seasonal drops, and the Living Fire Block.
+    #[test]
+    fn the_seasons_and_the_underworld_have_their_own_drops() {
+        assert!(
+            conditional(
+                3,
+                Conditions {
+                    halloween: true,
+                    ..plain()
+                }
+            )
+            .iter()
+            .any(|d| d.item == 1774),
+            "the Goodie Bag"
+        );
+        assert!(
+            conditional(
+                3,
+                Conditions {
+                    xmas: true,
+                    ..plain()
+                }
+            )
+            .iter()
+            .any(|d| d.item == 1869),
+            "the Present"
+        );
+        assert!(
+            conditional(3, plain())
+                .iter()
+                .all(|d| d.item != 1774 && d.item != 1869),
+            "and neither out of season"
+        );
+        let hell = Conditions {
+            hard_mode: true,
+            in_underworld: true,
+            ..plain()
+        };
+        let fire = conditional(3, hell)
+            .into_iter()
+            .find(|d| d.item == 2701)
+            .expect("Living Fire Blocks");
+        assert_eq!((fire.one_in, fire.min, fire.max), (50, 20, 50));
+    }
+
+    /// The two Halloween weapons are one chain, not two rolls: at most one per kill.
+    #[test]
+    fn the_halloween_weapons_are_one_chain() {
+        let spooky = Conditions {
+            halloween: true,
+            ..plain()
+        };
+        let chains = conditional_chains(3, spooky);
+        assert_eq!(chains.len(), 1, "{chains:?}");
+        assert_eq!(
+            chains[0].links,
+            vec![a_few(1825, 2000, 1, 1), a_few(1827, 2000, 1, 1)]
+        );
+        assert!(
+            conditional(3, spooky)
+                .iter()
+                .all(|d| d.item != 1825 && d.item != 1827),
+            "and they are not also independent rolls"
+        );
+        // A big enough enemy is above the condition's thresholds. Skeletron's head has 10 defence
+        // but is a boss worth far more than 500 coins.
+        assert!(
+            conditional_chains(35, spooky)
+                .iter()
+                .all(|c| c.links[0].item != 1825)
+        );
+    }
+
     /// The souls are the *right* souls, and they come at the game's own rate.
     ///
     /// This block used to drop 547 and 548 - Souls of Fright and Might, which are mechanical-boss
@@ -1815,7 +2274,14 @@ mod tests {
             in_corruption: true,
             ..plain()
         };
-        assert!(conditional(3, surface).is_empty(), "souls on the surface");
+        // Not `is_empty`: the Corruption Key drops anywhere in the corruption, at any depth
+        // (`Conditions.CorruptKeyCondition` has no position test at all). The *soul* is the one
+        // that wants the rock layer.
+        let drops = conditional(3, surface);
+        assert!(
+            !drops.iter().any(|d| d.item == 520 || d.item == 521),
+            "souls on the surface: {drops:?}"
+        );
     }
 
     /// Plantera drops the Temple Key, every time, in a classic world.
@@ -2158,6 +2624,12 @@ mod tests {
     }
 
     /// An ordinary enemy drops nothing conditional at all.
+    ///
+    /// "Everything" here is every *world and progress* flag, not every field: the zone, season and
+    /// position flags stay false on purpose. They gate the sixteen global rules, and those really
+    /// do fire for an ordinary enemy - a slime killed in a hardmode jungle drops the Jungle Key,
+    /// which is the whole point of them. `each_biome_key_drops_in_its_own_zone` and its neighbours
+    /// cover that side; this one is about the type-keyed tables staying quiet.
     #[test]
     fn most_things_drop_nothing_conditional() {
         let everything = Conditions {
@@ -2180,6 +2652,20 @@ mod tests {
             pumpkin_moon_wave: Some(1),
             red_hat_skeletron: true,
             empress_genuinely_enraged: true,
+            in_jungle: false,
+            in_snow: false,
+            in_desert: false,
+            in_beach: false,
+            in_dungeon: false,
+            halloween: false,
+            xmas: false,
+            downed_skeletron: false,
+            difficulty: 1.0,
+            near_ocean: false,
+            above_surface: false,
+            in_underworld: false,
+            below_cavern_third: false,
+            deep_for_cascade: false,
         };
         // A bunny, a goldfish, a guide.
         for ordinary in [46u16, 1, 22] {

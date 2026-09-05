@@ -252,6 +252,23 @@ fn in_the_tables(link: &Link) -> bool {
         downed_all_mech_bosses: true,
         pumpkin_moon_wave: None,
         frost_moon_wave: None,
+        // The sixteen global rules' own gates, all off. This walk asks what a *boss* link can
+        // reach, and a global rule hangs off every NPC rather than off any of them, so leaving
+        // these false keeps the question the one this example was written to ask.
+        in_jungle: false,
+        in_snow: false,
+        in_desert: false,
+        in_beach: false,
+        in_dungeon: false,
+        halloween: false,
+        xmas: false,
+        downed_skeletron: false,
+        difficulty: 1.0,
+        near_ocean: false,
+        above_surface: false,
+        in_underworld: false,
+        below_cavern_third: false,
+        deep_for_cascade: false,
     };
     let wanted = |item: i32| {
         conditional(link.boss, at)

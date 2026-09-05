@@ -3311,7 +3311,10 @@ impl GameServer {
             (center.0 / crate::game::npc::TILE) as i32,
             (center.1 / crate::game::npc::TILE) as i32,
         );
-        let ground = self.world.tile(tx, ty).block;
+        // The zone of whoever the kill is credited to, which every biome-gated drop rule reads.
+        let zones = self
+            .closest_player(center, (0, 0))
+            .and_then(|slot| self.player_biomes.last(usize::from(slot)));
         let p = &self.world.progress;
         let at = terrustia_proto::conditional_drops::Conditions {
             expert: self.is_expert(),
@@ -3319,18 +3322,34 @@ impl GameServer {
             world_is_crimson: self.world.crimson,
             hard_mode: p.hard_mode,
             downed_plantera: p.downed_plantera,
-            in_hallow: matches!(
-                terrustia_proto::convert::biome_of(ground),
-                Some(terrustia_proto::convert::Biome::Hallow)
-            ),
-            in_corruption: matches!(
-                terrustia_proto::convert::biome_of(ground),
-                Some(terrustia_proto::convert::Biome::Corruption)
-            ),
-            in_crimson: matches!(
-                terrustia_proto::convert::biome_of(ground),
-                Some(terrustia_proto::convert::Biome::Crimson)
-            ),
+            // The *credited player's* zone, which is what `info.player.ZoneHallow` and its six
+            // siblings are. These read `biome_of(the tile under the corpse)` until 2026-09-05,
+            // a different question: a soul or a biome key drops because of where the player
+            // standing there is, so an enemy dying on a stone tile inside the hallow still gives
+            // one. `last` rather than `read`: a death is not the biome cache's turn to scan, and
+            // its stale answer is the same answer a moment earlier.
+            in_hallow: zones.is_some_and(|z| z.biome == crate::game::spawn::Biome::Hallow),
+            in_corruption: zones.is_some_and(|z| z.biome == crate::game::spawn::Biome::Corruption),
+            in_crimson: zones.is_some_and(|z| z.biome == crate::game::spawn::Biome::Crimson),
+            in_jungle: zones.is_some_and(|z| z.biome == crate::game::spawn::Biome::Jungle),
+            in_snow: zones.is_some_and(|z| z.biome == crate::game::spawn::Biome::Snow),
+            // `ZoneDesert` is the tile-count flag, true alongside whatever else the place is, so
+            // it is the `desert` field rather than the winning biome. `ZoneBeach` is the ocean.
+            in_desert: zones.is_some_and(|z| z.desert),
+            in_beach: zones.is_some_and(|z| z.biome == crate::game::spawn::Biome::Ocean),
+            in_dungeon: zones.is_some_and(|z| z.biome == crate::game::spawn::Biome::Dungeon),
+            halloween: self.world.halloween,
+            xmas: self.world.xmas,
+            downed_skeletron: p.downed_boss3,
+            difficulty: self.effective_difficulty(),
+            // Where the NPC died, for the four rules that test its own position.
+            // `Conditions.PirateMap` (`Conditions.cs:394`) wants both halves of the ocean test.
+            near_ocean: tx < 380 || tx > self.world.width() - 380,
+            above_surface: ty < i32::from(self.world.surface) + 10,
+            in_underworld: ty > self.world.height() - crate::game::spawn::UNDERWORLD_DEPTH,
+            below_cavern_third: ty
+                > (i32::from(self.world.rock_layer) + self.world.height() * 2) / 3,
+            deep_for_cascade: ty > self.world.height() - 350,
             underground: ty > i32::from(self.world.rock_layer),
             // The sibling has to be gone already, and the one that just died is still in the
             // roster at this point, so it is excluded by index rather than by type.

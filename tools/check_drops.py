@@ -530,25 +530,11 @@ def _expand_npcs(label: str) -> list[int]:
 # The check is set membership rather than per-npc: a global rule is satisfied if the item can be
 # produced anywhere in `conditional_drops.rs`, since which NPC carries it is the rule's own
 # condition's business.
-GLOBAL_DEFERRED: dict[int, str] = {
-    1533: "Jungle Key: needs `Conditions.JungleKeyCondition`'s jungle-biome flag, which "
-          "`Conditions` does not carry yet",
-    1534: "Corruption Key: the same, for the corruption",
-    1535: "Crimson Key: the same, for the crimson",
-    1536: "Hallowed Key: the same, for the hallow",
-    1537: "Frozen Key: the same, for the snow biome",
-    4714: "Desert Key: the same, for the desert",
-    1315: "Pirate Map: needs the ocean-and-surface flag `Conditions.PirateMap` reads",
-    3282: "Cascade: needs `Conditions.YoyoCascade`'s depth and biome test",
-    3286: "Yelets: the same",
-    3289: "Amarok: the same",
-    3290: "Hel-Fire: the same",
-    1825: "Halloween weapon: needs the Halloween season flag",
-    1827: "Halloween weapon: the same",
-    1774: "Goodie Bag: the same",
-    1869: "Present: needs the Christmas season flag",
-    2701: "Living Fire Block: needs `Conditions.LivingFlames`' biome test",
-}
+#
+# The deferral list is empty: all sixteen were implemented on 2026-09-05, once `Conditions` learned
+# the credited player's zone, the two seasons, the world's difficulty and four facts about where the
+# NPC died. Anything that joins them fails the run rather than being listed.
+GLOBAL_DEFERRED: dict[int, str] = {}
 
 
 def check_globals(root: Path, repo: Path) -> list[str]:

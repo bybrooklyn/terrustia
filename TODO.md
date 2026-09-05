@@ -425,9 +425,10 @@ both generators to emit exactly what is committed rather than touching either ta
      read 2,545 of 3,090 recipes; it reads all of them. `check_drops.py` listed fourteen
      "we drop what the database does not register" items without gating on them; all fourteen are
      traced now (nine real over-drops or inventions, five holes in the checker) and the direction
-     gates. The one thing that grew rather than shrank is the new `GLOBAL_DEFERRED` list: sixteen
-     `RegisterToGlobal` rules with no source here, which `docs/release-blockers.md` carries as its
-     own entry.
+     gates. It also found a class nothing had ever looked at: the sixteen `RegisterToGlobal` rules,
+     which key by no npc at all and were **all sixteen missing** - the six dungeon biome keys, the
+     Pirate Map, the four hardmode yoyos and four seasonal drops. All sixteen are implemented, and
+     `GLOBAL_DEFERRED` is empty.
      `check_placed_items.py` got there in five passes, and every widening was found by that suite
      rather than by reading the checker: the literal assignments (70 defects), the placement
      helpers (151), the `GetItemDrop_*` methods (256), the six inline drop arms (204), and the ~120
