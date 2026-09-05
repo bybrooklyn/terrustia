@@ -25,10 +25,9 @@ use terrustia_proto::npc_params::{
     LEECH_MARKS, LEECH_TICKS, MOON_LORD_ACCEL, MOON_LORD_BELOW, MOON_LORD_CORE,
     MOON_LORD_DEATH_TICKS, MOON_LORD_FIGHTING_DISTANCE, MOON_LORD_FREE_EYE, MOON_LORD_HAND,
     MOON_LORD_HAND_OUT, MOON_LORD_HAND_UP, MOON_LORD_HEAD, MOON_LORD_HEAD_UP, MOON_LORD_OPENING,
-    MOON_LORD_RAY_SWEEP, MOON_LORD_SCRIPTS, MOON_LORD_SPEED, PHANTASMAL_BOLT_DAMAGE,
-    PHANTASMAL_DEATHRAY_DAMAGE, PHANTASMAL_EYE_DAMAGE, PHANTASMAL_SPHERE_DAMAGE,
-    TRUE_EYE_BOLT_DAMAGE, TRUE_EYE_DEATHRAY_DAMAGE, TRUE_EYE_SCRIPT, TRUE_EYE_SPHERE_DAMAGE,
-    TRUE_EYE_SPRAY_DAMAGE,
+    MOON_LORD_SCRIPTS, MOON_LORD_SPEED, PHANTASMAL_BOLT_DAMAGE, PHANTASMAL_DEATHRAY_DAMAGE,
+    PHANTASMAL_EYE_DAMAGE, PHANTASMAL_SPHERE_DAMAGE, TRUE_EYE_BOLT_DAMAGE,
+    TRUE_EYE_DEATHRAY_DAMAGE, TRUE_EYE_SCRIPT, TRUE_EYE_SPHERE_DAMAGE, TRUE_EYE_SPRAY_DAMAGE,
 };
 use terrustia_proto::projectile::ids::{
     MOON_LEECH_BRAND, PHANTASMAL_BOLT, PHANTASMAL_DEATHRAY, PHANTASMAL_EYE, PHANTASMAL_SPHERE,
@@ -484,8 +483,10 @@ fn run_head_attack(
         1 => {
             // ML-4: a hundred and eighty ticks of wind-up, then the beam (`NPC.cs:42606-42690`:
             // dust while `num < 180`, proj 455 at `num == 180`). A hand's id-1 attack is the eye
-            // stream instead, so only the head ever fires the deathray. The projectile flies
-            // straight for its lifetime (the sweep is a projectile-lane concern, not modelled here).
+            // stream instead, so only the head ever fires the deathray. The sweep and the weld to
+            // this eye are `systems::tick_phantasmal_deathrays`, which is where the ray's own
+            // `aiStyle == 84` lives; `MOON_LORD_RAY_SWEEP` is that sweep's denominator and was
+            // wrongly used here as the projectile's lifetime, which is 180 and comes off its table.
             if within as i32 == 180 {
                 let (cx, cy) = npc.center();
                 let aim = (target.0 - cx, target.1 - cy);
@@ -495,7 +496,7 @@ fn run_head_attack(
                     damage: PHANTASMAL_DEATHRAY_DAMAGE,
                     position: npc.center(),
                     velocity: (aim.0 / length, aim.1 / length),
-                    time_left: MOON_LORD_RAY_SWEEP as u16,
+                    time_left: 0,
                 });
             }
         }
@@ -661,7 +662,7 @@ pub fn free_eye(
                     damage: TRUE_EYE_DEATHRAY_DAMAGE,
                     position: (cx, cy),
                     velocity: (aim.0 / length, aim.1 / length),
-                    time_left: MOON_LORD_RAY_SWEEP as u16,
+                    time_left: 0,
                 });
             }
             drag(npc, 0.95);

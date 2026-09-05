@@ -491,6 +491,8 @@ crates/terrustia-proto/src/npc_params.rs	const MOON_LORD_BOLT_EVERY	NPC.cs	42780
 crates/terrustia-proto/src/npc_params.rs	const MOON_LORD_HAND_OUT	NPC.cs	42073	524ebd6bba17	4bd1dfd9e3de
 crates/terrustia-proto/src/npc_params.rs	const MOON_LORD_HAND_OUT	NPC.cs	42094	304ea718fa77	4bd1dfd9e3de
 crates/terrustia-proto/src/npc_params.rs	const MOON_LORD_HAND_OUT	NPC.cs	42534	5178e2d82aa8	4bd1dfd9e3de
+crates/terrustia-proto/src/npc_params.rs	const MOON_LORD_RAY_SWEEP	NPC.cs	42679	e70b1d8d1dd8	6addd9147a0e
+crates/terrustia-proto/src/npc_params.rs	const MOON_LORD_RAY_SWEEP	NPC.cs	43343	61fc3da4d4ff	6addd9147a0e
 crates/terrustia-proto/src/npc_params.rs	const MOON_LORD_SCRIPTS	NPC.cs	42032	50f0db685d96	bd459b386623
 crates/terrustia-proto/src/npc_params.rs	const MOON_LORD_SCRIPTS	NPC.cs	42530	86d10d62e9c6	bd459b386623
 crates/terrustia-proto/src/npc_params.rs	const PAL_CATTIVA	NPC.cs	43379-43478	7dd7d7ed43bb	b8341cb9ada5
@@ -870,8 +872,8 @@ crates/terrustia/src/game/ai/boss/moon.rs	mod tests :: fn santas_missiles_go_up_
 crates/terrustia/src/game/ai/boss/moon.rs	mod tests :: fn the_ice_queen_rolls_a_fresh_mode_when_one_ends	NPC.cs	33961-33978	93b792af7b19	d42d5189e11b
 crates/terrustia/src/game/ai/boss/moon.rs	mod tests :: fn the_ice_queen_spins_and_sprays_in_its_third_mode	NPC.cs	33903-33959	4f377a29a345	e6100db24605
 crates/terrustia/src/game/ai/boss/moon.rs	mod tests :: fn the_sweep_holds_while_you_are_out_of_range	NPC.cs	33803	9c1d3be83a7b	b2d76abc94eb
-crates/terrustia/src/game/ai/boss/moon_lord.rs	(file)	NPC.cs	42032	50f0db685d96	1d1bacd0b5c7
-crates/terrustia/src/game/ai/boss/moon_lord.rs	(file)	NPC.cs	42530	86d10d62e9c6	1d1bacd0b5c7
+crates/terrustia/src/game/ai/boss/moon_lord.rs	(file)	NPC.cs	42032	50f0db685d96	f053226f8d1d
+crates/terrustia/src/game/ai/boss/moon_lord.rs	(file)	NPC.cs	42530	86d10d62e9c6	f053226f8d1d
 crates/terrustia/src/game/ai/boss/moon_lord.rs	const CLEAR_STAGE_AT	NPC.cs	41752	480837b3dea4	32aff60ba68e
 crates/terrustia/src/game/ai/boss/moon_lord.rs	const MOON_LORD_SHOTS	NPC.cs	41755-41758	f38d3925887d	4af68895cb00
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn attack_row	NPC.cs	42032	50f0db685d96	f82d732f9255
@@ -894,13 +896,13 @@ crates/terrustia/src/game/ai/boss/moon_lord.rs	fn eye_socket	NPC.cs	42600	20db81
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn eye_socket	NPC.cs	78873	6cca228bcef3	e4ee9a417653
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn fire_spread	NPC.cs	42297-42302	a46db92e1dcd	6d6aa7101d7c
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn fire_spread	NPC.cs	42760-42766	e70d107f9a0d	6d6aa7101d7c
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42900-43370	17847c0b2de3	65ff4122c18c
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42906-42911	dc912a656e4b	65ff4122c18c
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42988-42996	c3852161d74a	65ff4122c18c
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43072-43079	0096bc4137a6	65ff4122c18c
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43125-43178	145c219a5e7b	65ff4122c18c
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43196-43237	8f73b16a7a71	65ff4122c18c
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43326-43345	557a7bb1fac1	65ff4122c18c
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42900-43370	17847c0b2de3	eb5a740ca6cd
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42906-42911	dc912a656e4b	eb5a740ca6cd
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42988-42996	c3852161d74a	eb5a740ca6cd
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43072-43079	0096bc4137a6	eb5a740ca6cd
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43125-43178	145c219a5e7b	eb5a740ca6cd
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43196-43237	8f73b16a7a71	eb5a740ca6cd
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43326-43345	557a7bb1fac1	eb5a740ca6cd
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn openness	NPC.cs	42088	a1eddde699ad	b17f539dbd30
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn openness	NPC.cs	42173-42241	2da227a185b8	b17f539dbd30
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn openness	NPC.cs	42610	a1eddde699ad	b17f539dbd30
@@ -908,8 +910,8 @@ crates/terrustia/src/game/ai/boss/moon_lord.rs	fn openness	NPC.cs	42716	9f783e71
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn openness	NPC.cs	42722	a1eddde699ad	b17f539dbd30
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_hand_attack	NPC.cs	42128-42159	a736392ed7c8	09f7cc8fe6ba
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_hand_attack	NPC.cs	42184-42260	6f3b96ef1433	09f7cc8fe6ba
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_head_attack	NPC.cs	42606-42690	c5d483f2f2a7	6be746cefd68
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_head_attack	NPC.cs	42719-42755	c4b840d95226	6be746cefd68
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_head_attack	NPC.cs	42606-42690	c5d483f2f2a7	96cc8300ddff
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_head_attack	NPC.cs	42719-42755	c4b840d95226	96cc8300ddff
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn step_timeline	NPC.cs	42027-42055	74dc25d9455e	003abf9a015c
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn step_timeline	NPC.cs	42541-42566	f5834a75beec	003abf9a015c
 crates/terrustia/src/game/ai/boss/moon_lord.rs	mod tests :: fn a_free_eye_runs_its_whole_attack_script	NPC.cs	7009-7033	3717cd988a0b	ac86034282b9
@@ -1859,8 +1861,8 @@ crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	3272	43583
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	50299-50302	6583807eb5db	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72072-72079	2a6f4d26e0bc	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72406	6c77495a5649	c5414c9d223d
-crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	a071d72c9bea
-crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	a071d72c9bea
+crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	c082e567e787
+crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	c082e567e787
 crates/terrustia/src/game/server/systems.rs	const STINKY	BuffID.cs	393	0f6008fbeed1	cfaa20a1d46a
 crates/terrustia/src/game/server/systems.rs	fn player_has_buff	MessageBuffer.cs	2456-2477	87cb35363490	c08c9f289848
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	7363-7366	54960e839053	00e47302005c
@@ -1995,6 +1997,9 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	51913-51936	095e58902bb8	9c71005ba103
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	54033	3715da670796	9c71005ba103
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	65243-65262	d7d8fc1f6b76	9c71005ba103
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_phantasmal_deathrays	NPC.cs	42670-42681	73a6a348b8e3	ab4b56a21bf0
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_phantasmal_deathrays	NPC.cs	43343	61fc3da4d4ff	ab4b56a21bf0
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_phantasmal_deathrays	Projectile.cs	31931-32113	2189c573fe29	ab4b56a21bf0
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_powders	NPC.cs	4877	5cfef7ac17cd	2b70277c367a
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_powders	NPC.cs	53489-53491	d1c7deeed929	2b70277c367a
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_powders	NPC.cs	5623	05f14efbef73	2b70277c367a
@@ -2092,6 +2097,9 @@ crates/terrustia/src/game/server/systems.rs	mod town_npc_persistence :: fn a_hur
 crates/terrustia/src/game/server/systems.rs	mod town_npc_persistence :: fn the_travelling_merchant_is_not_recorded_as_a_resident	WorldFile.cs	1724	388194be7fb6	64f274755cda
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_bunny_cannon_stops_at_four_bunnies	WorldGen.cs	51158-51199	56744b1290a5	8e10f18e2b08
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_dark_mage_sigil_heals_the_hurt_around_it_and_then_goes	Projectile.cs	37136-37168	1cca9536b7cf	1b6062476488
+crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_phantasmal_deathray_dies_with_its_eye	Projectile.cs	31939-31946	2b1a0bc755d1	c8d00f8e4481
+crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_phantasmal_deathray_rides_its_eye_and_sweeps	NPC.cs	42670-42681	73a6a348b8e3	abe54ee748ef
+crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_phantasmal_deathray_rides_its_eye_and_sweeps	Projectile.cs	31931-32113	2189c573fe29	abe54ee748ef
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_saucer_missile_arms_and_then_turns_onto_the_closest_player	Projectile.cs	31447-31513	5f7e5832de20	dab5a3ce5abe
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_saucer_missile_burns_out_after_three_seconds	Projectile.cs	31479-31483	f0d13c9e9e8c	814935cf3622
 crates/terrustia/src/game/server/systems.rs	mod wired_mines_and_doors :: fn a_wired_boulder_statue_drops_one_boulder_and_then_waits	Wiring.cs	1998-2017	4d8907ffa0f3	9b3d1f3bf45c

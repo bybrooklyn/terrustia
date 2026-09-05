@@ -4961,7 +4961,11 @@ pub const PHANTASMAL_BOLT_DAMAGE: i32 = 30;
 /// pixels a tick.
 pub const MOON_LORD_BOLT_EVERY: f32 = 7.0;
 pub const MOON_LORD_BOLT_SPEED: f32 = 8.0;
-/// The head's deathray sweeps across nine seconds.
+/// The denominator of the deathray's sweep, not its lifetime: vanilla passes
+/// `num13 * (MathF.PI * 2f) / 540f` as the ray's per-tick rotation (`NPC.cs:42679`, `:43343`), so
+/// the beam takes nine seconds to come all the way round and only 180 ticks of that are its own
+/// life. It was read as a lifetime at both launch sites, which is three times too long; the life
+/// comes off the projectile's own table and the sweep is `systems::tick_phantasmal_deathrays`.
 pub const MOON_LORD_RAY_SWEEP: f32 = 540.0;
 
 /// How an eye socket's eyelid works: the whole "you cannot hurt it while the eye is shut" mechanic.

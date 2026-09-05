@@ -1974,6 +1974,129 @@ impl GameServer {
     }
 
     /// Move every projectile, and remove the ones that are finished.
+    /// The Moon Lord's deathray stays welded to the eye that fired it, and sweeps.
+    ///
+    /// `aiStyle == 84` (`Projectile.cs:31931-32113`), and it is the endgame boss's signature
+    /// attack. The ray does not fly anywhere: it is pinned to its parent's centre every tick, and
+    /// what makes it an attack is that its *direction* turns. Vanilla launches it aimed sixty
+    /// degrees behind you and rotates it by a full circle over 540 ticks, so across the 180 ticks
+    /// it lives it sweeps a third of a turn and passes through you at the halfway mark
+    /// (`NPC.cs:42670-42681`, and `:43343` for a True Eye's).
+    ///
+    /// Before this it flew straight off the boss at one pixel a tick and lived for 540 - which is
+    /// the sweep's own denominator, used as a lifetime. `moon_lord.rs` said so at both launch
+    /// sites: "the sweep is a projectile-lane concern, not modelled here". This is that lane.
+    ///
+    /// Two things vanilla threads through `ai` are recovered rather than plumbed, because `Shot`
+    /// carries no ai values and ninety-seven shot literals is a poor trade for two. The **parent**
+    /// is whichever Moon Lord part the ray is standing on, which is unambiguous on its first tick
+    /// because it is launched from that part's own centre; the **sweep direction** is
+    /// `spinningpoint.X < 0`, recomputed from the player on that same tick. Both are then kept in
+    /// `local_ai`, so a player moving mid-sweep cannot reverse a ray that is already turning.
+    ///
+    /// Its scale envelope (`sin(life * PI / 180)`, which widens the beam and narrows it again) is
+    /// drawing, and the ellipse offset that seats it in the eye socket is drawing too. Neither is
+    /// modelled; the hitbox is the projectile's own, as it is for every other ray here.
+    fn tick_phantasmal_deathrays(&mut self) {
+        use terrustia_proto::npc_params::{MOON_LORD_FREE_EYE, MOON_LORD_HEAD};
+        use terrustia_proto::projectile::ids::PHANTASMAL_DEATHRAY;
+
+        /// `localAI[0] >= 180f`.
+        const RAY_LIFE: f32 = 180.0;
+        /// `num13 * (MathF.PI * 2f) / 540f`: a full turn in 540 ticks, so 120 degrees in its life.
+        const RAY_SWEEP: f32 = std::f32::consts::TAU / 540.0;
+        /// `RotatedBy((0f - num13) * (MathF.PI * 2f) / 6f)`: it starts a sixth of a turn behind you.
+        const RAY_LEAD: f32 = std::f32::consts::TAU / 6.0;
+
+        let rays: Vec<(u16, (f32, f32), bool)> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == PHANTASMAL_DEATHRAY)
+            .map(|(index, p)| (index, p.center(), p.local_ai[0] == 0.0))
+            .collect();
+        let mut spent = Vec::new();
+        for (index, centre, first) in rays {
+            // On the first tick the ray is still standing on the part that fired it, so "the
+            // nearest living Moon Lord part" is that part and nothing else. After that it is
+            // whatever `local_ai[1]` recorded, so a part dying does not hand the ray to another.
+            let parent = if first {
+                self.npcs
+                    .iter()
+                    .filter(|(_, npc)| {
+                        matches!(npc.npc_type, MOON_LORD_HEAD | MOON_LORD_FREE_EYE)
+                            && npc.is_alive()
+                    })
+                    .min_by(|(_, a), (_, b)| {
+                        let reach = |npc: &crate::game::npc::Npc| {
+                            let at = npc.center();
+                            (at.0 - centre.0).hypot(at.1 - centre.1)
+                        };
+                        reach(a).total_cmp(&reach(b))
+                    })
+                    .map(|(slot, _)| slot)
+            } else {
+                self.projectiles
+                    .get(index)
+                    .and_then(|ray| u8::try_from(ray.local_ai[1] as i32).ok())
+            };
+            // `Main.npc[ai[1]].active` is the gate on the whole arm: an eye that has been broken
+            // open takes its ray with it.
+            let Some(at) = parent
+                .and_then(|slot| self.npcs.get(slot))
+                .filter(|npc| npc.is_alive())
+                .map(|npc| npc.center())
+            else {
+                spent.push(index);
+                continue;
+            };
+            // `num13 = -1f; if (spinningpoint.X < 0f) num13 = 1f;`, from the player it was aimed at.
+            let sweep_sign = if first {
+                self.closest_player(centre, (0, 0))
+                    .and_then(|slot| self.player(slot))
+                    .map_or(-1.0, |p| {
+                        if p.position.0 + PLAYER_HALF_WIDTH - centre.0 < 0.0 {
+                            1.0
+                        } else {
+                            -1.0
+                        }
+                    })
+            } else {
+                self.projectiles
+                    .get(index)
+                    .map_or(-1.0, |ray| ray.local_ai[2])
+            };
+
+            let Some(ray) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            if first {
+                ray.local_ai[1] = f32::from(parent.unwrap_or(0));
+                ray.local_ai[2] = sweep_sign;
+                // Vanilla applies this at the launch site, one tick earlier; the effect is the
+                // same and it keeps the whole attack in one place.
+                let lead = -sweep_sign * RAY_LEAD;
+                let (sin, cos) = lead.sin_cos();
+                let v = ray.velocity;
+                ray.velocity = (v.0 * cos - v.1 * sin, v.0 * sin + v.1 * cos);
+            }
+            ray.local_ai[0] += 1.0;
+            if ray.local_ai[0] >= RAY_LIFE {
+                spent.push(index);
+                continue;
+            }
+            // Welded to its eye, and turning.
+            ray.position = (at.0 - ray.width() / 2.0, at.1 - ray.height() / 2.0);
+            let turn = sweep_sign * RAY_SWEEP;
+            let (sin, cos) = turn.sin_cos();
+            let v = ray.velocity;
+            ray.velocity = (v.0 * cos - v.1 * sin, v.0 * sin + v.1 * cos);
+            ray.dirty = true;
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
     /// The Empress's rainbow streak drifts and then homes, and her sun dance rides her.
     ///
     /// The last two of her five, and both need something a projectile cannot see from inside its
@@ -2311,6 +2434,8 @@ impl GameServer {
         self.tick_dark_mage_sigils();
         // And the Empress's last two, which need a player and the boss herself respectively.
         self.tick_empress_projectiles();
+        // And the Moon Lord's deathray, which is welded to the eye that fired it.
+        self.tick_phantasmal_deathrays();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -9640,6 +9765,116 @@ mod wired_mines_and_doors {
             .projectiles
             .iter()
             .any(|(_, p)| p.projectile_type == projectile_type)
+    }
+
+    /// The Moon Lord's deathray stays on his eye and sweeps across you.
+    ///
+    /// `Projectile.cs:31931-32113` and `NPC.cs:42670-42681`. Three things at once, each of which
+    /// was wrong on its own: it never left the eye, it turned, and it lasted 180 ticks rather than
+    /// the 540 its launch site was passing (which is the sweep's denominator, not a lifetime).
+    ///
+    /// The sweep is checked by where the beam *points*, not by where it is - the ray never moves,
+    /// so a test on position would pass against a ray welded to the eye and not turning at all,
+    /// which is half the bug.
+    #[test]
+    fn a_phantasmal_deathray_rides_its_eye_and_sweeps() {
+        use terrustia_proto::projectile::ids::PHANTASMAL_DEATHRAY;
+
+        let world = crate::world::World::empty(500, 300, "deathray probe");
+        let mut server = GameServer::new(Config::default(), world);
+        let (out_tx, _out_rx) = mpsc::channel(256);
+        let mut player = Player::new(0, "127.0.0.1:1".parse().expect("loopback"), out_tx);
+        player.state = ConnState::Playing;
+        player.life = 400;
+        player.position = (2400.0, 2000.0);
+        server.players[0] = Some(player);
+
+        let head = server
+            .npcs
+            .spawn(
+                terrustia_proto::npc_params::MOON_LORD_HEAD,
+                (2000.0, 2000.0),
+            )
+            .expect("the head");
+        let index = server
+            .projectiles
+            .launch(PHANTASMAL_DEATHRAY, (2000.0, 2000.0), (1.0, 0.0), 75, 0)
+            .expect("the deathray is a known type");
+
+        server.tick_phantasmal_deathrays();
+        let opening = server.projectiles.get(index).expect("still firing");
+        let heading = opening.velocity.1.atan2(opening.velocity.0);
+        assert!(
+            heading.abs() > 0.5,
+            "it should open a sixth of a turn off the player, not aimed at them: {heading}"
+        );
+
+        // Ninety more ticks is half its life, which is where the sweep crosses the player. The
+        // eye is walked well away from where it fired, so a ray that is not really welded to it
+        // gets left behind rather than passing the check by never having moved.
+        for _ in 0..90 {
+            if let Some(eye) = server.npcs.get_mut(head) {
+                eye.position.0 += 4.0;
+                eye.position.1 -= 2.0;
+            }
+            server.tick_phantasmal_deathrays();
+        }
+        let midway = server.projectiles.get(index).expect("still firing");
+        let crossed = midway.velocity.1.atan2(midway.velocity.0);
+        assert!(
+            crossed.abs() < heading.abs(),
+            "and sweep toward them, not away: {crossed} from {heading}"
+        );
+
+        // It never leaves the eye that fired it.
+        let at = server.npcs.get(head).expect("the head").center();
+        let on_eye = server
+            .projectiles
+            .get(index)
+            .expect("still firing")
+            .center();
+        assert!(
+            (on_eye.0 - at.0).abs() < 0.01 && (on_eye.1 - at.1).abs() < 0.01,
+            "the ray must stay welded to the eye: {on_eye:?} against {at:?}"
+        );
+
+        for _ in 0..90 {
+            server.tick_phantasmal_deathrays();
+        }
+        assert!(
+            server.projectiles.get(index).is_none(),
+            "and end at 180 ticks rather than the 540 its launch site used to pass"
+        );
+    }
+
+    /// ...and it goes when the eye that fired it does (`Projectile.cs:31939-31946`).
+    #[test]
+    fn a_phantasmal_deathray_dies_with_its_eye() {
+        use terrustia_proto::projectile::ids::PHANTASMAL_DEATHRAY;
+
+        let world = crate::world::World::empty(500, 300, "deathray orphan probe");
+        let mut server = GameServer::new(Config::default(), world);
+        let head = server
+            .npcs
+            .spawn(
+                terrustia_proto::npc_params::MOON_LORD_HEAD,
+                (2000.0, 2000.0),
+            )
+            .expect("the head");
+        let index = server
+            .projectiles
+            .launch(PHANTASMAL_DEATHRAY, (2000.0, 2000.0), (1.0, 0.0), 75, 0)
+            .expect("the deathray is a known type");
+
+        server.tick_phantasmal_deathrays();
+        assert!(server.projectiles.get(index).is_some(), "firing");
+
+        server.npcs.remove(head);
+        server.tick_phantasmal_deathrays();
+        assert!(
+            server.projectiles.get(index).is_none(),
+            "a ray whose eye is gone must go with it"
+        );
     }
 
     /// The Empress's rainbow streak drifts wide, then turns onto the player.

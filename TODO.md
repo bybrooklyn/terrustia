@@ -332,12 +332,25 @@ Two of her five ids also carried invented names pointing at the wrong attack (87
 vanilla has no name for). Every *use* was against the right id, checked site by site, so this was a
 rename rather than a fix - but it is the shape that had Mothron laying Crimson Penguins.
 
-**18 types remain, across sixteen styles**, read against `Projectile.cs` rather than assumed: 45, 65,
-84, 98, 102 (2), 109, 111, 112 (2), 128, 135, 136, 149, 157, 183, 186, 187. Six steer inline and ten
-delegate to an `AI_NNN_` method of their own. **None of them falls**: they are lasers, deathrays,
-homing bolts and hovering clouds, so a straight line is a poorer approximation than it was of a
-thrown bone rather than a free one. **Coverage is 61 of 79**, up from 36 when the count was first
-taken, and every gravity style and every boss projectile in the roster is closed.
+**The Moon Lord's deathray, closed 2026-09-05, and it was three bugs stacked.** `aiStyle == 84`
+(`Projectile.cs:31931-32113`): the ray is welded to the eye that fired it and never travels, its
+*direction* sweeps a full turn every 540 ticks, and it lives 180. Ours flew straight off the boss at
+one pixel a tick and lasted 540 - because `MOON_LORD_RAY_SWEEP` is the sweep's own denominator and
+both launch sites were passing it as the lifetime. `moon_lord.rs` had already written down the gap
+at both of them ("the sweep is a projectile-lane concern, not modelled here"). Vanilla aims it a
+sixth of a turn behind you so the beam crosses you at the halfway mark, which is the attack.
+
+The parent and the sweep direction are recovered rather than plumbed: `Shot` carries no ai values
+and 97 shot literals is a poor trade for two, so the ray finds the part it is standing on (which is
+unambiguous on its first tick, being launched from that part's own centre) and reads the player's
+side once, then keeps both in `local_ai`. Its scale envelope and the ellipse that seats it in the
+socket are drawing and stay unmodelled.
+
+**17 types remain, across fifteen styles**, read against `Projectile.cs` rather than assumed: 45, 65,
+98, 102 (2), 109, 111, 112 (2), 128, 135, 136, 149, 157, 183, 186, 187. **Coverage is 62 of 79**, up
+from 36 when the count was first taken; every gravity style and every boss projectile in the roster
+is closed, and what is left is town-NPC flourishes (109, 111, 112, 149, 183, 186) and single
+hardmode-enemy effects.
 
 **The explosion is the other half of style 16 and is not modelled.** A bomb reaches the ground and
 expires; `Projectile.Kill`'s own switch widens the hitbox and breaks tiles, so a grenade lands and
@@ -768,6 +781,18 @@ over effort; the first three are roughly a day each.
    failure leaves two servers on the old code and none on the new.
    **`new_world_cli` remains open** and is a different fault: it kills its child before asserting,
    so it cannot leak, and the `ENOENT`-against-a-relink lead above still stands.
+
+   **`every_newly_covered_town_npc_actually_fights` is a second open flake**, characterised
+   2026-09-05 rather than waved off. It fails on a *different* NPC each time - 453, 453, 588 across
+   four observations - and 588 is the Golfer, whose ball is `aiStyle 149` and has no arm at all,
+   while 453's bone is `aiStyle 2` and does. **A projectile change cannot make both miss**, which is
+   what rules the projectile lane out as the cause. Two runs in three pass; the failing run finished
+   in 78 seconds against 390 for the passing ones, so it bailed on the test's own twenty-second
+   per-NPC deadline rather than losing a shot. The test's own comments already document this
+   deadline as contention-sensitive, and this machine ran two to six concurrent cargo processes all
+   session. The fix is the same shape as `shutdown_signal`'s was: the deadline should be counted in
+   server *ticks* observed rather than wall-clock seconds, so a descheduled runtime slows the test
+   instead of failing it.
 
 7. **`just check-citations`: does a citation's own lines contain the numbers written beside it?**
    `check-parity` proves a citation still points at the same text and says plainly that it never
