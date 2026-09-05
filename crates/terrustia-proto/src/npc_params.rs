@@ -4070,7 +4070,7 @@ pub const GOLEM_FREE_LASER_NO_LOS_BONUS: f32 = 10.0;
 /// `100 + 4800/2`.
 pub const GOLEM_FREE_LASER_INTERVAL: f32 = 2500.0;
 /// Fractions of the **body's** health past which each laser hits one harder and a quarter faster
-/// (`NPC.cs:31755-31778`).
+/// (`NPC.cs:31754-31778`; the first of the five is on that opening line).
 pub const GOLEM_FREE_LASER_DAMAGE_STEPS: [f32; 5] = [0.5, 0.4, 0.3, 0.2, 0.1];
 /// Without line of sight, the volley is fired blind but hits much harder and faster.
 pub const GOLEM_FREE_LASER_NO_LOS_DAMAGE_MULT: f32 = 1.5;
@@ -4945,9 +4945,13 @@ pub const MOON_LORD_DEATH_TICKS: f32 = 600.0;
 pub const MOON_LORD_FIGHTING_DISTANCE: f32 = 4500.0;
 
 /// What its parts throw for. The damage each `NewProjectile` call passes in `AI_078`/`AI_079`: the
-/// eye stream (30, `NPC.cs:42155`), the sphere barrage (40, `NPC.cs:42199`), the head's deathray
-/// (75, `NPC.cs:42667`) and the bolt spread (30, `NPC.cs:42502`). The ids themselves are
-/// `projectile::ids::PHANTASMAL_*`.
+/// eye stream (452 for 30, `NPC.cs:42136`), the sphere barrage (454 for 40, `NPC.cs:42182`), the
+/// head's deathray (455 for 75, `NPC.cs:42679`) and the bolt spread (462 for 30, `NPC.cs:42278`).
+/// The ids themselves are `projectile::ids::PHANTASMAL_*`.
+///
+/// All four of these citations were off by twelve to twenty lines, each landing on a vector
+/// calculation or a brace rather than the `NewProjectile` call it names. `just check-citations`
+/// found them by asking whether the numbers were in the lines.
 pub const PHANTASMAL_EYE_DAMAGE: i32 = 30;
 pub const PHANTASMAL_SPHERE_DAMAGE: i32 = 40;
 pub const PHANTASMAL_DEATHRAY_DAMAGE: i32 = 75;
@@ -5851,6 +5855,9 @@ pub const EMPRESS_SUN_DANCE_DAMAGE: i32 = 40;
 /// 47135`), a genuinely different local from the ring's `num10` despite the similar name, which a
 /// prior pass had collapsed both into a single shared slot.
 pub const EMPRESS_DAMAGE: [(i32, i32); 5] = [(45, 30), (45, 30), (50, 30), (50, 35), (70, 65)];
+// The five pairs are two runs of locals: `num5`..`num9` (`NPC.cs:46462-46466`) against
+// `num11`..`num15` (`:46477-46481`), which `GetAttackDamage_ForProjectiles` then pairs off.
+
 /// As [`EMPRESS_DAMAGE`], phase 2: the same five locals after the `if (flag)` block raises them
 /// (`NPC.cs:46482-46494`), then through the same `GetAttackDamage_ForProjectiles` calls.
 pub const EMPRESS_DAMAGE_PHASE_2: [(i32, i32); 5] =

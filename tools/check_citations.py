@@ -77,12 +77,26 @@ def cited_text(tree, cs, spans, pad=0):
     return None
 
 
+def strip_array_lengths(line):
+    """Remove every `[T; N]`, innermost first.
+
+    One pass is not enough: `[[(u8, i32); 5]; 3]` has its inner array removed and leaves `[; 3]`
+    behind, and the outer length then reads as a number the game supposedly wrote. Repeat until
+    the line stops changing.
+    """
+    while True:
+        shorter = ARRAY_LEN.sub("", line)
+        if shorter == line:
+            return line
+        line = shorter
+
+
 def our_numbers(lines, span):
     kept = []
     for line in lines[span[0] : span[1] + 1]:
         if line.strip().startswith("//"):
             continue
-        kept.append(ARRAY_LEN.sub("", ARM.sub("", line)))
+        kept.append(strip_array_lengths(ARM.sub("", line)))
     return numbers("\n".join(kept))
 
 

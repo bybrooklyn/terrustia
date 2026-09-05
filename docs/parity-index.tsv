@@ -388,6 +388,8 @@ crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DAMAGE	NPC.cs	46995-47034
 crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DAMAGE	NPC.cs	47035	d9f5c1bc6e07	c0479a7eaddf
 crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DAMAGE	NPC.cs	47213-47303	fa14c82f1889	c0479a7eaddf
 crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DAMAGE	NPC.cs	47304-47353	25f0fe4d4b94	c0479a7eaddf
+crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DAMAGE_PHASE_2	NPC.cs	46462-46466	67f0f817d121	cffa1e067268
+crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DAMAGE_PHASE_2	NPC.cs	46477-46481	f98e27d4128b	cffa1e067268
 crates/terrustia-proto/src/npc_params.rs	const EMPRESS_DAMAGE_PHASE_2	NPC.cs	46482-46494	004f6fc87284	cffa1e067268
 crates/terrustia-proto/src/npc_params.rs	const EMPRESS_SUN_DANCE_DAMAGE	NPC.cs	46462	be6ee0149d56	2eaa9fb24042
 crates/terrustia-proto/src/npc_params.rs	const EMPRESS_SUN_DANCE_DAMAGE	NPC.cs	46482-46494	004f6fc87284	2eaa9fb24042
@@ -452,7 +454,7 @@ crates/terrustia-proto/src/npc_params.rs	const GOLEM_AIR_SPEED_GET_GOOD	NPC.cs	4
 crates/terrustia-proto/src/npc_params.rs	const GOLEM_FIREBALL_DAMAGE_UPGRADED	NPC.cs	31480	051141f80d28	b3add2016532
 crates/terrustia-proto/src/npc_params.rs	const GOLEM_FREE_FIREBALL_DAMAGE	NPC.cs	31684	03e74fa89371	a350ca649d6d
 crates/terrustia-proto/src/npc_params.rs	const GOLEM_FREE_FIREBALL_STEPS	NPC.cs	31645-31661	193c1124a3d4	0cd114c14ca6
-crates/terrustia-proto/src/npc_params.rs	const GOLEM_FREE_LASER_DAMAGE_STEPS	NPC.cs	31755-31778	6ac1b81df76e	32898861dbd9
+crates/terrustia-proto/src/npc_params.rs	const GOLEM_FREE_LASER_DAMAGE_STEPS	NPC.cs	31754-31778	225b9849d521	32898861dbd9
 crates/terrustia-proto/src/npc_params.rs	const GOLEM_FREE_LASER_INTERVAL_STEPS	NPC.cs	31694-31725	72f8458cb7ce	8c9bbbc41134
 crates/terrustia-proto/src/npc_params.rs	const GOLEM_FREE_LASER_NO_LOS_BONUS	NPC.cs	31732	48f7611c453b	351872c6efcd
 crates/terrustia-proto/src/npc_params.rs	const GOLEM_LASER_DAMAGE	NPC.cs	31504-31564	ffc9997f4f8f	f0b7e4572081
@@ -498,10 +500,10 @@ crates/terrustia-proto/src/npc_params.rs	const PAL_ESCORT_WAKE	NPC.cs	57553-5759
 crates/terrustia-proto/src/npc_params.rs	const PAL_REWARD_CATTIVA	ItemID.cs	12872	42a7f198cd7c	acb82daa7bd0
 crates/terrustia-proto/src/npc_params.rs	const PAL_REWARD_CATTIVA	ItemID.cs	12874	5227c4e79b8a	acb82daa7bd0
 crates/terrustia-proto/src/npc_params.rs	const PAL_REWARD_CATTIVA	NPC.cs	43481-43489	79b50c2cbdab	acb82daa7bd0
-crates/terrustia-proto/src/npc_params.rs	const PHANTASMAL_EYE_DAMAGE	NPC.cs	42155	0613bb1a64e5	1ff109e31b1e
-crates/terrustia-proto/src/npc_params.rs	const PHANTASMAL_EYE_DAMAGE	NPC.cs	42199	5504e3a78118	1ff109e31b1e
-crates/terrustia-proto/src/npc_params.rs	const PHANTASMAL_EYE_DAMAGE	NPC.cs	42502	4ffaefcc81db	1ff109e31b1e
-crates/terrustia-proto/src/npc_params.rs	const PHANTASMAL_EYE_DAMAGE	NPC.cs	42667	1786c0651671	1ff109e31b1e
+crates/terrustia-proto/src/npc_params.rs	const PHANTASMAL_EYE_DAMAGE	NPC.cs	42136	a2b3d36e837e	1ff109e31b1e
+crates/terrustia-proto/src/npc_params.rs	const PHANTASMAL_EYE_DAMAGE	NPC.cs	42182	6ec46ac7155a	1ff109e31b1e
+crates/terrustia-proto/src/npc_params.rs	const PHANTASMAL_EYE_DAMAGE	NPC.cs	42278	d698b71dce94	1ff109e31b1e
+crates/terrustia-proto/src/npc_params.rs	const PHANTASMAL_EYE_DAMAGE	NPC.cs	42679	e70b1d8d1dd8	1ff109e31b1e
 crates/terrustia-proto/src/npc_params.rs	const PLANTERA_HOOKS	NPC.cs	31974-31976	01f77a6b0475	e031db9a356d
 crates/terrustia-proto/src/npc_params.rs	const PLANTERA_HOOKS	NPC.cs	32226-32234	cecea1e4f9c4	e031db9a356d
 crates/terrustia-proto/src/npc_params.rs	const PLANTERA_SPORE	NPC.cs	32277-32315	9fe816f720c7	8a5d99821f65
