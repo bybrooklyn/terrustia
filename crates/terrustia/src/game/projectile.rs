@@ -274,6 +274,15 @@ const FIREBALL_GRAVITY: f32 = 0.2;
 const FIREBALL_SPIN: f32 = 0.3;
 /// A falling star's own style (`Projectile.cs:24082-24133`), which is not a movement arm at all.
 const STAR_STYLE: i32 = 5;
+/// The sandnado (`Projectile.cs:36662-36705`): it stands still and fills its own column.
+const SANDNADO_STYLE: i32 = 127;
+/// `num995 = 300f` for type 657, the hostile one, against 900 for a player's.
+const SANDNADO_LIFE: f32 = 300.0;
+/// `num997`/`num998`, how far up and down it looks for the open span.
+const SANDNADO_REACH: i32 = 15;
+/// `vector154.X = vector154.Y * 0.2f` and then `width = vector154.X * 0.65f`: it is a fifth as wide
+/// as it is tall, and its hitbox is two thirds of that again.
+const SANDNADO_SLENDER: f32 = 0.2 * 0.65;
 /// The Martian Saucer's missile (`Projectile.cs:31447-31513`). Its steering needs the player list
 /// and lives in `systems::tick_saucer_missiles`; what is read here is the tile-collision flag that
 /// phase turns on.
@@ -442,6 +451,49 @@ pub fn step(
                 projectile.velocity.1 = projectile.velocity.1.min(TERMINAL);
             }
             BOMB_STYLE => bomb(projectile),
+            SANDNADO_STYLE => {
+                // A sandnado does not travel and is not the size its table says. Every tick it
+                // walks up and down the column it is standing in, up to fifteen tiles each way,
+                // and then *becomes* that column: `width = height * 0.2 * 0.65`, `height` the
+                // whole open span, centred in it (`Projectile.cs:36689-36703`). That is why a
+                // sandnado is a wall you cannot walk under rather than a puff you step over, and
+                // it is the only reason the table's 10x10 is not what a player meets. `stats` is a
+                // per-projectile copy here, which is what makes writing to it the same move
+                // vanilla makes on the projectile itself.
+                projectile.ai[0] += 1.0;
+                if projectile.ai[0] >= SANDNADO_LIFE {
+                    return Outcome::Spent;
+                }
+                let centre = projectile.center();
+                let column = (centre.0 / TILE) as i32;
+                let row = (centre.1 / TILE) as i32;
+                let mut top = row;
+                while row - top < SANDNADO_REACH && !blocking(tiles, column, top - 1) {
+                    top -= 1;
+                }
+                let mut bottom = row;
+                while bottom - row < SANDNADO_REACH && !blocking(tiles, column, bottom + 1) {
+                    bottom += 1;
+                }
+                // Vanilla's `ExpandVertically` hands back the *solid* tiles that stopped it and
+                // then steps inside them with `topY++; bottomY--`. The walk above already stops on
+                // the last open row, so those two are already applied and doing them again would
+                // shrink the column by a tile at each end - which is exactly what the first version
+                // of this did, and the test caught it at 96 pixels instead of 128.
+                let (high, low) = (
+                    top as f32 * TILE + TILE / 2.0,
+                    bottom as f32 * TILE + TILE / 2.0,
+                );
+                let span = (low - high).max(TILE);
+                projectile.stats.height = span as i32;
+                projectile.stats.width = (span * SANDNADO_SLENDER) as i32;
+                let middle = (high + low) / 2.0;
+                projectile.position = (
+                    column as f32 * TILE + TILE / 2.0 - projectile.width() / 2.0,
+                    middle - projectile.height() / 2.0,
+                );
+                projectile.velocity = (0.0, 0.0);
+            }
             179 => {
                 // The Empress's lance: it hangs exactly where it was drawn for a full second and
                 // *then* leaves, at forty pixels a tick (`Projectile.cs:45853-45866`). The hold is
@@ -1512,6 +1564,56 @@ mod tests {
             grenade_travel > mine_travel * 2.0,
             "but the grenade should carry far further: {grenade_travel} against {mine_travel}"
         );
+    }
+
+    /// A sandnado fills the column it stands in, which is why you cannot walk under one.
+    ///
+    /// `Projectile.cs:36689-36703`. Its table size is 10x10 and vanilla overwrites it every tick
+    /// from a scan of the open space above and below, up to fifteen tiles each way. Without that a
+    /// sandnado is a ten-pixel dot on the floor, which is not the attack: the height *is* the
+    /// threat. It also never moves and ends at 300 ticks rather than the 900 a player's does.
+    #[test]
+    fn a_sandnado_grows_to_fill_its_column() {
+        let mut tiles = Air::default();
+        // A floor at 64 and a ceiling at 54: a ten-tile shaft.
+        for x in 50..70 {
+            tiles.0.insert((x, 64), Tile::block(1));
+            tiles.0.insert((x, 54), Tile::block(1));
+        }
+        let mut store = ProjectileStore::new();
+        let index = store
+            .launch(657, (60.0 * TILE, 60.0 * TILE), (0.0, 0.0), 30, 0)
+            .expect("the sandnado is a known type");
+        let mut nado = *store.get(index).unwrap();
+        assert_eq!(nado.height(), 10.0, "it starts as its table's dot");
+
+        step(&mut nado, &tiles, &mut Vec::new());
+        // Rows 55..63 inclusive are open, so the span is nine tiles between their centres.
+        assert!(
+            nado.height() > 100.0,
+            "and grows to fill the shaft, not stay at {}",
+            nado.height()
+        );
+        assert!(
+            nado.width() < nado.height() / 4.0,
+            "staying far narrower than it is tall: {} by {}",
+            nado.width(),
+            nado.height()
+        );
+        assert!(
+            nado.center().1 > 55.0 * TILE && nado.center().1 < 64.0 * TILE,
+            "and centred inside the shaft, not clipping through it: {}",
+            nado.center().1
+        );
+
+        let mut spent = false;
+        for _ in 0..300 {
+            if step(&mut nado, &tiles, &mut Vec::new()) == Outcome::Spent {
+                spent = true;
+                break;
+            }
+        }
+        assert!(spent, "a hostile sandnado ends at 300 ticks, not 900");
     }
 
     /// The Empress's lance hangs where it was drawn for a second and then leaves at forty.

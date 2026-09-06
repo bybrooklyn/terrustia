@@ -258,7 +258,12 @@ pub mod ids {
     pub const CRAWLER_SPIT: u16 = 472;
 
     /// The sandnado a sand elemental raises.
-    pub const SANDNADO: u16 = 658;
+    /// The Sand Elemental raises a **mark** (658, `SandnadoHostileMark`), and the mark is what
+    /// spawns the tornado (657, `SandnadoHostile`) sixty ticks later (`Projectile.cs:36848-36855`).
+    /// Only the mark used to have a name here, and it was called `SANDNADO`, so the elemental's
+    /// whole attack was a marker that spun in place and never became anything.
+    pub const SANDNADO_MARK: u16 = 658;
+    pub const SANDNADO: u16 = 657;
 
     /// A scutlix rider's shot.
     pub const RIDER_SHOT: u16 = 438;

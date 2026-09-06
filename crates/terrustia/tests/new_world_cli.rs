@@ -43,15 +43,62 @@ fn find_named(dir: &Path, name: &str) -> Vec<PathBuf> {
     found
 }
 
-/// Poll for `name` to show up under `dir` as a non-empty file, rather than sleeping a fixed amount
-/// and hoping. A real subprocess's first autosave landing inside a set wall-clock window is
-/// inherently load-sensitive — both tests in this file spawn a real OS process each and, by
-/// default, run concurrently in the same binary — so a fixed sleep is exactly the kind of "usually
-/// enough" timing assumption this project's own testing discipline avoids elsewhere (see
-/// `gameplay.rs`'s `deadline`-loop convention, reused here rather than reinvented).
-fn wait_for_file(dir: &Path, name: &str, timeout: Duration) -> Vec<PathBuf> {
+/// Wait until the server is up, then for its world file to land.
+///
+/// This used to be a bare 120-second filesystem poll, and that was the last real flake in the file:
+/// on a saturated machine generating a world takes as long as it takes, the poll returned whatever
+/// it had — usually nothing — and the assertion *after* it then failed on a missing file. Measured
+/// by running this binary against a concurrent `--test gameplay`: the run took 121.5 seconds, which
+/// is exactly the deadline, and it was `new_ignores_a_stale_world_file_left_in_the_config` that
+/// went red, on a world that simply had not been written yet.
+///
+/// A bigger number only moves the line. The load-sensitive part is generation, and the server says
+/// when that is over: `accepting connections` is logged once the world exists and the listener is
+/// bound. So this waits on that line rather than on a clock, and only then polls for the file,
+/// which by that point is a short and deterministic wait.
+///
+/// **The first attempt at this waited for `world saved` and was wrong**, in a way worth recording
+/// because it looked like a server bug: no such line ever appears. A fast autosave logs at `debug`
+/// on purpose (`game/server/mod.rs:2062-2069` — "a routine autosave that worked is not news"), and
+/// these tests run at the default level, so the only `info` save is the one on shutdown. The world
+/// is on disk from generation, long before any autosave, which is why the original poll saw it at
+/// all.
+///
+/// Draining stdout is a second fix in the same move: nothing read it before, so a chatty server
+/// could fill the pipe buffer and block on its own logging.
+fn wait_for_generated_world(
+    child: &mut std::process::Child,
+    dir: &Path,
+    name: &str,
+    timeout: Duration,
+) -> Vec<PathBuf> {
+    use std::io::{BufRead, BufReader};
+
+    let stdout = child.stdout.take().expect("run_new pipes stdout");
+    let (lines, from_server) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if lines.send(line).is_err() {
+                break;
+            }
+        }
+    });
+
     let deadline = std::time::Instant::now() + timeout;
-    loop {
+    let mut transcript = Vec::new();
+    let mut up = false;
+    while std::time::Instant::now() < deadline {
+        if !up {
+            match from_server.recv_timeout(Duration::from_millis(200)) {
+                Ok(line) => {
+                    up = line.contains("accepting connections");
+                    transcript.push(line);
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            }
+            continue;
+        }
         let found = find_named(dir, name);
         if found
             .iter()
@@ -59,11 +106,16 @@ fn wait_for_file(dir: &Path, name: &str, timeout: Duration) -> Vec<PathBuf> {
         {
             return found;
         }
-        if std::time::Instant::now() >= deadline {
-            return found;
-        }
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(100));
     }
+    let _ = child.kill();
+    let _ = child.wait();
+    panic!(
+        "{name} never landed within {}s (server {}up). It said:\n{}",
+        timeout.as_secs(),
+        if up { "" } else { "never came " },
+        transcript.join("\n")
+    );
 }
 
 /// Run `terrustia --new <name>` against a scratch home, with autosave fast enough that a short
@@ -102,7 +154,12 @@ fn new_generates_a_world_into_the_platforms_terraria_world_directory() {
     std::fs::create_dir_all(&home).expect("scratch home");
 
     let mut child = run_new(&home, "Fork Test World", "127.0.0.1:17779");
-    let found = wait_for_file(&home, "Fork_Test_World.wld", Duration::from_secs(120));
+    let found = wait_for_generated_world(
+        &mut child,
+        &home,
+        "Fork_Test_World.wld",
+        Duration::from_secs(120),
+    );
     let _ = child.kill();
     let _ = child.wait();
 
@@ -138,7 +195,12 @@ fn new_ignores_a_stale_world_file_left_in_the_config() {
     // is the only test in this file that generates two worlds in sequence, each waiting on top of
     // whatever the other tests' own concurrently-running server subprocesses are costing it.
     let mut stale = run_new(&home, "Stale World", "127.0.0.1:17782");
-    let stale_found = wait_for_file(&home, "Stale_World.wld", Duration::from_secs(120));
+    let stale_found = wait_for_generated_world(
+        &mut stale,
+        &home,
+        "Stale_World.wld",
+        Duration::from_secs(120),
+    );
     let _ = stale.kill();
     let _ = stale.wait();
     assert_eq!(
@@ -172,7 +234,12 @@ fn new_ignores_a_stale_world_file_left_in_the_config() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn terrustia");
-    let fresh_found = wait_for_file(&home, "Fresh_World.wld", Duration::from_secs(120));
+    let fresh_found = wait_for_generated_world(
+        &mut fresh,
+        &home,
+        "Fresh_World.wld",
+        Duration::from_secs(120),
+    );
     let _ = fresh.kill();
     let _ = fresh.wait();
     assert_eq!(
@@ -267,7 +334,12 @@ fn new_refuses_a_name_that_already_exists() {
     std::fs::create_dir_all(&home).expect("scratch home");
 
     let mut first = run_new(&home, "Collision World", "127.0.0.1:17780");
-    let found = wait_for_file(&home, "Collision_World.wld", Duration::from_secs(120));
+    let found = wait_for_generated_world(
+        &mut first,
+        &home,
+        "Collision_World.wld",
+        Duration::from_secs(120),
+    );
     let _ = first.kill();
     let _ = first.wait();
     assert_eq!(

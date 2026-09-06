@@ -346,11 +346,26 @@ unambiguous on its first tick, being launched from that part's own centre) and r
 side once, then keeps both in `local_ai`. Its scale envelope and the ellipse that seats it in the
 socket are drawing and stay unmodelled.
 
-**17 types remain, across fifteen styles**, read against `Projectile.cs` rather than assumed: 45, 65,
-98, 102 (2), 109, 111, 112 (2), 128, 135, 136, 149, 157, 183, 186, 187. **Coverage is 62 of 79**, up
-from 36 when the count was first taken; every gravity style and every boss projectile in the roster
-is closed, and what is left is town-NPC flourishes (109, 111, 112, 149, 183, 186) and single
-hardmode-enemy effects.
+**The Sand Elemental's tornado never existed, closed 2026-09-05, and the id table is why.** Only one
+of the two sandnado projectiles had a name here and it was the wrong one: `SANDNADO` was 658,
+`SandnadoHostileMark`, and the real tornado is 657, `SandnadoHostile`. Vanilla raises a mark, holds
+it still for sixty ticks while it spins up, and **the mark spawns the tornado** (`:36848-36855`)
+before ending itself at 120. `sand.rs` raised three markers that sat for 900 ticks and nothing ever
+became a tornado, so the elemental's signature attack was a visual effect.
+
+Both styles are transcribed. Style 128 is the mark (snap to the tile grid, hold still, raise at 60,
+end at 120), in `systems.rs` because the tornado's damage is the one number that depends on the
+world - 30 classic, 22 expert. Style 127 is the tornado, and the part that makes it an attack is
+that **it is not the size its table says**: every tick it scans up to fifteen tiles up and down for
+the open span it stands in and becomes that column, a fifth as wide as it is tall. Its table entry
+is 10x10, so without that a sandnado is a dot on the floor you step over. It also ends at 300 ticks
+rather than the 900 a player's does.
+
+**16 types remain, across fourteen styles**: 45, 65, 98, 102 (2), 109, 111, 112 (2), 135, 136, 149,
+157, 183, 186, 187. **Coverage is 64 of 80.** Ranked by what is silently doing nothing rather than
+merely flying straight, the next is **111, the Dryad's Ward** (`:41874-41980`): a circle that grows
+300 to 1200 over 570 ticks, buffs every player inside it and damages and debuffs every hostile,
+every ten ticks. It is a projectile that exists purely to apply effects, and applies none.
 
 **The explosion is the other half of style 16 and is not modelled.** A bomb reaches the ground and
 expires; `Projectile.Kill`'s own switch widens the hitbox and breaks tiles, so a grenade lands and
@@ -779,8 +794,28 @@ over effort; the first three are roughly a day each.
    the same shape (only `shutdown_signal.rs` was observed leaking; `world_switch`'s server happens
    to die of `SIGPIPE` when the reader goes, which is luck rather than design). Forcing a mid-test
    failure leaves two servers on the old code and none on the new.
-   **`new_world_cli` remains open** and is a different fault: it kills its child before asserting,
-   so it cannot leak, and the `ENOENT`-against-a-relink lead above still stands.
+   **`new_world_cli`: the `ENOENT`-against-a-relink lead was wrong, and the real shape is now
+   measured (2026-09-05).** Reproduced by running the binary against a concurrent `--test gameplay`:
+   it fails roughly one run in six, and the failing run takes **121.5 seconds**, which is exactly
+   `wait_for_file`'s deadline. Nothing is relinked and nothing leaks; the machine is simply too busy
+   for a real subprocess to generate a world inside a fixed window, and the poll then returned an
+   empty result for the assertion after it to trip over.
+
+   **What changed**: the wait is now on the server's own `accepting connections` line before it
+   polls for the file, and a failure panics with the child's whole transcript instead of leaving an
+   empty directory behind. Its stdout is drained for the first time too, which removes a pipe-buffer
+   stall nobody had noticed. **This makes the flake diagnosable, not gone**: the same run under load
+   now reports `Stale_World.wld never landed within 120s (server up)` and, separately, the
+   size-refusal test can still hit its own 30-second exit deadline. Both are wall-clock deadlines
+   against real subprocesses, and the fix is the same one `every_newly_covered_town_npc_actually_fights`
+   needs: count deadlines in observed server output rather than seconds.
+
+   **One dead end is worth keeping** because it looked like a blocker and is not. The first version
+   of the wait watched for `world saved`, and no such line ever appears: a fast autosave logs at
+   `debug` **on purpose** (`game/server/mod.rs:2062-2069`, "a routine autosave that worked is not
+   news"), these tests run at the default level, and the only `info` save is on shutdown. Ten
+   seconds of a real server with `autosave_secs = 1` prints nothing and writes nothing new, because
+   the world has been on disk since generation. Autosave is fine; the signal was wrong.
 
    **`every_newly_covered_town_npc_actually_fights` is a second open flake**, characterised
    2026-09-05 rather than waved off. It fails on a *different* NPC each time - 453, 453, 588 across

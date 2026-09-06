@@ -1974,6 +1974,77 @@ impl GameServer {
     }
 
     /// Move every projectile, and remove the ones that are finished.
+    /// A Sand Elemental's mark spins up and then *becomes* the tornado.
+    ///
+    /// `aiStyle == 128` (`Projectile.cs:36750-36860`), and the elemental's whole attack turned on
+    /// it. Vanilla raises a mark (658, `SandnadoHostileMark`), holds it still for two seconds while
+    /// it spins up, spawns the real tornado (657, `SandnadoHostile`) at the sixty-tick mark, and
+    /// ends the mark at 120. Only the mark had a name in this project's own id table, and that name
+    /// was `SANDNADO` - so `sand.rs` raised three markers that sat spinning for 900 ticks and no
+    /// tornado ever formed. The elemental's signature attack produced a visual and nothing else.
+    ///
+    /// The damage belongs here rather than in the mark's own tick because it is the one number that
+    /// depends on the world: 30 in classic, 22 in expert (`:36850-36854`). It is smaller in expert
+    /// because a hostile shot's wire damage is a base the client scales, the same convention
+    /// `broadcast_projectile` documents for everything else.
+    fn tick_sandnado_marks(&mut self) {
+        use terrustia_proto::projectile::ids::{SANDNADO, SANDNADO_MARK};
+
+        /// `localAI[1] == 60f` and `>= 120f`.
+        const RAISES_AT: f32 = 60.0;
+        const MARK_LIFE: f32 = 120.0;
+        /// `num1005`.
+        const NADO_DAMAGE: i32 = 30;
+        const NADO_DAMAGE_EXPERT: i32 = 22;
+
+        let expert = self.is_expert();
+        let marks: Vec<(u16, (f32, f32))> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == SANDNADO_MARK)
+            .map(|(index, p)| (index, p.center()))
+            .collect();
+        let mut spent = Vec::new();
+        let mut raised = Vec::new();
+        for (index, centre) in marks {
+            let Some(mark) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            // `base.Center = new Vector2(point9.X * 16 + 8, point9.Y * 16 + 8)`: it snaps to the
+            // tile grid once, so three marks raised a few pixels apart line up like fence posts.
+            if mark.local_ai[0] == 0.0 {
+                mark.local_ai[0] = 1.0;
+                let tile = ((centre.0 / 16.0).floor(), (centre.1 / 16.0).floor());
+                mark.position = (
+                    tile.0 * 16.0 + 8.0 - mark.width() / 2.0,
+                    tile.1 * 16.0 + 8.0 - mark.height() / 2.0,
+                );
+            }
+            // `velocity = Vector2.Zero` unconditionally: a mark never travels.
+            mark.velocity = (0.0, 0.0);
+            mark.local_ai[1] += 1.0;
+            if mark.local_ai[1] == RAISES_AT {
+                raised.push(mark.center());
+            }
+            if mark.local_ai[1] >= MARK_LIFE {
+                spent.push(index);
+            }
+        }
+        for at in raised {
+            let damage = if expert {
+                NADO_DAMAGE_EXPERT
+            } else {
+                NADO_DAMAGE
+            };
+            if let Some(index) = self.projectiles.launch(SANDNADO, at, (0.0, 0.0), damage, 0) {
+                self.broadcast_projectile(index);
+            }
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
     /// The Moon Lord's deathray stays welded to the eye that fired it, and sweeps.
     ///
     /// `aiStyle == 84` (`Projectile.cs:31931-32113`), and it is the endgame boss's signature
@@ -2436,6 +2507,8 @@ impl GameServer {
         self.tick_empress_projectiles();
         // And the Moon Lord's deathray, which is welded to the eye that fired it.
         self.tick_phantasmal_deathrays();
+        // And the Sand Elemental's marks, each of which becomes a tornado.
+        self.tick_sandnado_marks();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -9765,6 +9838,50 @@ mod wired_mines_and_doors {
             .projectiles
             .iter()
             .any(|(_, p)| p.projectile_type == projectile_type)
+    }
+
+    /// A Sand Elemental's mark becomes a tornado, and then gets out of the way.
+    ///
+    /// `Projectile.cs:36842-36859`. The mark holds still for sixty ticks, raises the real
+    /// `SandnadoHostile`, and ends at 120. Before this the id table had only the *mark* and called
+    /// it `SANDNADO`, so the elemental raised three markers that spun for 900 ticks and no tornado
+    /// ever formed - its whole attack was a visual.
+    #[test]
+    fn a_sandnado_mark_raises_a_real_tornado_and_then_goes() {
+        use terrustia_proto::projectile::ids::{SANDNADO, SANDNADO_MARK};
+
+        let world = crate::world::World::empty(500, 300, "sandnado probe");
+        let mut server = GameServer::new(Config::default(), world);
+        let mark = server
+            .projectiles
+            .launch(SANDNADO_MARK, (2000.0, 2000.0), (0.0, 0.0), 0, 0)
+            .expect("the mark is a known type");
+
+        for _ in 0..59 {
+            server.tick_sandnado_marks();
+        }
+        assert!(
+            !threw(&server, SANDNADO),
+            "no tornado before the sixtieth tick"
+        );
+
+        server.tick_sandnado_marks();
+        assert!(
+            threw(&server, SANDNADO),
+            "and one at it - the mark's whole purpose"
+        );
+
+        for _ in 0..60 {
+            server.tick_sandnado_marks();
+        }
+        assert!(
+            server.projectiles.get(mark).is_none(),
+            "the mark ends at 120 rather than lingering for its table's 900"
+        );
+        assert!(
+            threw(&server, SANDNADO),
+            "and the tornado it raised outlives it"
+        );
     }
 
     /// The Moon Lord's deathray stays on his eye and sweeps across you.

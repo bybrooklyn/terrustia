@@ -25,7 +25,7 @@ use terrustia_proto::{
         SHARK_LUNGE_RANGE, SHARK_LUNGE_READY, SHARK_LUNGE_SPEED, SHARK_MIN_RANGE, SHARK_SWIM_ACCEL,
         SHARK_SWIM_SPEED, STUCK_TOLERANCE, STUCK_TURN_REST, STUCK_TURN_TICKS,
     },
-    projectile::ids::SANDNADO,
+    projectile::ids::SANDNADO_MARK,
     tile_sets::sandy,
     tile_solid::solid,
 };
@@ -393,11 +393,12 @@ fn raise_sandnadoes(
         };
         chosen.push(x);
         shots.push(Shot {
-            projectile: SANDNADO,
+            projectile: SANDNADO_MARK,
             damage: 0,
             position: (x as f32 * TILE, (floor - 15) as f32 * TILE),
             velocity: (0.0, 0.0),
-            time_left: 900,
+            // Its own arm ends it at 120, having spawned the tornado at 60.
+            time_left: 0,
         });
     }
     shots
@@ -546,7 +547,7 @@ mod tests {
         assert!(!raised.is_empty(), "the cast should have raised something");
         assert!(raised.len() <= SANDNADOES, "and no more than three");
         assert!(
-            raised.iter().all(|s| s.projectile == SANDNADO),
+            raised.iter().all(|s| s.projectile == SANDNADO_MARK),
             "sandnadoes, not anything else"
         );
         // Spaced out rather than stacked.
