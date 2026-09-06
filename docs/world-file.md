@@ -8,7 +8,7 @@ How this server reads and writes Terraria's world format.
 ## Layout
 
 ```
-i32     format version          325 for 1.4.5.7
+i32     format version          326 for 1.4.5.8; this reader accepts 279..=326
 [7]u8   "relogic"
 u8      file type               2 = world
 u32     revision                incremented on every save

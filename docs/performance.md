@@ -25,8 +25,11 @@ The phase in that line is the point. "A tick took 71 ms" is a mystery; "the worl
 
 ## Where the tick goes
 
-Phases, in order: `World`, `Sections`, `Items`, `Npcs`, `Projectiles`, `Damage`, `Spawning`,
-`Housing`, `Sync`.
+Phases, in `Phase`'s own declared order (`game/server/tick.rs`): `Snapshot`, `Liquids`, `Growth`,
+`Spread`, `Weather`, `World`, `Sections`, `Items`, `Npcs`, `Projectiles`, `Damage`, `Spawning`,
+`Housing`, `Sync`. Fourteen, not the nine this line used to list - and the five it was missing were
+the five that run first, `Snapshot` among them, which is the phase this page's own headline finding
+is about.
 
 With 24 players and a busy world, the worst tick sits around **350–520 µs** — about 3% of budget.
 The roster is not the problem and has not been.
