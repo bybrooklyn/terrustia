@@ -41,6 +41,18 @@ pub struct SyncNpc {
     pub life_max: i32,
     /// Only present for catchable critters.
     pub release_owner: u8,
+    /// `NPC.spawnNeedsSyncing`: this is the NPC's first sync since it was created.
+    ///
+    /// The server sets it in `NPC.NewNPC` (`NPC.cs:81609`) and clears it the first time the NPC is
+    /// broadcast (`NetMessage.cs:1738`), so exactly one frame per spawn carries it. The client
+    /// reads it as `flag17 = bitsByte31[3] || generation differs` and, when either holds, builds a
+    /// **fresh** instance in the slot instead of reusing whatever is there
+    /// (`MessageBuffer.cs:1610-1620`).
+    ///
+    /// Found by `conform` against a real `TerrariaServer`: it sent `0x08` in the second flags byte
+    /// where this encoder sent `0x00`. It had never been modelled, and the comment listing the
+    /// bits deliberately left clear did not mention it.
+    pub spawn_needs_syncing: bool,
 }
 
 impl SyncNpc {
@@ -106,9 +118,18 @@ impl SyncNpc {
             flags1 |= 0x80;
         }
 
-        // Bits for scaled stats, statue spawns, difficulty and shimmer are all left clear: this
-        // server does not scale NPCs per player or run them through shimmer.
-        let flags2 = 0u8;
+        // Bits for scaled stats (0x01), statue spawns (0x02) and difficulty (0x04) are left clear:
+        // this server does not scale NPCs per player. Bit 0x10 is
+        // `spawnNeedsSyncing && shimmerTransparency > 0f` and stays clear with it, since nothing
+        // here runs an NPC through shimmer.
+        //
+        // 0x08 is `spawnNeedsSyncing` (`NetMessage.cs:718`) and is *not* one of the deliberate
+        // omissions: it was missing until `conform` caught a real server sending it where this
+        // encoder sent nothing. See the field's own documentation for what the client does with it.
+        let mut flags2 = 0u8;
+        if self.spawn_needs_syncing {
+            flags2 |= 0x08;
+        }
 
         w.u8(self.index)
             .u8(self.generation)
@@ -212,6 +233,7 @@ impl SyncNpc {
             life,
             life_max,
             release_owner,
+            spawn_needs_syncing: flags2 & 0x08 != 0,
         })
     }
 }
@@ -287,11 +309,64 @@ mod tests {
             life: 25,
             life_max: 25,
             release_owner: 255,
+            spawn_needs_syncing: false,
         }
     }
 
     fn payload(frame: &[u8]) -> &[u8] {
         &frame[3..]
+    }
+
+    /// `spawnNeedsSyncing` rides bit 3 of the second flags byte, and survives a round trip.
+    ///
+    /// Found by `conform` against a real `TerrariaServer`, which sent `0x08` at payload offset 21
+    /// where this encoder sent `0x00`. Vanilla writes it at `NetMessage.cs:718`; the client uses it
+    /// to decide whether to build a fresh NPC instance in the slot (`MessageBuffer.cs:1610-1620`).
+    ///
+    /// Offset 21 is the second flags byte: index (1), generation (1), position (8), velocity (8),
+    /// target (2), first flags byte (1) - 21 bytes before it.
+    #[test]
+    fn a_freshly_spawned_npc_says_so_in_the_second_flags_byte() {
+        let mut npc = sample();
+
+        npc.spawn_needs_syncing = false;
+        let quiet = npc.encode().expect("a sample NPC encodes");
+        assert_eq!(
+            payload(&quiet)[21] & 0x08,
+            0,
+            "an NPC that has already been synced must not ask for a fresh instance"
+        );
+
+        npc.spawn_needs_syncing = true;
+        let fresh = npc.encode().expect("a sample NPC encodes");
+        assert_eq!(
+            payload(&fresh)[21] & 0x08,
+            0x08,
+            "a newly spawned NPC sets bit 3, as `NetMessage.cs:718` does"
+        );
+
+        // The bit is the only difference between the two frames, so nothing else moved with it.
+        assert_eq!(quiet.len(), fresh.len());
+        let differing: Vec<usize> = quiet
+            .iter()
+            .zip(fresh.iter())
+            .enumerate()
+            .filter(|(_, (a, b))| a != b)
+            .map(|(at, _)| at)
+            .collect();
+        assert_eq!(differing, vec![3 + 21], "only the flags byte should change");
+
+        // And it survives being read back, which is what `conform` compares.
+        assert!(
+            SyncNpc::decode(payload(&fresh))
+                .expect("the frame decodes")
+                .spawn_needs_syncing
+        );
+        assert!(
+            !SyncNpc::decode(payload(&quiet))
+                .expect("the frame decodes")
+                .spawn_needs_syncing
+        );
     }
 
     #[test]
