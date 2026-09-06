@@ -47,9 +47,18 @@
 //!   declared-zero default) — transcribed faithfully rather than "corrected," the same standing
 //!   rule this session's other genuinely-dead-vanilla-branch transcriptions already follow. Her
 //!   `AttackTime[20]` is also a real outlier at 600 (vs. 15-90 for everyone else), so she attacks
-//!   far less often than the rest even before that. The net effect — a rare, harmless shot — reads
-//!   as intentional in vanilla too (a nature spirit's projectile is closer to a visual effect than
-//!   a weapon).
+//!   far less often than the rest even before that.
+//!
+//!   What this doc used to conclude from that was wrong, and is the reason it is worth writing
+//!   down: it read the zero damage as "a rare, harmless shot" that "reads as intentional in
+//!   vanilla too (a nature spirit's projectile is closer to a visual effect than a weapon)". The
+//!   damage is zero because *nothing about this attack is a collision*. Projectile 586 is the
+//!   Dryad's Ward, and its whole behaviour is `AI_111_DryadsWard`
+//!   (`Projectile.cs:41872-41978`): a circle that grows around her, blesses every town NPC inside
+//!   it and puts Dryad's Bane on every hostile, every ten ticks for 570 ticks. It is her single
+//!   most useful contribution to defending a town, and this module had it filed as decoration.
+//!   The arm lives in `server::systems::tick_dryad_wards`, because it acts on the NPCs around it
+//!   rather than on anything it touches.
 //! - **Tax Collector's "Andrew" easter egg** (`GivenName == "Andrew"`, a doubled Tax Collector) is
 //!   deliberately not carried over, the same call already made for Dye Trader's own easter egg —
 //!   cosmetic flavour tied to a specific name, not a gameplay gap.
@@ -534,15 +543,21 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
             shots: &[15],
             attack_time: 60,
         },
-        // Dryad. NPC.cs state-14 block, `type == 20` — real vanilla zero-damage attack, see module
-        // doc: projectile 586, damage 0, speed approximated at 6, knockback 3.
+        // Dryad. `NPC.cs:55463-55469`, `type == 20`: a real vanilla zero-damage attack, see module
+        // doc: projectile 586, damage 0, knockback 3, and **no speed at all**.
         // AttackTime[20]=600, AttackAverageChance[20]=60, DangerDetectRange[20]=1200.
+        //
+        // The zero is transcribed, not a placeholder. State 14's speed local (`num63`) is declared
+        // at `:55394` and only two of its five branches ever assign it - the Clothier's 10 and the
+        // Wizard's 6 - so the Dryad's aim vector is multiplied by zero at `:55486` and the ward
+        // hangs exactly where it was cast. This entry read 6 with a comment calling it an
+        // approximation, which put the circle 3,420 pixels from the town by the time it expired.
         20 => TownCombat {
             state: 14.0,
             kind: AttackKind::Ranged {
                 projectile: 586,
                 damage: 0,
-                speed: 6.0,
+                speed: 0.0,
                 knockback: 3.0,
             },
             range: 1200.0,

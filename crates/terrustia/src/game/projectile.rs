@@ -5,17 +5,25 @@
 //! decided to shoot has been emitting its aim and cadence for a while; this is what makes those
 //! decisions land.
 //!
-//! Fifteen behaviours are transcribed. This file used to say "a handful of behaviours cover
-//! everything the roster and the world's traps fire"; the count, when it was finally taken, was
-//! **43 of the 79 types something here can launch reaching no arm at all**. It is 26 now, and the
-//! sixteen closed are every style that puts a projectile on an arc.
+//! Fifteen behaviours are transcribed here, and ten more in `server::systems` (see below). This
+//! file used to say "a handful of behaviours cover everything the roster and the world's traps
+//! fire"; the count, when it was finally taken, was **43 of the 79 types something here can launch
+//! reaching no arm at all**. It is 15 of 80 now.
 //!
-//! The 26 left are not all straight lines, and saying so would be the same mistake again. Read
+//! The 15 left are not all straight lines, and saying so would be the same mistake again. Read
 //! against `Projectile.cs`: two of their styles genuinely never touch a velocity, twelve steer
 //! inline, and eleven delegate to an `AI_NNN_` method of their own. What they have in common is
 //! that none of them *falls*: they are lasers, deathrays, homing bolts and hovering clouds, and a
 //! straight line is a poorer approximation of them than it was of a thrown bone, not a free one.
 //! `TODO.md`'s C6 has the list, by style, with what each one does.
+//!
+//! **A style whose arm needs to see anything but tiles lives in `server::systems` instead**, and
+//! is no less transcribed for it: a projectile cannot search the player list, walk the NPC table
+//! or read the boss that launched it from inside its own tick. Styles 80 (the Saucer's missile),
+//! 84 (the Moon Lord's deathray), 85 (his brand), 111 (the Dryad's ward), 127/128 (the Sand
+//! Elemental's mark and tornado), 133 (the Dark Mage's sigils) and 171/180 (two of the Empress's)
+//! are all there, called from `tick_projectiles` before the movement below, in vanilla's own
+//! order.
 //!
 //! * **Style 1**, the arc: it flies straight for a quarter of a second and then starts falling, a
 //!   tenth of a pixel a tick, capped at sixteen. Feathers, stingers, snowballs, skulls and darts.
@@ -354,6 +362,17 @@ fn advance(
     tiles: &impl TileView,
 ) -> ((f32, f32), bool) {
     let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+    // A projectile that is not moving cannot collide with anything, however deep in a wall it is
+    // sitting. Vanilla is emphatic about this by construction: every one of `Collision.TileCollision`'s
+    // four clauses (`Collision.cs:2299-2420`) tests the box at `Position + Velocity` against a
+    // tile *and* the box at `Position` against being clear of it on that side, so a zero velocity
+    // is handed straight back unchanged and no style ever reaches its kill. Ours probed `from`
+    // itself, because `steps` floors at one and the single probe of a zero-length walk is the
+    // start - so anything launched at rest and already overlapping terrain died on its first tick.
+    // The Dryad's ward is cast exactly that way.
+    if dx == 0.0 && dy == 0.0 {
+        return (to, false);
+    }
     let distance = (dx * dx + dy * dy).sqrt();
     let steps = (distance / (TILE * 0.5)).ceil().max(1.0) as i32;
     let mut last = from;
@@ -2039,5 +2058,49 @@ mod tests {
             flame.time_left <= 60,
             "and is cut to a second on its first tick"
         );
+    }
+
+    /// A projectile that is not moving cannot be killed by whatever it is sitting in.
+    ///
+    /// `Collision.TileCollision` (`Collision.cs:2299`) decides a hit by comparing the box at
+    /// `Position + Velocity` against a tile *and* the box at `Position` against being outside it
+    /// on that side, so a zero velocity comes back unchanged and no style reaches its kill. Ours
+    /// walked from the start point inclusive, and a zero-length walk is only its own start, so
+    /// anything launched at rest inside terrain died on its first tick.
+    ///
+    /// The Dryad's ward is the first shipped projectile to meet this: vanilla gives it no launch
+    /// velocity at all and it is cast at chest height next to a townsperson standing on a floor.
+    #[test]
+    fn a_projectile_at_rest_is_not_killed_by_the_tile_it_is_standing_in() {
+        let mut tiles = Air::default();
+        for x in 60..70 {
+            for y in 60..70 {
+                tiles.0.insert((x, y), Tile::block(1));
+            }
+        }
+        // Buried, at rest, and of a type that collides.
+        let mut ward = launched(586, (0.0, 0.0));
+        assert!(ward.stats.tile_collide, "the type does collide");
+        ward.position = (64.0 * TILE, 64.0 * TILE);
+        assert!(
+            hits_terrain(&tiles, ward.position, (ward.width(), ward.height())),
+            "and is inside a solid block"
+        );
+
+        assert_eq!(
+            step(&mut ward, &tiles, &mut Vec::new()),
+            Outcome::Flying,
+            "vanilla hands a zero velocity straight back rather than killing on it"
+        );
+        assert_eq!(
+            ward.position,
+            (64.0 * TILE, 64.0 * TILE),
+            "and it has not been pushed anywhere either"
+        );
+
+        // The guard is on the *move*, not on the type: give it a velocity and the wall still kills
+        // it, so this has not quietly made a colliding projectile immortal.
+        ward.velocity = (4.0, 0.0);
+        assert_eq!(step(&mut ward, &tiles, &mut Vec::new()), Outcome::Spent);
     }
 }

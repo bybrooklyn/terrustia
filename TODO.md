@@ -361,11 +361,50 @@ the open span it stands in and becomes that column, a fifth as wide as it is tal
 is 10x10, so without that a sandnado is a dot on the floor you step over. It also ends at 300 ticks
 rather than the 900 a player's does.
 
-**16 types remain, across fourteen styles**: 45, 65, 98, 102 (2), 109, 111, 112 (2), 135, 136, 149,
-157, 183, 186, 187. **Coverage is 64 of 80.** Ranked by what is silently doing nothing rather than
-merely flying straight, the next is **111, the Dryad's Ward** (`:41874-41980`): a circle that grows
-300 to 1200 over 570 ticks, buffs every player inside it and damages and debuffs every hostile,
-every ten ticks. It is a projectile that exists purely to apply effects, and applies none.
+**The Dryad's Ward, closed 2026-09-05, and it was the highest-value one left because it was the
+one doing nothing rather than merely flying straight.** `aiStyle == 111`, `AI_111_DryadsWard`
+(`Projectile.cs:41872-41978`): a circle that widens from 300 pixels to 1,020 over 570 ticks and,
+every tenth of them, blesses the town NPCs standing in it and puts Dryad's Bane on the hostiles.
+It is a projectile that exists purely to apply effects, and applied none. **Nothing in this server
+had ever put a buff on an NPC of its own accord** - `Buffs::add`'s only production caller was
+packet 53, a client reporting a hit - so `buffs::dryad_bane_dps`, a fourteen-boss progression
+curve with its own tests, had never once been reached by anything this server originated.
+
+Three separate bugs, and the arm was only the third:
+
+- **`town_combat.rs` gave it a launch speed of six**, with a comment calling that an
+  approximation. State 14's speed local (`NPC.cs:55394`) is assigned in exactly two of its five
+  branches, the Clothier's and the Wizard's, so the Dryad's aim vector is multiplied by zero and
+  the ward hangs where she cast it. At six pixels a tick it was 3,420 pixels from the town by the
+  time it expired.
+- **`town.rs` invented a 300-tick lifetime for every town shot.** `NewProjectile` passes none, so
+  each takes its own table value; 300 cut the ward's 570-tick arm off at little over half, and
+  ran the Princess's weapon 120 ticks past its own 180. The same shape as the Empress's seven,
+  where a made-up 900 stopped a homing streak from ever homing. Now zero, which `launch` already
+  reads as "the projectile's own".
+- **A projectile at rest died on the ground it was left on.** `advance` walks from its start point
+  inclusive and a zero-length walk is only its own start, so a colliding projectile launched with
+  no velocity was killed on its first tick. Vanilla cannot do this by construction: every clause
+  of `Collision.TileCollision` (`Collision.cs:2299`) tests "was outside, now inside", so a zero
+  velocity comes back unchanged. Latent until now - the four other zero-velocity projectiles here
+  all have `tileCollide` false - and the ward is the first to meet it.
+
+The player half of the sweep is deliberately absent and that is faithful: vanilla's blessing of
+nearby players sits behind `Main.netMode != 2` (`:41948`) and every client applies it to itself.
+The owner is recovered rather than plumbed, as the Moon Lord's deathray recovers its eye, and
+written into `ai[1]` - the slot vanilla uses and the wire syncs, so a client running the same arm
+stops killing the circle on sight. Seventeen neutralisations, all caught; one of them was caught
+only after fixing a test that passed because the Dryad happened to occupy slot zero, which is the
+value an unwritten `ai[1]` already holds.
+
+**15 types remain, across thirteen styles**: 45, 65, 98, 102 (2), 109, 112 (2), 135, 136, 149,
+157, 183, 186, 187. **Coverage is 65 of 80.** None of them falls. Ranked by how far a straight line
+is from what the style actually does, the next two are both town NPCs' and both are round trips:
+**109, the Mechanic's wrench** (`Projectile.cs:34652-34690`), which flies out for thirty ticks and
+then turns and comes home to her, dying when it arrives (ours never turns and leaves on a straight
+line); and **112, the Truffle's spore and the Dandelion seed** (`:34741-34900`), two unrelated
+bodies under one style number - the seed rides the wind toward a player and the spore is a drifting
+cloud.
 
 **The explosion is the other half of style 16 and is not modelled.** A bomb reaches the ground and
 expires; `Projectile.Kill`'s own switch widens the hitbox and breaks tiles, so a grenade lands and

@@ -2384,6 +2384,187 @@ impl GameServer {
         }
     }
 
+    /// The Dryad's ward, which grows around her and is the whole of her attack.
+    ///
+    /// `aiStyle == 111`, `AI_111_DryadsWard` (`Projectile.cs:41872-41978`). It is not a weapon and
+    /// it never touches what it overlaps: it is a circle that widens for 570 ticks and, every
+    /// tenth of those, blesses the town NPCs standing inside it and puts Dryad's Bane on the
+    /// hostiles. `town_combat.rs` had it filed as a harmless visual effect and shot it at six
+    /// pixels a tick with a 300-tick fuse, so the one thing the Dryad does in a fight has never
+    /// happened here: nothing in this server has ever applied a buff to an NPC of its own accord,
+    /// and `buffs::dryad_bane_dps` - a fourteen-boss progression curve, tested - has only ever
+    /// been reached by a debuff a client inflicted.
+    ///
+    /// **The player half is deliberately absent, and that is faithful.** Vanilla's own blessing
+    /// of nearby players is behind `Main.netMode != 2` (`:41948`), so a dedicated server does not
+    /// apply it and every client applies it to itself from the same arm; the NPC half is behind
+    /// `Main.netMode != 1` and is ours. The dust, the rotation and the alpha envelope are drawing.
+    ///
+    /// **The owner is recovered rather than plumbed**, exactly as the Moon Lord's deathray
+    /// recovers its eye. Vanilla passes the Dryad's index in `ai[1]`
+    /// (`NPC.cs:55533`, `NewProjectile(..., 0f, whoAmI, ...)`) and the arm reads it every tick to
+    /// decide whether it should still exist; `Shot` carries no ai values and ninety-seven shot
+    /// literals is a poor trade for one. The ward is cast from its Dryad's own centre plus sixteen
+    /// pixels and never moves, so the nearest casting Dryad on its first tick is unambiguous.
+    /// It goes into `ai[1]` rather than into `local_ai` on purpose: that slot is synced, and a
+    /// client running this same arm against the zero that used to sit there kills the circle on
+    /// sight - which is why the ward has never been *drawn* either.
+    fn tick_dryad_wards(&mut self) {
+        use crate::game::ai::sight;
+        use terrustia_proto::projectile::ids::DRYADS_WARD;
+
+        /// `NPCID.Dryad`, and `ai[0] == 14f` is her ranged-attack state.
+        const DRYAD: u16 = 20;
+        const CASTING: f32 = 14.0;
+        /// `NPCID.TargetDummy`, the one type the sweep skips outright (`:41961`).
+        const TARGET_DUMMY: u16 = 488;
+        /// How far the first tick may look for the Dryad who cast this. Vanilla needs no such
+        /// number; here it is the width of the launch offset (sixteen pixels from her centre, plus
+        /// her own half-width) with room to spare, so it can only ever match the caster.
+        const OWNER_REACH: f32 = 96.0;
+        /// `ai[0] >= 30f` before anything is applied, then `ai[0] % 10f == 0f`, then dead at 570.
+        const ARMS_AT: f32 = 30.0;
+        const EVERY: f32 = 10.0;
+        const LIFE: f32 = 570.0;
+        /// The radius envelope: 300 flat, easing to 600 between tick 100 and tick 300, then to
+        /// 1200 between tick 500 and tick 600 - which it never reaches, because it dies at 570.
+        const RADIUS_MIN: f32 = 300.0;
+        const RADIUS_MID: f32 = 600.0;
+        const RADIUS_MAX: f32 = 1200.0;
+        const GROW_FROM: f32 = 100.0;
+        const GROW_OVER: f32 = 200.0;
+        const SURGE_FROM: f32 = 500.0;
+        const SURGE_OVER: f32 = 100.0;
+        /// `BuffID.DryadsWard` on a townsperson, `BuffID.DryadsBane` on a hostile, both for two
+        /// seconds and both re-applied only once the one already there is nearly out.
+        const BLESSING: u16 = 165;
+        const BANE: u16 = 186;
+        const FOR: i32 = 120;
+        const NEARLY_OUT: i32 = 20;
+        /// `nPC.lifeMax > 5`: below that it is a critter, not something to curse.
+        const WORTH_CURSING: i32 = 5;
+
+        let wards: Vec<u16> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == DRYADS_WARD)
+            .map(|(index, _)| index)
+            .collect();
+        if wards.is_empty() {
+            return;
+        }
+        let tiles = WorldTiles(&self.world);
+        let mut spent = Vec::new();
+        let mut touched = Vec::new();
+        for index in wards {
+            let Some(ward) = self.projectiles.get(index) else {
+                continue;
+            };
+            let centre = ward.center();
+            let owner = if ward.ai[0] == 0.0 {
+                // First tick: find the Dryad it was cast from. Nothing found means nothing to be
+                // welded to, which is the same answer vanilla's own dead-owner check gives.
+                let found = self
+                    .npcs
+                    .iter()
+                    .filter(|(_, npc)| npc.npc_type == DRYAD && npc.ai[0] == CASTING)
+                    .map(|(slot, npc)| {
+                        let at = npc.center();
+                        (slot, (at.0 - centre.0).hypot(at.1 - centre.1))
+                    })
+                    .filter(|(_, away)| *away <= OWNER_REACH)
+                    .min_by(|a, b| a.1.total_cmp(&b.1))
+                    .map(|(slot, _)| slot);
+                let Some(slot) = found else {
+                    spent.push(index);
+                    continue;
+                };
+                slot
+            } else {
+                ward.ai[1] as u8
+            };
+            // `if (!npc[ai[1]].active || npc[ai[1]].type != 20 || npc[ai[1]].ai[0] != 14f) Kill()`.
+            // She stops casting, or dies, and the circle goes with her.
+            let still_hers = self
+                .npcs
+                .get(owner)
+                .is_some_and(|npc| npc.npc_type == DRYAD && npc.ai[0] == CASTING);
+            if !still_hers {
+                spent.push(index);
+                continue;
+            }
+            let Some(ward) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            if ward.ai[1] != f32::from(owner) {
+                ward.ai[1] = f32::from(owner);
+                ward.dirty = true;
+            }
+            ward.ai[0] += 1.0;
+            let age = ward.ai[0];
+
+            let mut radius = RADIUS_MIN;
+            if age >= GROW_FROM {
+                radius = RADIUS_MIN + (RADIUS_MID - RADIUS_MIN) * (age - GROW_FROM) / GROW_OVER;
+            }
+            if radius > RADIUS_MID {
+                radius = RADIUS_MID;
+            }
+            if age >= SURGE_FROM {
+                radius = RADIUS_MID + (RADIUS_MAX - RADIUS_MID) * (age - SURGE_FROM) / SURGE_OVER;
+            }
+
+            if age >= ARMS_AT && age % EVERY == 0.0 {
+                for (slot, npc) in self.npcs.iter_mut() {
+                    if npc.npc_type == TARGET_DUMMY {
+                        continue;
+                    }
+                    let at = npc.center();
+                    if (at.0 - centre.0).hypot(at.1 - centre.1) > radius {
+                        continue;
+                    }
+                    // Vanilla's `else if`, kept as one: a town NPC is only ever blessed and a
+                    // hostile is only ever cursed, and nothing is both.
+                    let changed = if npc.stats.town_npc {
+                        npc.buffs.expiring(npc.npc_type, BLESSING, NEARLY_OUT)
+                            && npc.buffs.add(npc.npc_type, BLESSING, FOR)
+                    } else {
+                        !npc.stats.friendly
+                            && npc.stats.life_max > WORTH_CURSING
+                            && !npc.invulnerable
+                            && npc.buffs.expiring(npc.npc_type, BANE, NEARLY_OUT)
+                            // Already cursed means already in sight of her once: vanilla reads its
+                            // own `dryadBane` flag first so a hostile that steps behind a wall is
+                            // not let off, and only walks the line for one that is not yet marked.
+                            && (npc.buffs.flags.dryad_bane
+                                || sight::can_hit(
+                                    &tiles,
+                                    centre,
+                                    (1, 1),
+                                    npc.position,
+                                    (npc.stats.width, npc.stats.height),
+                                ))
+                            && npc.buffs.add(npc.npc_type, BANE, FOR)
+                    };
+                    if changed {
+                        npc.buffs_dirty = true;
+                        touched.push(slot);
+                    }
+                }
+            }
+
+            if age >= LIFE {
+                spent.push(index);
+            }
+        }
+        for slot in touched {
+            self.broadcast_npc_buffs(slot);
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
     /// The Martian Saucer's missile: it arms, picks whoever is closest, and turns hard at them.
     ///
     /// `aiStyle == 80` (`Projectile.cs:31447-31513`), and it lives here rather than in
@@ -2509,6 +2690,8 @@ impl GameServer {
         self.tick_phantasmal_deathrays();
         // And the Sand Elemental's marks, each of which becomes a tornado.
         self.tick_sandnado_marks();
+        // And the Dryad's ward, which blesses and curses the NPCs standing in it.
+        self.tick_dryad_wards();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -10605,6 +10788,254 @@ mod wired_mines_and_doors {
             server.world.tile(100, 100).frame_x,
             0,
             "and pops back up when the window runs out"
+        );
+    }
+}
+
+/// The Dryad's ward, which is the whole of her attack and had never once applied anything.
+///
+/// `AI_111_DryadsWard` (`Projectile.cs:41872-41978`). Each of these fails on the pre-fix build:
+/// the ward had no arm, so it was an ordinary zero-damage projectile thrown at six pixels a tick
+/// with an invented 300-tick fuse, and every one of the effects below simply did not exist.
+#[cfg(test)]
+mod dryads_ward {
+    use super::*;
+    use crate::config::Config;
+    use terrustia_proto::projectile::ids::DRYADS_WARD;
+
+    /// `NPCID.Dryad`, and the `ai[0]` her ranged-attack state sets (`town_combat`'s `state`).
+    const DRYAD: u16 = 20;
+    /// A townsperson to bless and something hostile to curse.
+    const GUIDE: u16 = 22;
+    const ZOMBIE: u16 = 3;
+    const CASTING: f32 = 14.0;
+    /// `BuffID.DryadsWard` and `BuffID.DryadsBane`.
+    const BLESSING: u16 = 165;
+    const BANE: u16 = 186;
+
+    /// A Dryad mid-cast, with her ward hanging at the point vanilla casts it from: her own centre
+    /// plus sixteen pixels across and two up (`NPC.cs:55533`).
+    ///
+    /// She is deliberately not the first NPC in the table. Slot zero is the value an unwritten
+    /// `ai[1]` already holds, so a Dryad standing in it makes "the ward found its caster" and
+    /// "the ward found nothing" indistinguishable - which is exactly how the assertion in
+    /// [`the_ward_recovers_its_dryad_and_ends_when_she_stops_casting`] first passed against a
+    /// build with the write to `ai[1]` deleted. The filler is a Target Dummy far outside any
+    /// radius the circle reaches, so it can neither be mistaken for the caster nor be swept.
+    fn casting_dryad() -> (GameServer, u8, u16) {
+        let world = crate::world::World::empty(500, 300, "ward probe");
+        let mut server = GameServer::new(Config::default(), world);
+        server
+            .npcs
+            .spawn(488, (100.0, 100.0))
+            .expect("a slot for the filler");
+        let dryad = server
+            .npcs
+            .spawn(DRYAD, (2000.0, 2000.0))
+            .expect("a slot for the Dryad");
+        assert_ne!(dryad, 0, "slot zero would make the ai[1] assertion vacuous");
+        let at = {
+            let npc = server.npcs.get_mut(dryad).expect("just spawned");
+            npc.ai[0] = CASTING;
+            npc.center()
+        };
+        let ward = server
+            .projectiles
+            .launch(DRYADS_WARD, (at.0 + 16.0, at.1 - 2.0), (0.0, 0.0), 0, 0)
+            .expect("586 is a known type");
+        (server, dryad, ward)
+    }
+
+    fn carries(server: &GameServer, npc: u8, buff: u16) -> bool {
+        server.npcs.get(npc).expect("still there").buffs.has(buff)
+    }
+
+    /// It blesses the town and curses what is attacking it, and only inside its own radius.
+    ///
+    /// `:41956-41973`: nothing at all until the thirtieth tick, then every tenth, and the radius
+    /// starts at three hundred pixels.
+    #[test]
+    fn the_ward_blesses_the_town_and_curses_the_hostiles_inside_it() {
+        let (mut server, dryad, _) = casting_dryad();
+        let guide = server
+            .npcs
+            .spawn(GUIDE, (2100.0, 2000.0))
+            .expect("a slot for the guide");
+        let near = server
+            .npcs
+            .spawn(ZOMBIE, (2200.0, 2000.0))
+            .expect("a slot for the zombie");
+        let far = server
+            .npcs
+            .spawn(ZOMBIE, (2500.0, 2000.0))
+            .expect("a slot for the far zombie");
+
+        for _ in 0..29 {
+            server.tick_dryad_wards();
+        }
+        assert!(
+            !carries(&server, near, BANE),
+            "the sweep does not run before the thirtieth tick"
+        );
+
+        server.tick_dryad_wards();
+        assert!(carries(&server, near, BANE), "the hostile inside is cursed");
+        assert!(
+            carries(&server, guide, BLESSING),
+            "and the townsperson inside is blessed"
+        );
+        assert!(
+            carries(&server, dryad, BLESSING),
+            "including the Dryad herself, who vanilla's loop does not skip"
+        );
+        assert!(
+            !carries(&server, near, BLESSING) && !carries(&server, guide, BANE),
+            "vanilla's `else if`: nothing is ever both"
+        );
+        assert!(
+            !carries(&server, far, BANE),
+            "five hundred pixels is outside the opening radius of three hundred"
+        );
+
+        // It widens: by tick 300 the radius has eased out to six hundred and reaches the far one.
+        for _ in 0..270 {
+            server.tick_dryad_wards();
+        }
+        assert!(
+            carries(&server, far, BANE),
+            "and the circle grows to six hundred by its three-hundredth tick"
+        );
+    }
+
+    /// A critter is not worth cursing and an invulnerable thing cannot be
+    /// (`:41967`, `lifeMax > 5 && !dontTakeDamage`), and a Target Dummy is skipped outright
+    /// (`:41961`).
+    #[test]
+    fn the_ward_leaves_critters_dummies_and_the_invulnerable_alone() {
+        /// `NPCID.TargetDummy`, and `NPCID.Bunny`, whose five life is the reason for the check.
+        const TARGET_DUMMY: u16 = 488;
+        const BUNNY: u16 = 46;
+
+        let (mut server, _, _) = casting_dryad();
+        let bunny = server.npcs.spawn(BUNNY, (2100.0, 2000.0)).expect("a slot");
+        let dummy = server
+            .npcs
+            .spawn(TARGET_DUMMY, (2120.0, 2000.0))
+            .expect("a slot");
+        let immortal = server.npcs.spawn(ZOMBIE, (2140.0, 2000.0)).expect("a slot");
+        server
+            .npcs
+            .get_mut(immortal)
+            .expect("just spawned")
+            .invulnerable = true;
+
+        assert!(
+            server.npcs.get(bunny).expect("spawned").stats.life_max <= 5,
+            "the bunny is under the life floor the check is written for"
+        );
+        for _ in 0..30 {
+            server.tick_dryad_wards();
+        }
+        assert!(!carries(&server, bunny, BANE), "a critter is not cursed");
+        assert!(!carries(&server, dummy, BANE), "nor a target dummy");
+        assert!(
+            !carries(&server, immortal, BANE),
+            "nor anything that cannot be hurt"
+        );
+    }
+
+    /// The circle is welded to the Dryad who cast it: she stops, and it goes with her.
+    ///
+    /// `:41874-41878`, which reads `ai[1]` as her index every tick. That index is not plumbed
+    /// through `Shot`, so the ward recovers it on its first tick and writes it into the slot
+    /// vanilla uses - which is also the slot a client reads to decide whether to draw the thing.
+    #[test]
+    fn the_ward_recovers_its_dryad_and_ends_when_she_stops_casting() {
+        let (mut server, dryad, ward) = casting_dryad();
+        server.tick_dryad_wards();
+        assert_eq!(
+            server.projectiles.get(ward).expect("still up").ai[1],
+            f32::from(dryad),
+            "the caster's index goes into the slot vanilla puts it in"
+        );
+
+        server.npcs.get_mut(dryad).expect("still there").ai[0] = 0.0;
+        server.tick_dryad_wards();
+        assert!(
+            server.projectiles.get(ward).is_none(),
+            "she left the attack state, so the circle goes"
+        );
+    }
+
+    /// It runs the full 570 ticks its arm gives it, which the 300 `town.rs` used to invent cut
+    /// short by nearly half.
+    #[test]
+    fn the_ward_lives_its_own_five_hundred_and_seventy_ticks() {
+        let (mut server, _, ward) = casting_dryad();
+        assert_eq!(
+            server.projectiles.get(ward).expect("up").time_left,
+            3600,
+            "a zero at launch means the projectile's own table lifetime"
+        );
+        for _ in 0..569 {
+            server.tick_dryad_wards();
+        }
+        assert!(
+            server.projectiles.get(ward).is_some(),
+            "still up on its 569th tick"
+        );
+        server.tick_dryad_wards();
+        assert!(
+            server.projectiles.get(ward).is_none(),
+            "and gone on its 570th"
+        );
+    }
+
+    /// A ward with no Dryad within reach of it has nothing to be welded to, and ends rather than
+    /// hanging in the air for the projectile table's hour.
+    ///
+    /// Driven through the real [`GameServer::tick_projectiles`] rather than the arm directly, so
+    /// this is also the test that the arm is *wired in*: unhooked, the ward simply lives out its
+    /// 3,600 ticks and every other test here still passes.
+    #[test]
+    fn an_orphan_ward_ends_at_once() {
+        let world = crate::world::World::empty(500, 300, "orphan ward");
+        let mut server = GameServer::new(Config::default(), world);
+        let ward = server
+            .projectiles
+            .launch(DRYADS_WARD, (2000.0, 2000.0), (0.0, 0.0), 0, 0)
+            .expect("586 is a known type");
+        server.tick_projectiles();
+        assert!(server.projectiles.get(ward).is_none());
+    }
+
+    /// The sweep declines to touch a buff that is still fresh, which is the difference between
+    /// one broadcast of the whole slot list per hundred ticks and one per ten.
+    ///
+    /// The other half of the sawtooth - that it *does* renew one nearly out - is
+    /// `buffs::tests::a_buff_nearly_out_is_the_only_one_worth_reapplying`, where the timer can be
+    /// run down without also running an NPC's whole damage-over-time pass.
+    #[test]
+    fn a_fresh_buff_is_left_alone_by_the_next_sweep() {
+        let (mut server, _, _) = casting_dryad();
+        let zombie = server.npcs.spawn(ZOMBIE, (2100.0, 2000.0)).expect("a slot");
+        for _ in 0..30 {
+            server.tick_dryad_wards();
+        }
+        {
+            let npc = server.npcs.get_mut(zombie).expect("there");
+            assert!(npc.buffs.has(BANE));
+            assert!(npc.buffs_dirty, "the first application is news");
+            npc.buffs_dirty = false;
+        }
+
+        // Ten ticks on, the sweep runs again over a buff with its full time left and must decline.
+        for _ in 0..10 {
+            server.tick_dryad_wards();
+        }
+        assert!(
+            !server.npcs.get(zombie).expect("there").buffs_dirty,
+            "nothing changed, so nothing is owed to the clients"
         );
     }
 }

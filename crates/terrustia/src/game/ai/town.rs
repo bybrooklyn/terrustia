@@ -655,7 +655,14 @@ fn try_combat<T: TileView>(
                     npc.center().1 - 2.0,
                 ),
                 velocity: (dx / distance * speed, dy / distance * speed),
-                time_left: 300,
+                // Zero means "whatever the projectile's own table says", which is what vanilla
+                // gets: `NewProjectile` never passes a lifetime, so every one of these takes the
+                // `timeLeft` its `SetDefaults` gave it. The flat 300 here was invented, and it was
+                // wrong in both directions - it cut the Dryad's ward off at 300 ticks when its arm
+                // runs to 570, and it kept the Princess's weapon alive for 300 when its own table
+                // says 180. This is the same shape as the Empress's seven shots, where a made-up
+                // 900 stopped a homing streak from ever homing.
+                time_left: 0,
             }),
             ..TownUpdate::default()
         },
@@ -816,6 +823,48 @@ mod tests {
         assert!(
             shot.velocity.0 > 0.0,
             "the hostile is to the right; the shot should aim there"
+        );
+    }
+
+    /// The Dryad's ward is cast at rest, and with the lifetime its own table gives it.
+    ///
+    /// Both numbers used to be invented here and both were load-bearing. State 14's speed local
+    /// (`NPC.cs:55394`) is only ever assigned in the Clothier's and the Wizard's branches, so the
+    /// Dryad's aim vector is multiplied by zero and the circle hangs where she cast it; this file
+    /// gave it six pixels a tick, which is 3,420 pixels from the town by the time it expires. And
+    /// `NewProjectile` passes no lifetime at all, so every town shot takes its type's own - which
+    /// for the ward is 3,600 against a `Projectile.cs:41974` arm that runs to 570. The flat 300
+    /// invented here cut it off at little over half.
+    #[test]
+    fn the_dryads_ward_is_cast_at_rest_and_takes_its_own_lifetime() {
+        let tiles = flat(0, 400);
+        let mut dryad = stand_on(20, 200);
+        let mut w = day(&tiles);
+        w.hostile = Some(Target {
+            slot: 9,
+            center: (dryad.center().0 + 300.0, dryad.center().1),
+            velocity: (0.0, 0.0),
+            alive: true,
+        });
+        let mut r = rng();
+        let (result, mark) = attack_within(&mut dryad, &w, &mut r, 20_000);
+        assert_eq!(mark, 24, "the ward leaves on frame 24 of her attack state");
+        let shot = result.shot.expect("the Dryad should raise her ward");
+        assert_eq!(shot.projectile, 586, "ProjectileID.DryadsWardCircle");
+        assert_eq!(
+            shot.velocity,
+            (0.0, 0.0),
+            "vanilla never gives it a launch speed, so it hangs where it was cast"
+        );
+        assert_eq!(
+            shot.time_left, 0,
+            "zero means the projectile's own 3,600, which its arm ends at 570"
+        );
+        // It is still aimed - the position is the hand offset, not her centre - so this has not
+        // been turned into a shot that spawns on top of her.
+        assert!(
+            (shot.position.0 - dryad.center().0).abs() > 8.0,
+            "the launch point is still the outstretched-hand offset"
         );
     }
 

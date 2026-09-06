@@ -336,6 +336,22 @@ impl Buffs {
             .position(|s| s.time >= 1 && s.kind == kind)
     }
 
+    /// Whether a buff is absent or has `within` ticks or fewer left on it.
+    ///
+    /// Vanilla writes this inline as `FindBuffIndex(k) == -1 || buffTime[FindBuffIndex(k)] <= n`
+    /// wherever something re-applies a buff on a repeating timer (`Projectile.cs:41963` and
+    /// `:41967` are the Dryad's ward's pair). It reads like a redundant guard in front of
+    /// [`Self::add`], which refuses a shorter time anyway, and it is not: without it a source that
+    /// fires every ten ticks pins the remaining time at its full value forever and re-broadcasts
+    /// the whole slot list each time. With it the timer sawtooths down to `within` and back, which
+    /// is one packet per hundred ticks rather than ten.
+    pub fn expiring(&self, npc_type: u16, kind: u16, within: i32) -> bool {
+        match self.find(npc_type, kind) {
+            Some(at) => self.slots[at].time <= within,
+            None => true,
+        }
+    }
+
     /// Put a buff on, or extend one already there. `NPC.AddBuff`.
     ///
     /// Returns whether anything changed, which is what decides if clients need telling.
@@ -861,6 +877,47 @@ mod tests {
         assert_eq!(buffs.active().next().unwrap().time, 600);
         assert!(buffs.add(ZOMBIE, ON_FIRE, 900), "a longer one extends it");
         assert_eq!(buffs.active().next().unwrap().time, 900);
+    }
+
+    /// The gate a repeating source re-applies through: absent, or nearly out, and nothing else.
+    ///
+    /// The Dryad's ward is the one that needs it (`Projectile.cs:41963`, `:41967`). Without it a
+    /// source firing every ten ticks pins the timer at its full value and reports a change every
+    /// time, which is the whole slot list on the wire ten times as often as it needs to be.
+    #[test]
+    fn a_buff_nearly_out_is_the_only_one_worth_reapplying() {
+        let mut buffs = Buffs::new();
+        assert!(
+            buffs.expiring(ZOMBIE, DRYAD_BANE, 20),
+            "absent counts as expiring - there is nothing there to keep"
+        );
+        assert!(buffs.add(ZOMBIE, DRYAD_BANE, 120));
+        assert!(
+            !buffs.expiring(ZOMBIE, DRYAD_BANE, 20),
+            "fresh, so left alone"
+        );
+
+        for _ in 0..99 {
+            buffs.set_flags(ZOMBIE, 0.0);
+        }
+        assert!(
+            !buffs.expiring(ZOMBIE, DRYAD_BANE, 20),
+            "twenty-one left is still one too many"
+        );
+        buffs.set_flags(ZOMBIE, 0.0);
+        assert!(
+            buffs.expiring(ZOMBIE, DRYAD_BANE, 20),
+            "and at twenty it is renewed"
+        );
+    }
+
+    /// An immune type has no buff to be nearly out of, so it is always ready for one it can never
+    /// take: `FindBuffIndex` returns -1 for an immunity exactly as it does for an empty slot.
+    #[test]
+    fn expiring_reads_an_immunity_as_absent() {
+        let mut buffs = Buffs::new();
+        assert!(!buffs.add(SLIME, POISONED, 600));
+        assert!(buffs.expiring(SLIME, POISONED, 20));
     }
 
     /// The type's own immunities are honoured. A Blue Slime shrugs off poison.

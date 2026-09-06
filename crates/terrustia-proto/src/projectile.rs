@@ -381,6 +381,15 @@ pub mod ids {
     pub const EMPRESS_DEATH_AURORA: u16 = 874;
     pub const EMPRESS_LANCE: u16 = 919;
     pub const EMPRESS_SUN_DANCE: u16 = 923;
+
+    /// `ProjectileID.DryadsWardCircle`, the only thing the Dryad's own attack puts in the air.
+    ///
+    /// It is not a weapon and never touches what it overlaps: `AI_111_DryadsWard`
+    /// (`Projectile.cs:41872-41978`) grows a radius around itself and, every ten ticks, blesses
+    /// the town NPCs inside it and puts Dryad's Bane on the hostiles. Vanilla launches it with no
+    /// velocity at all (`NPC.cs:55463-55469` sets no speed for `type == 20`), so it hangs where it
+    /// was cast for its whole life.
+    pub const DRYADS_WARD: u16 = 586;
 }
 
 #[cfg(test)]

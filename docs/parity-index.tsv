@@ -624,6 +624,8 @@ crates/terrustia-proto/src/placed_items.rs	fn placed_item	WorldGen.cs	46572	7954
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65569-65639	d3f3ee060b89	3dc8d66fdd69
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65640-65719	0f1bf334c965	3dc8d66fdd69
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65720-65779	395ea9816079	3dc8d66fdd69
+crates/terrustia-proto/src/projectile.rs	mod ids :: const DRYADS_WARD	NPC.cs	55463-55469	c7493ec94ce7	795fd2d42ecd
+crates/terrustia-proto/src/projectile.rs	mod ids :: const DRYADS_WARD	Projectile.cs	41872-41978	f11c2cf8c212	795fd2d42ecd
 crates/terrustia-proto/src/projectile.rs	mod ids :: const EMPRESS_RAINBOW	NPC.cs	46528	6bf8f2a90a78	040e7ff7f2d0
 crates/terrustia-proto/src/projectile.rs	mod ids :: const EMPRESS_RAINBOW	NPC.cs	46833	64579b8ddd4f	040e7ff7f2d0
 crates/terrustia-proto/src/projectile.rs	mod ids :: const EMPRESS_RAINBOW	NPC.cs	47022	dae7634f7181	040e7ff7f2d0
@@ -1261,13 +1263,13 @@ crates/terrustia/src/game/ai/swimmer.rs	mod tests :: fn daylight_turns_an_eyebal
 crates/terrustia/src/game/ai/town.rs	fn drowning	Collision.cs	1387-1398	6f1cf7c124ad	f450b2a8548a
 crates/terrustia/src/game/ai/town.rs	fn drowning	Collision.cs	1418	b37381c51352	f450b2a8548a
 crates/terrustia/src/game/ai/town.rs	fn drowning	NPC.cs	54361	b60780c82463	f450b2a8548a
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54033	3715da670796	cea23c5bd00c
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54892-55087	c04d158f1240	cea23c5bd00c
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55045-55049	9d1457f3d51f	cea23c5bd00c
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55632-55676	792f7b809c16	cea23c5bd00c
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56012	46bba6010785	cea23c5bd00c
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56012-56109	6cd2a7fd610c	cea23c5bd00c
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56030-56033	80e4a233b1a6	cea23c5bd00c
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54033	3715da670796	492cee444652
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54892-55087	c04d158f1240	492cee444652
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55045-55049	9d1457f3d51f	492cee444652
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55632-55676	792f7b809c16	492cee444652
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56012	46bba6010785	492cee444652
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56012-56109	6cd2a7fd610c	492cee444652
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56030-56033	80e4a233b1a6	492cee444652
 crates/terrustia/src/game/ai/town.rs	fn walk	NPC.cs	54393	c72281eb17de	a0f03becbeea
 crates/terrustia/src/game/ai/town.rs	fn walk	NPC.cs	54467-54473	e303394cb105	a0f03becbeea
 crates/terrustia/src/game/ai/town.rs	fn walk	NPC.cs	54612-54614	bffb252e1522	a0f03becbeea
@@ -1281,6 +1283,8 @@ crates/terrustia/src/game/ai/town.rs	mod tests :: fn a_town_npc_with_no_combat_p
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn attack_within	NPC.cs	55049	809b0c4bf80c	add254e7b6cd
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn residents_notice_trouble_at_their_own_ranges	NPCID.cs	4841	369488ec653d	5fc3aedecb06
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn the_arms_dealers_burst_is_hardmode_only	NPC.cs	55129-55147	1dde1f7f3777	6df35dc9adec
+crates/terrustia/src/game/ai/town.rs	mod tests :: fn the_dryads_ward_is_cast_at_rest_and_takes_its_own_lifetime	NPC.cs	55394	692f060eeeea	79a280243c84
+crates/terrustia/src/game/ai/town.rs	mod tests :: fn the_dryads_ward_is_cast_at_rest_and_takes_its_own_lifetime	Projectile.cs	41974	8d9fdb79a33d	79a280243c84
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn the_painters_burst_is_not_hardmode_only	NPC.cs	55159-55168	f05ea7afe35c	c53371c425d6
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn the_painters_burst_is_not_hardmode_only	NPC.cs	55169-55172	811e3e69fdd9	c53371c425d6
 crates/terrustia/src/game/ai/town.rs	mod tests :: fn wading_is_not_drowning	Collision.cs	1387-1398	6f1cf7c124ad	46a973cfa0a5
@@ -1291,17 +1295,20 @@ crates/terrustia/src/game/ai/town_combat.rs	fn hardmode_shots	NPC.cs	55159-55168
 crates/terrustia/src/game/ai/town_combat.rs	fn hardmode_shots	NPC.cs	55190	61b1f7ec13dd	40bda52c03ff
 crates/terrustia/src/game/ai/town_combat.rs	fn hardmode_shots	NPC.cs	55233-55242	a0b0fb8c52b9	40bda52c03ff
 crates/terrustia/src/game/ai/town_combat.rs	fn hardmode_shots	NPC.cs	55253-55279	54e2c615fbb6	40bda52c03ff
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	54969-54977	bf79f14ff8ac	c3657e692de2
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55114-55123	b1294ab408cb	c3657e692de2
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55159-55168	f05ea7afe35c	c3657e692de2
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55169-55172	811e3e69fdd9	c3657e692de2
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55253-55279	54e2c615fbb6	c3657e692de2
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55280-55287	c9bf33c423d3	c3657e692de2
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55428-55438	d365428a5b24	c3657e692de2
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55611-55617	dbb630139c12	c3657e692de2
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55618	92a9554dadf3	c3657e692de2
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55632-55676	792f7b809c16	c3657e692de2
-crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPCID.cs	4851,4853,4841	a2103a1676cd	c3657e692de2
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	54969-54977	bf79f14ff8ac	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55114-55123	b1294ab408cb	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55159-55168	f05ea7afe35c	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55169-55172	811e3e69fdd9	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55253-55279	54e2c615fbb6	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55280-55287	c9bf33c423d3	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55394	692f060eeeea	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55428-55438	d365428a5b24	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55463-55469	c7493ec94ce7	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55486	11a4a1476f36	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55611-55617	dbb630139c12	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55618	92a9554dadf3	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPC.cs	55632-55676	792f7b809c16	aa38e8c08699
+crates/terrustia/src/game/ai/town_combat.rs	fn town_combat	NPCID.cs	4851,4853,4841	a2103a1676cd	aa38e8c08699
 crates/terrustia/src/game/ai/town_combat.rs	mod tests :: fn every_ranged_cooldown_is_its_own_attack_time_plus_average_chance	NPC.cs	55581-55609,55641-55686	9d1e20c7b9e9	b5f90171a39d
 crates/terrustia/src/game/ai/town_combat.rs	mod tests :: fn every_ranged_cooldown_is_its_own_attack_time_plus_average_chance	NPCID.cs	4841	369488ec653d	b5f90171a39d
 crates/terrustia/src/game/ai/town_combat.rs	mod tests :: fn every_ranged_cooldown_is_its_own_attack_time_plus_average_chance	NPCID.cs	4851	2c0bd80c1384	b5f90171a39d
@@ -1313,6 +1320,7 @@ crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPC.cs	55325	b6480
 crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPC.cs	55372	b4bc67326b6b	a2cf32356ddf
 crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPC.cs	56012	46bba6010785	a2cf32356ddf
 crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPCID.cs	4855	9af2e8b7621c	a2cf32356ddf
+crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	Projectile.cs	41872-41978	f11c2cf8c212	a2cf32356ddf
 crates/terrustia/src/game/ai/track.rs	fn wheel	NPC.cs	24743	20db8144f6b0	e481021ef211
 crates/terrustia/src/game/ai/track.rs	mod tests :: fn a_blazing_wheel_sets_off_toward_whoever_is_there	NPC.cs	24743	20db8144f6b0	1e435f1385f7
 crates/terrustia/src/game/ai/tumbleweed.rs	(file)	NPC.cs	63012-63573	0f4605aedd6e	02d0f9615365
@@ -1380,12 +1388,16 @@ crates/terrustia/src/game/arrivals.rs	mod tests :: fn the_item_triggers_name_the
 crates/terrustia/src/game/arrivals.rs	mod tests :: fn the_item_triggers_name_the_right_items	NPC.cs	7119-7183	789c8100ea2a	5985658ae77e
 crates/terrustia/src/game/arrivals.rs	mod tests :: fn the_nurse_uses_the_real_life_formula	NPC.cs	7185-7199	c32db97e4dd9	92fa23502823
 crates/terrustia/src/game/arrivals.rs	mod tests :: fn the_unwired_townsfolk_can_move_in	Main.cs	66755-66940	33f9fa2d4a6d	8e35f2179fb9
-crates/terrustia/src/game/buffs.rs	(file)	NPC.cs	81972-81990	31a3373a0f5c	5bec00d1d201
-crates/terrustia/src/game/buffs.rs	(file)	NPC.cs	82046	56cd15300f20	5bec00d1d201
-crates/terrustia/src/game/buffs.rs	(file)	Player.cs	20582	598999f245dd	5bec00d1d201
-crates/terrustia/src/game/buffs.rs	(file)	Player.cs	20602	25ce67899292	5bec00d1d201
-crates/terrustia/src/game/buffs.rs	(file)	Player.cs	44763	35281e1cb76f	5bec00d1d201
-crates/terrustia/src/game/buffs.rs	(file)	Projectile.cs	13686	ba18a6ddbaf0	5bec00d1d201
+crates/terrustia/src/game/buffs.rs	(file)	NPC.cs	81972-81990	31a3373a0f5c	6363b80dc0d6
+crates/terrustia/src/game/buffs.rs	(file)	NPC.cs	82046	56cd15300f20	6363b80dc0d6
+crates/terrustia/src/game/buffs.rs	(file)	Player.cs	20582	598999f245dd	6363b80dc0d6
+crates/terrustia/src/game/buffs.rs	(file)	Player.cs	20602	25ce67899292	6363b80dc0d6
+crates/terrustia/src/game/buffs.rs	(file)	Player.cs	44763	35281e1cb76f	6363b80dc0d6
+crates/terrustia/src/game/buffs.rs	(file)	Projectile.cs	13686	ba18a6ddbaf0	6363b80dc0d6
+crates/terrustia/src/game/buffs.rs	impl Buffs :: fn expiring	Projectile.cs	41963	a93f1902896e	b5e9e60c969d
+crates/terrustia/src/game/buffs.rs	impl Buffs :: fn expiring	Projectile.cs	41967	6bf7de01647a	b5e9e60c969d
+crates/terrustia/src/game/buffs.rs	mod tests :: fn a_buff_nearly_out_is_the_only_one_worth_reapplying	Projectile.cs	41963	a93f1902896e	a413023404f5
+crates/terrustia/src/game/buffs.rs	mod tests :: fn a_buff_nearly_out_is_the_only_one_worth_reapplying	Projectile.cs	41967	6bf7de01647a	a413023404f5
 crates/terrustia/src/game/buffs.rs	struct Flags	NPC.cs	53550-53561	dd6d4dc54c49	4ccf6d5cbda8
 crates/terrustia/src/game/buffs.rs	struct Flags	NPC.cs	53846	a7ddc6efe464	4ccf6d5cbda8
 crates/terrustia/src/game/buffs.rs	struct Flags	NPC.cs	53913	200ee7474f1e	4ccf6d5cbda8
@@ -1532,6 +1544,7 @@ crates/terrustia/src/game/projectile.rs	const SNOWBALL	Projectile.cs	23838-23843
 crates/terrustia/src/game/projectile.rs	const STAR_STYLE	Projectile.cs	24082-24133	d5ae53ea4e5e	c91d032ff46c
 crates/terrustia/src/game/projectile.rs	const THROWN_DELAY	Projectile.cs	23907-23930	2e8c5b0e8c10	5f21d3d75a53
 crates/terrustia/src/game/projectile.rs	const THROWN_SPIN	Projectile.cs	23945-23947	9f860f2ea5fa	a7b0c52d50bb
+crates/terrustia/src/game/projectile.rs	fn advance	Collision.cs	2299-2420	56d8e64a62c6	95ecc818db7c
 crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	47764-48409	109af965b315	4425ece6bbd4
 crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	48333	fbb2c3125f55	4425ece6bbd4
 crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	48354	96b6b5078339	4425ece6bbd4
@@ -1561,6 +1574,7 @@ crates/terrustia/src/game/projectile.rs	mod tests :: fn a_falling_star_passes_th
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_grenade_bounces_off_a_wall_and_settles_on_the_floor	Projectile.cs	19872-19886	424f6fd70985	b568eea70619
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_grenade_bounces_off_a_wall_and_settles_on_the_floor	Projectile.cs	48378-48399	eb10839c0918	b568eea70619
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_present_holds_its_rise_and_then_floats_down	Projectile.cs	29337-29366	c0c2724d47dc	b1fb1f0481a9
+crates/terrustia/src/game/projectile.rs	mod tests :: fn a_projectile_at_rest_is_not_killed_by_the_tile_it_is_standing_in	Collision.cs	2299	1d5197eaf761	13d2e4ef298e
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_proximity_mine_drops_where_a_grenade_carries	Projectile.cs	48354-48366	2e12d91f4f72	b79432fbc528
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_rolling_boulder_stops_gaining_speed_at_seven	Projectile.cs	26715-26724	2150cddb1af0	938c88475e28
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_sandnado_grows_to_fill_its_column	Projectile.cs	36689-36703	2f7bd1ccd9f0	3e6386617fc5
@@ -1865,8 +1879,8 @@ crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	3272	43583
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	50299-50302	6583807eb5db	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72072-72079	2a6f4d26e0bc	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72406	6c77495a5649	c5414c9d223d
-crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	3e504ec88006
-crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	3e504ec88006
+crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	f02d66f5385d
+crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	f02d66f5385d
 crates/terrustia/src/game/server/systems.rs	const STINKY	BuffID.cs	393	0f6008fbeed1	cfaa20a1d46a
 crates/terrustia/src/game/server/systems.rs	fn player_has_buff	MessageBuffer.cs	2456-2477	87cb35363490	c08c9f289848
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	7363-7366	54960e839053	00e47302005c
@@ -1976,6 +1990,9 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage_sigils	Projectile.cs	37106-37169	30e0c14a17a1	0b27f798f588
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage_sigils :: const HEAL_COLOUR	CombatText.cs	20	62671f7b672b	ee87118e9183
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_detonators	Wiring.cs	212-244	5b1abb2df77d	872824d143e1
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dryad_wards	NPC.cs	55533	9853b3734e79	ca71621c9a3b
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dryad_wards	Projectile.cs	41872-41978	f11c2cf8c212	ca71621c9a3b
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dryad_wards	Projectile.cs	41948	04bef2764c79	ca71621c9a3b
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_empress_projectiles	Projectile.cs	45805-45849	807627358f83	171ef610dd71
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_empress_projectiles	Projectile.cs	46287-46394	270e43beadb3	171ef610dd71
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_falling_stars	Projectile.cs	24093-24096	28b56f64c3b2	e00246a023eb
@@ -2051,6 +2068,8 @@ crates/terrustia/src/game/server/systems.rs	mod conditional_numerator_fixes :: f
 crates/terrustia/src/game/server/systems.rs	mod conditional_numerator_fixes :: fn queen_bee_drops_item_1130_at_three_in_four_not_one_in_four	ItemDropDatabase.cs	551	218943b9abcc	8d3be42b4857
 crates/terrustia/src/game/server/systems.rs	mod conditional_numerator_fixes :: fn the_creeper_drops_tissue_sample_and_crimtane_at_two_in_three_not_one_in_three	ItemDropDatabase.cs	502-503	2d1cd4a01b65	814f3ce9e56e
 crates/terrustia/src/game/server/systems.rs	mod difficulty_slider :: fn a_for_the_worthy_destroyer_grows_a_longer_body	NPC.cs	51488-51495	df65fa1f6aef	a371afa4ba45
+crates/terrustia/src/game/server/systems.rs	mod dryads_ward	Projectile.cs	41872-41978	f11c2cf8c212	afb485a7ee3e
+crates/terrustia/src/game/server/systems.rs	mod dryads_ward :: fn casting_dryad	NPC.cs	55533	9853b3734e79	cad55d8b8f4d
 crates/terrustia/src/game/server/systems.rs	mod far_placement_range	Player.cs	35212	71fab5d3114c	840e10cdcd62
 crates/terrustia/src/game/server/systems.rs	mod godmode :: fn a_hostile_shot_does_double_damage_and_opens_the_full_window	Projectile.cs	14916-14919	2c62941898b4	370b208719b1
 crates/terrustia/src/game/server/systems.rs	mod godmode :: fn an_absolute_phase_damage_still_scales_with_the_worlds_difficulty	NPC.cs	32209	0ba026ffd5b4	4683b0a91da0
