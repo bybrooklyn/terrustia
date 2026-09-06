@@ -53,6 +53,24 @@ use syn::visit::{self, Visit};
 /// decision written down in the field's own doc comment. "It is probably fine" is not a reason;
 /// a field with no reason belongs in the report, where somebody has to look at it.
 const ALLOWED: &[(&str, &str)] = &[
+    // `NPC.rarity`, generated from `SetDefaultsFromNetId` into all 65 net variants. Its vanilla
+    // readers were traced rather than assumed, and there are two: `ContentSamples.cs:1228-1249`
+    // sorts the bestiary with it, which is client-side content browsing a dedicated server has no
+    // part in; and `CoinLossRevengeSystem.cs:351` uses `npc.rarity > 0` as one of the conditions
+    // that *excludes* an NPC from getting a coin-loss revenge marker. This server models the
+    // receiving half of that system (packet 92, `dispatch.rs::on_extra_value`) but not the marker
+    // cache the gate belongs to, so there is nothing here for the field to gate yet.
+    //
+    // Excused rather than deleted because the value is right and comes free with the generated
+    // table; the open work is the marker cache, tracked in `TODO.md`. This entry was added
+    // 2026-09-06, when `check-dead-writes` was run for the first time in a while and turned out to
+    // have been failing on `main` since `4d27097` introduced the field.
+    (
+        "NetVariant::rarity",
+        "generated with the net-variant table; vanilla's only server-side reader is \
+         CoinLossRevengeSystem's exclusion gate, and that marker cache is not modelled here yet \
+         (TODO.md)",
+    ),
     // The worldgen census. Its own doc says what it is for: "Returned so callers - and the tests
     // that guard this - can assert a world is playable rather than merely non-empty." The
     // consumer is the assertion, which is legitimately a test.

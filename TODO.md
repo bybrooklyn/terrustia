@@ -1113,6 +1113,20 @@ over effort; the first three are roughly a day each.
    and `golf_score` now feed the rebroadcast the way `NetMessage.cs:1156-1160` does, and the rest
    went onto `ALLOWED` with a traced reason each. Keeping it at zero is the standing work.
 
+   **It did not stay at zero, and nobody noticed for six days.** Run again 2026-09-06, it reported
+   `NetVariant::rarity`: written at all 65 generated sites and read nowhere in production, on `main`
+   as well as on the branch, since `4d27097` added the net-variant table. That is the third checker
+   this project found silently red in one day, after `packet_audit.py` and `just regen` itself, and
+   the lesson each time is the same: a gate that is not part of a routine run is not a gate.
+
+   The field itself is now excused with a traced reason, and the reason names a real gap rather than
+   dismissing it. Vanilla reads `NPC.rarity` in exactly two places: `ContentSamples.cs:1228-1249`
+   sorts the bestiary with it, which is client-side; and `CoinLossRevengeSystem.cs:351` uses
+   `npc.rarity > 0` to *exclude* an NPC from getting a coin-loss revenge marker. This server models
+   the receiving half of that system (packet 92, `dispatch.rs::on_extra_value`, which accumulates
+   because two players can feed the same enemy) but not the marker cache the gate belongs to.
+   **So the open work is the revenge-marker cache**, and `rarity` is the field waiting for it.
+
 4. **Invariants in the soak, not just thresholds.** Liquid conservation is a property: the total in
    a sealed world does not change however many passes run. FIX-B found its blocker by measuring
    exactly that across nine release sizes, where the existing tests used 40x30 worlds, pools of at

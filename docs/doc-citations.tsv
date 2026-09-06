@@ -32,7 +32,9 @@ TODO.md	repo	crates/terrustia/src/game/server/tick.rs	420	29e0988f5bf2
 TODO.md	repo	crates/terrustia/src/net/listener.rs	157	31991ff0ad1e
 TODO.md	repo	crates/terrustia/src/world/worldgen/traps.rs	621	1cf0d9301099
 TODO.md	vanilla	BallCollision.cs	24-90	e814f0dea5d1
+TODO.md	vanilla	CoinLossRevengeSystem.cs	351	46247d3b0497
 TODO.md	vanilla	Collision.cs	2299	1d5197eaf761
+TODO.md	vanilla	ContentSamples.cs	1228-1249	e9e75306eba3
 TODO.md	vanilla	CultistRitual.cs	133-159	8880a5495aaf
 TODO.md	vanilla	Item.cs	49779-49845	41cb15038949
 TODO.md	vanilla	ItemDropDatabase.cs	1162-1164	17e9025f5a76
