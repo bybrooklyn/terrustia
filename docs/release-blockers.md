@@ -11,6 +11,20 @@ output can be reproduced. Nothing here is a plan; the plans live in `TODO.md`.
 Three separate "done" claims turned out to be stale or wrong on the day this was written, so the rule
 followed throughout is: a status word in a document is not evidence. Only code and command output are.
 
+**Refreshed 2026-09-06, and this file had itself gone stale in twenty-four commits.** Every claim in
+it was re-checked against the code. Six were wrong: the Lane B unwrap count (off by about fifty
+times, and every file it named has zero), the Moon Lord countdown entry (wrong citation, wrong
+conclusion, and the real gap is a different and smaller one), the `new_world_cli` flake (closed
+fifteen hours after this file called it open, and by a diagnosis this file contradicts), the
+town-NPC ladder (named the Cyborg, which has no ladder), the `check-data` row (six parts named of
+nine), and the journey.rs entry in "Documents that were wrong", whose own two citations had rotted.
+Roughly fourteen player-visible fixes had landed with no entry at all.
+
+That is twice now for this file, which is the argument for `tools/check_doc_citations.py`: every
+`file.rs:NNN` above is content-keyed in `docs/doc-citations.tsv` and `just check-data` fails when
+one stops pointing at what it was written against. Prose still has to be read by a person; a
+citation no longer does.
+
 ## How the bar is judged
 
 `TODO.md`'s Phase 2 names the release bar. Each clause below is marked:
@@ -23,8 +37,8 @@ followed throughout is: a status word in a document is not evidence. Only code a
 
 | Clause | State | Evidence |
 |---|---|---|
-| `just check` green (fmt, clippy x2, deny, web build, workspace tests) | MET | CI green on both jobs across the last six pushes; `just check` locally ends `All checks passed` |
-| `just check-data` green (drops, recipes, parity, spawn-reach, dead-writes, mutants) | MET | All six run 2026-09-04; every mutant target inside its own survival budget |
+| `just check` green (fmt, clippy x2, deny, packet audit, web build, workspace tests) | MET, re-run 2026-09-06 | `All checks passed ✓`, exit 0, 24 test binaries and zero failures. **CI was not green when this was re-run**, and `just check` could not have told anyone: the `packet-audit` job had been failing since `9f056a2` because `docs/packet-ids.tsv` row 51 disagreed with the code, and `just check` did not run that script. It does now (`justfile`'s `check-rust`), so the two cannot diverge again |
+| `just check-data` green (nine parts: drops, npc-data, placed-items, tile-object, recipes, parity, spawn-reach, mutants, dead-writes) | **PARTIALLY RE-RUN 2026-09-06** | This row said "all six run 2026-09-04" and named six of the nine. Three of the nine (`check-npc-data`, `check-placed-items`, `check-tile-object`) did not exist on that date, and `check-citations` landed later still and immediately found real defects (`2753a1d`). Re-run 2026-09-06: `check-parity` green (3,848 citations still pointing at the code they were checked against), `check-drops` green (375 of 378 NPC types, 40 of 40 deferrals on the record), `check-spawn-reach` green (the two known ids in `docs/spawn-gaps.tsv`). The other six have not been re-run since 2026-09-04 |
 | Zero unknown protocol IDs | MET | `docs/packet-ids.tsv` has no `unknown` row and no row that is `none`/`none` |
 | Fuzzing green | MET | `fuzz/artifacts/` is empty; both targets run per-push in CI |
 | p99 tick under the 16.67 ms budget at 255 players | MET | `TODO.md`'s soak table, four runs, with a neutralised control run proving the `BiomeCache` cap is what holds it |
@@ -121,6 +135,15 @@ our shorter window. That is a census difference, not a defect, and it is exactly
 the census rather than scoring it. Driving a longer session through real gameplay is what would widen
 this, and is the obvious next step.
 
+**Re-read 2026-09-06: "17" is also a limit of `conform`'s own arms, not only of the session.**
+Four ids sit in its `decode_only!` list because a *client* never writes them, yet the proto types
+all have encoders the server uses every tick - `SyncNpc` (`npc.rs:79`), `SyncProjectile`
+(`projectile.rs:68`), `SyncItem` (`items.rs:122`) and `TileManipulation` (`packets.rs:1412`).
+Promoting those four arms re-checks bytes already captured, before any longer session is driven.
+And this whole table is now older than the encoder it measured: `terrustia-proto` has changed
+underneath it since (`projectile.rs` +52 lines, `golf_physics.rs` +3,511), so the run wants
+repeating regardless of what the arms do.
+
 The captures are kept out of the repository on purpose: a recording of Re-Logic's own wire output is
 game-derived data, and rule 2 in `AGENTS.md` keeps that out of the tree. They live under `.scratch/`.
 
@@ -165,7 +188,11 @@ worst first by what a player or operator would actually notice.
    has a name now (`shares_a_life_pool`) and answers vanilla's actual question, so Skeletron's hands
    and Golem's fists are drained like the separate NPCs they are.
 4. **Self-update cannot replace the running binary off Unix**
-   (`crates/terrustia/src/update.rs:58-60`). The operator has to finish the update by hand on Windows.
+   (`crates/terrustia/src/update.rs:485-498`, the `#[cfg(windows)] install` arm, which copies to
+   `terrustia.exe.new` and returns `DownloadedForManualApply`). The operator has to finish the
+   update by hand on Windows. This entry used to cite `:58-60`, the enum variant's doc comment,
+   which itself points readers at a `cfg(not(unix))` branch that does not exist anywhere in the
+   file - the branch is `#[cfg(windows)]` on `install`.
    Separately, and now fixed: Windows ARM64 could not self-update *at all*, because `target_triple`
    had no arm for a target `release.yml` has been publishing.
 5. ~~One bad Journey-power id in a `.wld` silently defaults every power after it.~~ **Addressed
@@ -176,6 +203,29 @@ worst first by what a player or operator would actually notice.
 ## Player-visible gaps, disclosed in code
 
 Not defects; deliberate narrowings that a player would nonetheless notice.
+
+**This census is point-in-time, and the point was 2026-09-05.** A projectile and boss-AI wave landed
+across 2026-09-05 and 2026-09-06 and closed roughly fourteen items of exactly this class, none of
+which ever had an entry here, which is the same failure the section is meant to prevent. Listed
+once, worst first by what a player saw, rather than folded into the bullets below:
+
+| Fixed | What a player saw before it |
+|---|---|
+| `62e8c91` | Deerclops' shadow hands: `AI_187_ShadowHand` is four behaviours under one style, and a hand launched with nothing runs the first, so **every hand of a six-hand wave drifted** |
+| `ecfb3c0` | The Sand Elemental's tornado: `SANDNADO` was 658 (`SandnadoHostileMark`) where the tornado is 657, so **three markers spun in place for 900 ticks and no tornado ever formed** |
+| `9f056a2` | The Key of Light and Key of Night were craft-and-discard: no `NPC.BigMimicSummonCheck`, so no Corrupt, Crimson or Hallowed Mimic could ever be met |
+| `2468025` | The boulder never moved - a wired Boulder Statue put a stationary hostile box under itself for 3,600 ticks |
+| `00ff471` | 16 of 43 arm-less projectiles flew perfectly flat: bone, knife, syringe, daggerfish, Santa's bombs, snowball, cannonball, Ball of Fire, three grenades, a present, the ale |
+| `dfb2b2a` | The Empress's lance never fired and her rainbow never curved: every shot passed `time_left: 900` where the table says 200/660/240/180, and for three of five that number *is* the mechanic |
+| `ce837dc` | The Empress's streaks never homed and her sun dances drifted away |
+| `9f65f54` | The Moon Lord's deathray flew away from him instead of sweeping across you |
+| `ce83de5` | The Dark Mage's heal healed nothing; the Saucer's missile never turned |
+| `ea22e13` | A `Shot` could not carry `ai` values, so Duke Fishron's bubble never chased |
+| `74104f0` | Queen Slime's ground smash never grew its hitbox (5 to 30 tiles); the Deerclops spikes stood still |
+| `1d40bff` | Nebula and Stardust escorts left in a straight line instead of escorting |
+| `f0c0f8a` | Betsy's flame breath was launched at her dash velocity and trailed out behind her instead of riding her jaw |
+| `8eea7ec` | The golf ball had no arm at all; projectile coverage is 81 of 81 now, from 43 of 79 arm-less when the lane opened |
+| `6f78e4d` | Clients were told a world was Remix when nothing here mirrors one |
 
 - **Player luck is modeled now** (2026-09-05), and it was never client-side state: packet 134
   (`UpdatePlayerLuckFactors`) exists to tell the server, and `MessageBuffer.cs:4190-4220` stores all
@@ -235,10 +285,31 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   leech *on the target*. Shedding it, or being far enough away that your brand has not landed, is
   the counter-play, and none of it existed. The timer also fired one leech every sixty ticks over a
   435-tick step - eight a cycle against the game's three, made at the boss rather than at anybody.
-  **Moon Lord's true countdown timer** is still unmodelled
-  (`crates/terrustia/src/game/ai/boss/moon_lord.rs:299`).
+  ~~**Moon Lord's true countdown timer** is still unmodelled
+  (`crates/terrustia/src/game/ai/boss/moon_lord.rs:299`).~~ **This entry was wrong twice, and
+  rewritten 2026-09-06.** The citation never resolved: `moon_lord.rs` contains no occurrence of the
+  word "countdown" at HEAD *or* at the commit that wrote the line, so it was pointing at the wrong
+  file the day it was written. And the countdown *is* modelled - `NPC.MoonLordCountdown` /
+  `MaxMoonLordCountdown = 3600` (`NPC.cs:6038`), started by `WorldGen.StartImpendingDoom`, is
+  `lunar.rs:29` here, armed at `:127`, ticked at `:129-132`, announced with vanilla's own
+  `Lang.misc[52]`, and broadcast as packet 103 with max-then-current exactly as
+  `NetMessage.cs:1391-1392` sends it.
+
+  **The real gap is one clause of `AnyDanger`, and it is smaller and more specific than what this
+  entry claimed.** Vanilla's `NPC.AnyDanger` opens with `if (!ignorePillarsAndMoonlordCountdown &&
+  MoonLordCountdown > 0) flag = true;` (`NPC.cs:81066`). Ours
+  (`crates/terrustia/src/game/server/systems.rs:9246-9252`) is `moon.running() || army.ongoing() ||
+  any live boss`, with a comment saying the countdown "is not modelled as a countdown" - which was
+  true when it was written and is not now, since `lunar.countdown` is right there. So for the 3,600
+  ticks between the last pillar falling and the Moon Lord arriving, vanilla considers the world
+  dangerous and this server does not, and ambient spawning carries on as if nothing were coming.
+  One clause plus a test; tracked in `TODO.md`.
 - **A hand holds its station** through its attacks rather than being pulled off it by each one
-  (the sphere barrage's `SmoothStep` swing to `400 * side, -60`, for instance).
+  (the sphere barrage's `SmoothStep` swing to `400 * side, -60`, for instance). Still true at
+  `moon_lord.rs:301-311`, but the cross-references beside it are not: `moon_lord.rs:452` and `:585`
+  say this is "the same narrowing the deathray already carries" and the deathray stopped carrying
+  it in `9f65f54`, which moved the sweep into `systems::tick_phantasmal_deathrays`. What remains
+  narrowed is the hand station and the hover-then-relaunch gather, not the head and not the ray.
 - ~~Old One's Army has no client-visible progress bar.~~ **Fixed 2026-09-05**: it rides packet 78
   with its own icon 3 and its wave number, as `DD2Event.cs:185`/`:191` do.
 - ~~**Frost and Pumpkin Moon wave-gated drops** are flattened to guaranteed picks rather than gated on
@@ -253,16 +324,35 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
 - ~~**Town-NPC attack windups** are skipped and the Pirate's escalating burst is unmodeled.~~
   **Fixed 2026-09-05.** A shot now leaves on its own `localAI[3]` mark rather than on the tick the
   decision is made (`NPC.cs:55049`), which is the telegraph; and the four burst ladders are
-  transcribed, longest first: the Pirate's six shots at frames 1/16/24/32/40/48, the Arms Dealer's
-  four and the Cyborg's three behind `if (Main.hardMode)`, the Steampunker's three unconditional.
-  Each was read off the state block rather than inferred from the pattern the first one sets.
+  transcribed, longest first: the Pirate's six shots at frames 1/16/24/32/40/48, the **Painter's**
+  three and the Steampunker's three unconditional, and the Arms Dealer's four, which is the **only**
+  ladder in the game behind `if (Main.hardMode)` (`NPC.cs:55129-55147`).
+
+  **Both halves of that sentence were wrong here until 2026-09-06.** This entry named the Cyborg,
+  which has `num54 = 1` and no ladder at all, and put its non-existent three behind hardmode
+  alongside the Arms Dealer's - 227 is the Painter and 209 is the Cyborg, and the type ids are the
+  trap (`town_combat.rs:131-148` records the same confusion in the code it was fixed in). The
+  Painter's ladder really was behind the hardmode gate, which cost a classic-mode Painter two
+  thirds of its defence. And the claim that "each was read off the state block rather than inferred
+  from the pattern the first one sets" is refuted by the commit that corrected it (`c65a924`):
+  they were inferred, and that is precisely how the wrong NPC got a ladder.
   The flat `cooldown` also goes, replaced by vanilla's own per-tick gate
   `Main.rand.Next(AttackAverageChance[type]) == 0` (`NPC.cs:56012`) - the module doc claimed this
   project had "no equivalent scheduling primitive" for it, which was never true, and the flat
   number was wrong for the Dye Trader, whose gate is `1` and was modelled at a nine-tick gap.
   Still narrowed, and each still disclosed at its own entry: the hardmode *damage* upgrades, the
   Cyborg's three-way projectile roll, the Pirate's close-range special, and the vertical
-  aim-tolerance check.
+  aim-tolerance check. (Those four were re-checked 2026-09-06 and are all still accurate.)
+
+  **And "Fixed 2026-09-05" was three defects short.** `2eda3bd` found that twenty-two of the
+  twenty-eight combat-capable townsfolk are ranged and **nothing in this server had ever damaged an
+  NPC with a friendly projectile**: their shots were decided, aimed, launched, synced, flown and
+  expired without once being tested against a hitbox, because `Damage_PVE` sits behind
+  `owner == Main.myPlayer` and `Main.myPlayer` is 255 on a dedicated server. `143c6ef` found the
+  Dryad's ward launch speed was invented, and that every town shot carried an invented flat
+  300-tick lifetime; `12286c2` found the zero that replaced it was wrong for the only two
+  `timeLeft` overrides in `AI_007_TownEntities`, the Golfer's ball and the Goblin Tinkerer's spiky
+  ball (both 480).
 - ~~**Slime Rain** collapses its per-type flags to one case~~ **and had no spawns at all.** Fixed
   2026-09-05: `NPC.SlimeRainSpawns` (`NPC.cs:5905-5967`) is transcribed, so the event is slimes
   falling rather than a world flag and an announcement. Three of its four picks are negative net
@@ -344,11 +434,31 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   every rule that reads them means the *player's* zone.
   `GLOBAL_DEFERRED` is empty and the check gates, so nothing can join them silently.
 
-- **Lane B (error handling and data safety) is the only lane in `TODO.md` with no "(done)" marker**, and
-  485 `.unwrap()` calls remain in production files (`net/listener.rs`, `net/codec.rs`, `world/wld.rs`,
-  `world/wld_save.rs`, `admin/audit.rs` and others). The lane's claim is scoped to paths the outside
-  world can trigger, so the count alone proves nothing either way. What is missing is any way to
-  *demonstrate* the claim: no checker distinguishes an internal-invariant unwrap from a reachable one.
+- **Lane B (error handling and data safety) is the only lane in `TODO.md` with no "(done)" marker.**
+  Still true as of 2026-09-06, though it needed Lane G to be marked done - which it had earned and
+  had not been given - for the sentence to become true again.
+
+  **The count this entry used to carry was wrong by about fifty times, and how it was wrong is the
+  point.** It read: "485 `.unwrap()` calls remain in production files (`net/listener.rs`,
+  `net/codec.rs`, `world/wld.rs`, `world/wld_save.rs`, `admin/audit.rs` and others)". **All five of
+  those files have zero production unwraps**; every occurrence in them is inside `#[cfg(test)]`.
+  485 was a naive whole-file grep, and it was quoted here as evidence of an open sweep.
+
+  Three counting methods were tried on 2026-09-06 and gave three answers: a naive grep says 505, a
+  "count occurrences before each file's first `#[cfg(test)]`" heuristic says 1, and brace-matched
+  stripping of `#[cfg(test)]` bodies says 9 - of which at least three are a comment, a method that
+  happens to be named `expect`, and test bodies sitting after a nested `cfg(test)`. **That spread
+  is the finding.** The genuine production sites are single-digit and each is an internal invariant
+  carrying its own written reason ("the loop only exits with a slot or a return", "checked just
+  above", `terrustia-proto/src/reader.rs:19`'s infallible `try_into` after a checked `take`).
+
+  So the sweep looks essentially done and **nobody can demonstrate it**, which is what this lane's
+  gate has always actually been about. Nothing distinguishes an internal-invariant unwrap from one
+  the outside world can reach, and a hand count cannot settle it: three careful people counting by
+  hand today produced 505, 1 and 9. The work is a checker - a sibling of
+  `crates/terrustia-codegen/src/bin/deadwrite.rs`, same `syn` parse, same `ALLOWED`-list-with-a-
+  written-reason discipline - after which this bullet is whatever it reports and this entry cites
+  that instead of a number somebody typed.
 - ~~**The flaky-test root cause is still undiagnosed**~~ for `tests/shutdown_signal.rs`.
   **Found and fixed 2026-09-05**, and it was not a race in the server at all. Two defects in the
   test compounded: the kill sits after the assertions and `std::process::Child` does not kill on
@@ -363,9 +473,20 @@ Not defects; deliberate narrowings that a player would nonetheless notice.
   a server and had the same shape, and every assertion here now carries what the server said.
   Verified both ways: forcing a mid-test failure leaves two servers running on the old code and
   none on the new, and the suite is 8 for 8 with nothing left in `$TMPDIR`.
-  **`new_world_cli` is a separate fault and stays open.** It kills its child before asserting, so
+  ~~**`new_world_cli` is a separate fault and stays open.** It kills its child before asserting, so
   it cannot leak; its lead is still the `Command::spawn` `ENOENT` against a concurrently relinked
-  `target/debug/terrustia` written up in `TODO.md`.
+  `target/debug/terrustia` written up in `TODO.md`.~~ **Closed 2026-09-05 (`f9f8b09`), fifteen hours
+  after this paragraph was written, and the ENOENT lead it repeats was wrong.** That commit's own
+  message opens by saying so. Five faults, none of them a relink: a 120-second filesystem poll on
+  the success path, a log line filtered out at the default level, constant ports 17779-17784, a
+  racy `free_addr` that bound `:0` and dropped the listener before returning the port, and a
+  30-second `try_wait` poll. Measured 1-in-6 before and 0-in-12 after.
+
+  **Both flakes of this shape in the suite are now closed**, the second being
+  `every_newly_covered_town_npc_actually_fights` (`61407f2`), whose wall-clock deadline now counts
+  server events instead of seconds. Worth recording that the wrong lead survived in two documents
+  at once: it was well argued, it explained every observation, and it was still not what was
+  happening.
 
 ## Documents that were wrong
 
@@ -374,12 +495,19 @@ entries and one planning document were found stating things the code contradicte
 
 - `TODO.md`'s DESERT and TAXCOLLECTOR entries both described gaps that were fully implemented, the
   latter predicting infrastructure ("a general item-vs-live-NPC interaction, which nothing in this
-  server currently has") that already existed at `dispatch.rs:3869-3889`.
+  server currently has") that already existed at `dispatch.rs:4017-4023` (this file cited
+  `:3869-3889`, which is now the pylon-travel source check - the citation rotted the same way the
+  entries it is describing did).
 - A planning document claimed eighteen boss AIs were unbuilt. Every one of them exists, several at over
   a thousand lines.
-- `crates/terrustia/src/game/journey.rs:55-58` claims Stop Biome Spread "has nothing to gate yet" and
-  that this project "does not model corruption/crimson/hallow tile spread at all". Both halves are
-  false: `systems.rs:5519-5524` implements it and `systems.rs:7692-7706` tests the gate.
+- ~~`crates/terrustia/src/game/journey.rs:55-58` claims Stop Biome Spread "has nothing to gate yet"
+  and that this project "does not model corruption/crimson/hallow tile spread at all".~~ **The
+  comment was corrected; this entry then went stale in its place.** `journey.rs:60-66` now reads
+  "Freezes the hardmode infections where they stand, and really does", and says outright that it
+  used to say the opposite. Both of this entry's own citations had also rotted: the gate is
+  `systems.rs:7780` (`let spreading = hard_mode && !self.journey.stop_biome_spread;`) and the test
+  is `with_the_power_on_nothing_spreads` at `systems.rs:10465`. A file about documents that were
+  wrong is not exempt from being one.
 
 The checkers caught none of these, because none of them check prose. `docs/spawn-gaps.tsv` would have
 caught the first two the day they went stale, had anyone diffed it.
