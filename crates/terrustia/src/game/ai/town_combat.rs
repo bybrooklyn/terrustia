@@ -36,12 +36,19 @@
 //! - **Cyborg picks one of three random projectiles per shot in vanilla** (`Utils.SelectRandom`
 //!   among rocket/grenade/proximity-mine launchers); this always fires the rocket launcher variant
 //!   (case `135`) rather than modelling the roll.
-//! - **Truffle and Princess do not throw their projectile from themselves** — vanilla spawns it at
-//!   a position near the target instead (a mushroom sprouting, a heart projectile appearing), with
-//!   no meaningful launch velocity. Modelled here as an ordinary aimed shot like every other ranged
-//!   entry, since this module's `AttackKind::Ranged` has no "spawn near target" shape and adding
-//!   one for two NPCs was judged not worth the complexity — both still deal real damage on a real
-//!   cooldown, which is what matters for "the town fights back."
+//! - **Truffle and Princess do not throw their projectile from themselves**: vanilla spawns it at
+//!   a position near the target instead (a mushroom sprouting, a heart bursting), with no launch
+//!   velocity at all. This doc used to say that was "modelled here as an ordinary aimed shot",
+//!   because adding a shape for two NPCs "was judged not worth the complexity" while "both still
+//!   deal real damage on a real cooldown, which is what matters".
+//!
+//!   Both halves of that stopped being true. The damage was never delivered - nothing in this
+//!   server tested a town NPC's projectile against a hitbox until `Damage_PVE` was transcribed -
+//!   and the approximation only held while neither projectile had an arm: `aiStyle 112`'s spore
+//!   overwrites its velocity every tick with a vertical bob, so "thrown from the Truffle" and
+//!   "sits on the Truffle" are the same thing. [`AttackKind::AtTarget`] is the shape, and the one
+//!   part of it that is still an approximation - the size of the scatter box - says so at its own
+//!   field rather than here.
 //! - **Dryad's ranged attack does zero pre-scaling damage in vanilla** (`NPC.cs`'s `type == 20`
 //!   branch never sets the damage local the way every other branch does, leaving it at its
 //!   declared-zero default) — transcribed faithfully rather than "corrected," the same standing
@@ -148,6 +155,38 @@ pub enum AttackKind {
         damage: i32,
         speed: f32,
         knockback: f32,
+    },
+    /// A projectile that *appears at the target* rather than being thrown at it.
+    ///
+    /// Vanilla has exactly two, both in state 14 (`NPC.cs:55499-55529`): the Truffle's spore and
+    /// the Princess's weapon. Neither is aimed and neither is given a speed - a mushroom sprouts
+    /// where the enemy is standing and a heart bursts on it - so both roll a point in a box around
+    /// the target, re-roll while that point is inside a solid tile, and spawn there at rest.
+    ///
+    /// This module used to model both as ordinary aimed shots at an invented six pixels a tick,
+    /// disclosed in the module doc as not worth a shape of its own for two NPCs. That judgement
+    /// was made when neither projectile had an arm and both therefore behaved like any other
+    /// straight-line shot. It does not survive the arms: `aiStyle 112`'s spore overwrites its
+    /// velocity every tick with a vertical bob and so never travels at all, which turns "thrown
+    /// from the Truffle" into "sits on the Truffle", and `aiStyle 186`'s weapon lives sixty ticks.
+    /// A spore that has to sprout on the enemy cannot be approximated by throwing it.
+    AtTarget {
+        projectile: u16,
+        damage: i32,
+        knockback: f32,
+        /// Half the box the spawn point is rolled in, per axis, in pixels.
+        ///
+        /// **This is the one number here that is not vanilla's own.** Vanilla scales the box by
+        /// the *target's* size - the Truffle's spans five of them and the Princess's exactly one -
+        /// and [`crate::game::npc_ai::Target`] carries a centre and no size. Threading one through
+        /// would touch a hundred and fifty literals for a scatter radius, so the box is evaluated
+        /// once here against an 18x40 hitbox, which is the Zombie's and close to the median of the
+        /// hostile roster. Everything else about the shape - at the target, at rest, re-rolled out
+        /// of walls - is transcribed.
+        scatter: (f32, f32),
+        /// `while (num74 > 0 && WorldGen.SolidTile(...))`: how many times the point is re-rolled
+        /// when it lands in a wall. Ten for the Truffle, five for the Princess.
+        tries: u32,
     },
     Melee {
         damage: i32,
@@ -528,34 +567,44 @@ pub fn town_combat(npc_type: u16) -> Option<TownCombat> {
             shots: &[15],
             attack_time: 30,
         },
-        // Truffle. NPC.cs state-14 block, `type == 160` — spawns near the target rather than being
-        // thrown, see module doc: projectile 590, damage 40, speed approximated at 6 (vanilla has
-        // no real launch velocity here), knockback 3. AttackTime[160]=60,
-        // AttackAverageChance[160]=60, DangerDetectRange[160]=700.
+        // Truffle. `NPC.cs:55439-55450`, `type == 160`: projectile 590, damage 40, knockback 3,
+        // and no launch speed at all. AttackTime[160]=60, AttackAverageChance[160]=60,
+        // DangerDetectRange[160]=700.
+        //
+        // The spore sprouts on the enemy: `vector4 = npc.position - npc.Size * 2f + npc.Size *
+        // RandomVector2(rand, 0f, 1f) * 5f` (`:55503`), re-rolled up to ten times out of a solid
+        // tile, then `NewProjectile(vector4, 0f, 0f, ...)`. Five target-sizes across an 18x40
+        // hitbox is the +/-45 by +/-100 below; see [`AttackKind::AtTarget`] for why the box is
+        // fixed rather than read off the target.
         160 => TownCombat {
             state: 14.0,
-            kind: AttackKind::Ranged {
+            kind: AttackKind::AtTarget {
                 projectile: 590,
                 damage: 40,
-                speed: 6.0,
                 knockback: 3.0,
+                scatter: (45.0, 100.0),
+                tries: 10,
             },
             range: 700.0,
             average_chance: 60,
             shots: &[15],
             attack_time: 60,
         },
-        // Princess. NPC.cs state-14 block, `type == 663`, non-hardmode — spawns near the target
-        // rather than being thrown, see module doc: projectile 950, damage 15, speed approximated
-        // at 6, knockback 3. AttackTime[663]=60, AttackAverageChance[663]=1,
+        // Princess. `NPC.cs:55451-55461`, `type == 663`, non-hardmode: projectile 950, damage 15,
+        // knockback 3, no launch speed. AttackTime[663]=60, AttackAverageChance[663]=1,
         // DangerDetectRange[663]=700.
+        //
+        // Her weapon bursts inside the enemy's own box rather than around it: `vector5 =
+        // npc.position + npc.Size * RandomVector2(rand, 0f, 1f) * 1f` (`:55519`), re-rolled up to
+        // five times, which against an 18x40 hitbox is the +/-9 by +/-20 below.
         663 => TownCombat {
             state: 14.0,
-            kind: AttackKind::Ranged {
+            kind: AttackKind::AtTarget {
                 projectile: 950,
                 damage: 15,
-                speed: 6.0,
                 knockback: 3.0,
+                scatter: (9.0, 20.0),
+                tries: 5,
             },
             range: 700.0,
             average_chance: 1,

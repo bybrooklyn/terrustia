@@ -2384,7 +2384,16 @@ async fn every_newly_covered_town_npc_actually_fights() {
                 Event::ProjectileSynced(p) if Some(p.projectile_type) == projectile_type => {
                     fired = true;
                 }
-                Event::NpcSynced(n) if n.index == hostile.index && n.life < hostile.life => {
+                // The generation is checked as well as the index, and it is not belt and braces.
+                // A slot freed by a despawn is handed to the next natural spawn, and this test
+                // runs a live world for thousands of events: an index match alone reports "the
+                // target took damage" for any *later* occupant of that slot with less life than a
+                // zombie, which is most of the roster. That is what this assertion was doing.
+                Event::NpcSynced(n)
+                    if n.index == hostile.index
+                        && n.generation == hostile.generation
+                        && n.life < hostile.life =>
+                {
                     hurt = true;
                 }
                 _ => {}

@@ -339,6 +339,14 @@ pub struct MeleeHit {
     pub damage: i32,
     pub knockback: f32,
     pub direction: i8,
+    /// How long the target is then immune to *this server's* hits, in ticks.
+    ///
+    /// `nPC2.immune[myPlayer] = (int)ai[1] + 2` (`NPC.cs:55639`): the rest of the swinging NPC's
+    /// attack state plus two, which is what makes state 15 one hit rather than one per tick. The
+    /// state runs against whatever is in the box every tick it lasts and has no `localAI[3]` gate
+    /// at all, so without this a Tax Collector's twelve-damage swing lands twelve damage a tick
+    /// for the whole state.
+    pub immune_for: i32,
 }
 
 /// What Plantera can see of its own fight.

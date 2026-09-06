@@ -305,6 +305,14 @@ impl GameServer {
         if self.world.blood_moon {
             self.convert_critters_under_a_blood_moon();
         }
+        // `for (int j = 0; j < 256; j++) if (immune[j] > 0) immune[j]--;` (`NPC.cs:91564-91567`),
+        // once per NPC update. Only slot 255, the server's own, exists here; see
+        // [`Npc::immune_ticks`].
+        for (_, npc) in self.npcs.iter_mut() {
+            if npc.immune_ticks > 0 {
+                npc.immune_ticks -= 1;
+            }
+        }
         let targets: Vec<Target> = self
             .players
             .iter()
@@ -1142,8 +1150,20 @@ impl GameServer {
             let Some(npc) = self.npcs.get_mut(hit.target) else {
                 continue;
             };
+            // `nPC2.immune[myPlayer] == 0` (`NPC.cs:55635`), and slot 255 is the server's; see
+            // [`Npc::immune_ticks`]. State 15 has no `localAI[3]` gate and swings against whatever
+            // is in the box on every tick it runs, so this cooldown is the only thing making it
+            // one blow per attack rather than one per tick - which is what it used to be.
+            if npc.immune_ticks > 0 {
+                continue;
+            }
+            // `StrikeNPC_Inner` runs the damage through `CalculateDamageNPCsTake(Damage, defense)`
+            // (`NPC.cs:82068`), which this path skipped: a townsperson's blow was landing its full
+            // face value on a target with armour.
+            let taken = damage_taken(hit.damage, npc.defense, false);
+            npc.immune_ticks = hit.immune_for;
             // A townsperson's blow never crits (the melee-hit path skips the crit roll on purpose).
-            let killed = npc.take_damage(hit.damage, hit.knockback, hit.direction);
+            let killed = npc.take_damage(taken, hit.knockback, hit.direction);
             let (npc_type, center) = (npc.npc_type, npc.center());
             let value = if npc.from_statue {
                 0.0
@@ -2384,6 +2404,127 @@ impl GameServer {
         }
     }
 
+    /// The Mechanic's wrench comes back to her, which is the half of it that was missing.
+    ///
+    /// `aiStyle == 109` (`Projectile.cs:34652-34690`). It is a boomerang: thirty ticks out at
+    /// whatever speed it was thrown, then a turn, then a lerp home at four per cent of the
+    /// remaining angle a tick until it reaches her and ends. Ours flew out and kept going, so the
+    /// Mechanic's wrench left the town at ten pixels a tick and stopped being anybody's problem
+    /// after about a second.
+    ///
+    /// Two things it does that read as detail and are not. It stops colliding with tiles the
+    /// moment it turns (`:34676`), so the wall it bounced off cannot stop it coming home; and it
+    /// dies when it is within *one tick's travel* of her rather than on contact
+    /// (`:34681`), which is why a wrench never visibly reaches her sprite.
+    ///
+    /// The owner is recovered on the first tick and written into `ai[1]`, the same trade the
+    /// Dryad's ward makes and for the same reason. Vanilla's own `localAI[1]` (the launch speed,
+    /// latched once) is kept in `local_ai[1]` because the homing target is built from it, not from
+    /// the current speed: a wrench that has been slowed by a bounce still comes home at ten.
+    fn tick_mechanic_wrenches(&mut self) {
+        use terrustia_proto::projectile::ids::MECHANIC_WRENCH;
+
+        /// `NPCID.Mechanic`. The arm checks the type, not just that the slot is filled.
+        const MECHANIC: u16 = 124;
+        /// `localAI[0] > 30f`: how long the outbound leg lasts.
+        const OUTBOUND: f32 = 30.0;
+        /// `Vector2.Lerp(velocity, toward, 0.04f)`.
+        const TURN: f32 = 0.04;
+        /// `rotation += MathF.PI / 10f`, every tick of both legs.
+        const SPIN: f32 = std::f32::consts::PI / 10.0;
+        /// How far the first tick may look for the Mechanic who threw it. She throws from her own
+        /// centre plus sixteen pixels, so this can only ever match her.
+        const OWNER_REACH: f32 = 96.0;
+
+        let wrenches: Vec<u16> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == MECHANIC_WRENCH)
+            .map(|(index, _)| index)
+            .collect();
+        let mut spent = Vec::new();
+        for index in wrenches {
+            let Some(wrench) = self.projectiles.get(index) else {
+                continue;
+            };
+            let centre = wrench.center();
+            // `if (localAI[1] == 0f) localAI[1] = velocity.Length()`, which is also this arm's
+            // "first tick" mark, and so the one tick on which the thrower is still next to it.
+            if wrench.local_ai[1] == 0.0 {
+                let found = self
+                    .npcs
+                    .iter()
+                    .filter(|(_, npc)| npc.npc_type == MECHANIC)
+                    .map(|(slot, npc)| {
+                        let at = npc.center();
+                        (slot, (at.0 - centre.0).hypot(at.1 - centre.1))
+                    })
+                    .filter(|(_, away)| *away <= OWNER_REACH)
+                    .min_by(|a, b| a.1.total_cmp(&b.1))
+                    .map(|(slot, _)| slot);
+                let speed = wrench.velocity.0.hypot(wrench.velocity.1);
+                let Some(wrench) = self.projectiles.get_mut(index) else {
+                    continue;
+                };
+                wrench.local_ai[1] = speed;
+                if let Some(slot) = found {
+                    wrench.ai[1] = f32::from(slot);
+                    wrench.dirty = true;
+                }
+            }
+
+            let Some(wrench) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            if wrench.ai[0] == 0.0 {
+                wrench.local_ai[0] += 1.0;
+                if wrench.local_ai[0] > OUTBOUND {
+                    // Vanilla `return`s here rather than falling through, so the turn is the one
+                    // tick of the flight that does not spin.
+                    wrench.ai[0] = 1.0;
+                    wrench.local_ai[0] = 0.0;
+                    wrench.dirty = true;
+                } else {
+                    wrench.rotation += SPIN;
+                }
+                continue;
+            }
+
+            let owner = wrench.ai[1] as u8;
+            let speed = wrench.local_ai[1];
+            let Some(home) = self
+                .npcs
+                .get(owner)
+                .filter(|npc| npc.npc_type == MECHANIC)
+                .map(|npc| npc.center())
+            else {
+                // `if (type != 582 || !npc[ai[1]].active || npc[ai[1]].type != 124) Kill()`: she
+                // died or was never found, and a wrench with nobody to come back to simply ends.
+                spent.push(index);
+                continue;
+            };
+            let Some(wrench) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            let toward = (home.0 - wrench.center().0, home.1 - wrench.center().1);
+            let away = toward.0.hypot(toward.1);
+            if away < speed {
+                spent.push(index);
+                continue;
+            }
+            let goal = (toward.0 / away * speed, toward.1 / away * speed);
+            wrench.velocity = (
+                wrench.velocity.0 + (goal.0 - wrench.velocity.0) * TURN,
+                wrench.velocity.1 + (goal.1 - wrench.velocity.1) * TURN,
+            );
+            wrench.rotation += SPIN;
+            wrench.dirty = true;
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
     /// The Dryad's ward, which grows around her and is the whole of her attack.
     ///
     /// `aiStyle == 111`, `AI_111_DryadsWard` (`Projectile.cs:41872-41978`). It is not a weapon and
@@ -2692,6 +2833,8 @@ impl GameServer {
         self.tick_sandnado_marks();
         // And the Dryad's ward, which blesses and curses the NPCs standing in it.
         self.tick_dryad_wards();
+        // And the Mechanic's wrench, which turns round and comes back to her.
+        self.tick_mechanic_wrenches();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -2720,6 +2863,10 @@ impl GameServer {
             }
         }
 
+        // `Projectile.Update` calls `Damage()` right after the move, and on a dedicated server
+        // this is the half of it that runs.
+        self.tick_friendly_projectile_hits();
+
         // Clients interpolate between updates, so projectiles go out at the same rate NPCs do.
         if self.ticks.is_multiple_of(NPC_SYNC_INTERVAL) {
             let dirty: Vec<u16> = self
@@ -2734,6 +2881,128 @@ impl GameServer {
                 }
                 self.broadcast_projectile(index);
             }
+        }
+    }
+
+    /// The projectiles *this server* threw, landing on the enemies they were thrown at.
+    ///
+    /// `Projectile.Damage_PVE` (`Projectile.cs:12572-12608`), reached from `Damage()` under
+    /// `if (owner == Main.myPlayer)` (`:12518`). On a dedicated server `Main.myPlayer` is 255
+    /// (`Netplay.cs:250`) and every projectile a town NPC throws is created with
+    /// `owner: Main.myPlayer` (`NPC.cs:55067`, `:55533` and every other `NewProjectile` in
+    /// `AI_007_TownEntities`), so **the server is the machine that lands these hits**. Its sibling
+    /// `Damage_EVP`, hostile-hits-player, is the one guarded by `Main.netMode != 2` and left to
+    /// each client; this server does that one anyway and says so at `tick_contact_damage`.
+    ///
+    /// **Nothing here did this before, so no town NPC's ranged attack had ever damaged anything.**
+    /// Twenty-two of the twenty-eight combat-capable townsfolk are ranged; their shots were
+    /// launched, synced, flown and expired without ever being tested against a hitbox, and the
+    /// only two paths that could reduce an NPC's life were a client's packet 28 and a town NPC's
+    /// melee swing. The gameplay test that was meant to cover exactly this asserted a health drop
+    /// on `n.index == hostile.index` alone; a despawn frees that slot to the next natural spawn,
+    /// so it had been reading somebody else's health for a fixed target's, and it goes red on the
+    /// first NPC in its list the moment the generation is checked too.
+    ///
+    /// The filter is vanilla's, which is looser than it looks: a friendly projectile hits any NPC
+    /// that is not itself friendly (`Projectile.cs:12618`, `flag = !targetNPC.friendly`; the `killGuide` and
+    /// `killClothier` clauses beside it are gated on `owner < 255` and so cannot fire here), that
+    /// is not `dontTakeDamage` (`Projectile.cs:12600`), and that has no live hit cooldown in its
+    /// own slot (`Projectile.cs:12636`).
+    fn tick_friendly_projectile_hits(&mut self) {
+        use terrustia_proto::projectile::ids::MECHANIC_WRENCH;
+
+        /// `targetNPC.immune[owner] = 10` (`Projectile.cs:14183`), the default a projectile leaves
+        /// behind, and the wrench's own seven (`:14107`).
+        const IMMUNE_FOR: i32 = 10;
+        const WRENCH_IMMUNE_FOR: i32 = 7;
+
+        let throwers: Vec<u16> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| !p.stats.hostile && p.damage > 0 && p.can_damage())
+            .map(|(index, _)| index)
+            .collect();
+        if throwers.is_empty() {
+            return;
+        }
+        let mut struck = Vec::new();
+        let mut spent = Vec::new();
+        for index in throwers {
+            let Some(projectile) = self.projectiles.get(index) else {
+                continue;
+            };
+            let (at, size) = (
+                projectile.position,
+                (projectile.width(), projectile.height()),
+            );
+            let (base, kind) = (projectile.damage, projectile.projectile_type);
+            let (knockback, from_x) = (projectile.knockback, projectile.center().0);
+
+            let hit = self.npcs.iter().find(|(_, npc)| {
+                !npc.stats.friendly
+                    && !npc.invulnerable
+                    && npc.is_alive()
+                    && npc.immune_ticks == 0
+                    && npc.position.0 < at.0 + size.0
+                    && npc.position.0 + npc.width() > at.0
+                    && npc.position.1 < at.1 + size.1
+                    && npc.position.1 + npc.height() > at.1
+            });
+            let Some((target, _)) = hit else {
+                continue;
+            };
+            let Some(npc) = self.npcs.get_mut(target) else {
+                continue;
+            };
+            // `StrikeNPC` applies the target's own defence, exactly as the two damage paths that
+            // were already here do. A townsperson's shot never crits: vanilla rolls the crit off
+            // `Main.player[owner]`, and slot 255 is the blank player.
+            let taken = damage_taken(base, npc.defense, false);
+            // hitDirection is the projectile's own `direction`, which `NewProjectile` sets from
+            // the sign of its launch velocity; measured here off the target's centre, the same
+            // form every other hit site in this file uses.
+            let direction = if from_x < npc.center().0 { 1 } else { -1 };
+            let killed = npc.strike(taken, knockback, direction, false);
+            npc.immune_ticks = if kind == MECHANIC_WRENCH {
+                WRENCH_IMMUNE_FOR
+            } else {
+                IMMUNE_FOR
+            };
+            let (npc_type, centre) = (npc.npc_type, npc.center());
+            let value = if npc.from_statue {
+                0.0
+            } else {
+                npc.stats.value
+            };
+            struck.push((target, killed, npc_type, centre, value));
+
+            let Some(projectile) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            // A wrench that lands turns for home there and then (`Projectile.cs:14106-14113`),
+            // which is why one never punches through a crowd.
+            if kind == MECHANIC_WRENCH && projectile.ai[0] != 1.0 {
+                projectile.ai[0] = 1.0;
+                projectile.dirty = true;
+            }
+            // `if (penetrate > 0) { penetrate--; if (penetrate == 0) Kill(); }`
+            // (`Projectile.cs:14190-14206`). Minus one is vanilla's "unlimited".
+            if projectile.penetrate > 0 {
+                projectile.penetrate -= 1;
+                if projectile.penetrate == 0 {
+                    spent.push(index);
+                }
+            }
+        }
+        for (target, killed, npc_type, centre, value) in struck {
+            if killed {
+                self.npc_died(target, npc_type, centre, value);
+            } else {
+                self.broadcast_npc(target);
+            }
+        }
+        for index in spent {
+            self.kill_projectile(index);
         }
     }
 
@@ -16020,5 +16289,447 @@ mod slime_rain_spawns {
             drain_slimes(&mut server);
         }
         assert_eq!(inside, 0, "a slime landed inside a walled-off band");
+    }
+}
+
+/// The projectiles this server throws finally land, and the four town-NPC arms that decide where
+/// they are when they do.
+///
+/// The headline is `tick_friendly_projectile_hits`: until it existed no town NPC's ranged attack
+/// had ever damaged anything, and the gameplay test that was meant to prove otherwise was reading
+/// a recycled NPC slot. Each test here fails on the pre-fix build.
+#[cfg(test)]
+mod town_shots_land {
+    use super::*;
+    use crate::config::Config;
+    use terrustia_proto::projectile::ids::{MECHANIC_WRENCH, PRINCESS_WEAPON, TRUFFLE_SPORE};
+
+    const GUIDE: u16 = 22;
+    const ZOMBIE: u16 = 3;
+    const MECHANIC: u16 = 124;
+    /// `ProjectileID.ZoologistStrikeGreen`, and the Guide's own arrow.
+    const ZOOLOGIST_CLAW: u16 = 880;
+    const WOODEN_ARROW: u16 = 1;
+
+    fn server() -> GameServer {
+        GameServer::new(
+            Config::default(),
+            crate::world::World::empty(500, 300, "town shot probe"),
+        )
+    }
+
+    /// A town NPC's shot damages the enemy it is flying through.
+    ///
+    /// `Projectile.Damage_PVE` under `owner == Main.myPlayer` (`Projectile.cs:12518`), and on a
+    /// dedicated server `Main.myPlayer` is 255 - the owner every one of these is created with.
+    /// Before this the only two things that could reduce an NPC's life were a client's packet 28
+    /// and a town NPC's melee swing, so twenty-two of the twenty-eight combat-capable townsfolk
+    /// were firing blanks.
+    #[test]
+    fn a_town_npcs_shot_damages_the_enemy_it_hits() {
+        let mut server = server();
+        let zombie = server.npcs.spawn(ZOMBIE, (2000.0, 2000.0)).expect("a slot");
+        let was = server.npcs.get(zombie).expect("there").life;
+        let at = server.npcs.get(zombie).expect("there").center();
+        server
+            .projectiles
+            .launch(WOODEN_ARROW, at, (0.0, 0.0), 20, 0)
+            .expect("a known type");
+
+        // Through the real `tick_projectiles`, not the sweep alone, so this is also the test that
+        // the sweep is *wired in*: unhooked, the arrow flies past and every other test here still
+        // passes because they call the sweep directly.
+        server.tick_projectiles();
+        let now = server.npcs.get(zombie).expect("there").life;
+        assert!(now < was, "the arrow should have hurt it: {was} -> {now}");
+        // `StrikeNPC_Inner` runs it through `CalculateDamageNPCsTake(Damage, defense)`.
+        let defense = server.npcs.get(zombie).expect("there").defense;
+        assert_eq!(was - now, damage_taken(20, defense, false));
+    }
+
+    /// And then it cannot be hit again for ten ticks. `targetNPC.immune[owner] = 10`
+    /// (`Projectile.cs:14183`), counted down once per NPC update (`NPC.cs:91564-91567`).
+    ///
+    /// Driven with the Zoologist's claw rather than an arrow, because an arrow has one hit in it
+    /// and would be spent rather than blocked - which would prove nothing about the cooldown.
+    #[test]
+    fn a_hit_target_is_immune_to_this_server_for_ten_ticks() {
+        let mut server = server();
+        let zombie = server.npcs.spawn(ZOMBIE, (2000.0, 2000.0)).expect("a slot");
+        let at = server.npcs.get(zombie).expect("there").center();
+        let claw = server
+            .projectiles
+            .launch(ZOOLOGIST_CLAW, at, (0.0, 0.0), 20, 0)
+            .expect("a known type");
+        assert_eq!(
+            server.projectiles.get(claw).expect("up").penetrate,
+            -1,
+            "unlimited, so nothing here is measuring penetration by mistake"
+        );
+
+        server.tick_friendly_projectile_hits();
+        let after_one = server.npcs.get(zombie).expect("there").life;
+        assert_eq!(server.npcs.get(zombie).expect("there").immune_ticks, 10);
+
+        // Nine more sweeps with no NPC update in between: still immune, still the same health.
+        for _ in 0..9 {
+            server.tick_friendly_projectile_hits();
+        }
+        assert_eq!(server.npcs.get(zombie).expect("there").life, after_one);
+
+        // Ten NPC updates run the cooldown out.
+        for _ in 0..10 {
+            server.tick_npcs();
+        }
+        assert_eq!(server.npcs.get(zombie).expect("there").immune_ticks, 0);
+        // `tick_npcs` also *moves* it - it has a routine and there is no floor under it - so the
+        // claw is put back on top of it rather than assuming the two still overlap.
+        let now = server.npcs.get(zombie).expect("there").center();
+        server.projectiles.get_mut(claw).expect("up").position = now;
+        server.tick_friendly_projectile_hits();
+        assert!(server.npcs.get(zombie).expect("there").life < after_one);
+    }
+
+    /// It hits nothing friendly and nothing that cannot be hurt.
+    ///
+    /// `flag = !targetNPC.friendly` (`Projectile.cs:12618`) and `!nPC.dontTakeDamage`
+    /// (`Projectile.cs:12600`).
+    /// Without the first a Guide's arrow would go through the Merchant standing next to him.
+    #[test]
+    fn a_shot_passes_through_the_town_and_through_the_untouchable() {
+        let mut server = server();
+        let guide = server.npcs.spawn(GUIDE, (2000.0, 2000.0)).expect("a slot");
+        let immortal = server.npcs.spawn(ZOMBIE, (2000.0, 2000.0)).expect("a slot");
+        server
+            .npcs
+            .get_mut(immortal)
+            .expect("just spawned")
+            .invulnerable = true;
+        let (guide_was, immortal_was) = (
+            server.npcs.get(guide).expect("there").life,
+            server.npcs.get(immortal).expect("there").life,
+        );
+        let at = server.npcs.get(guide).expect("there").center();
+        server
+            .projectiles
+            .launch(WOODEN_ARROW, at, (0.0, 0.0), 20, 0)
+            .expect("a known type");
+
+        server.tick_friendly_projectile_hits();
+        assert_eq!(server.npcs.get(guide).expect("there").life, guide_was);
+        assert_eq!(server.npcs.get(immortal).expect("there").life, immortal_was);
+        // Health alone does not prove the `dontTakeDamage` half: `strike` refuses an invulnerable
+        // target on its own, so without the filter the projectile would still count the hit -
+        // burning its penetration and putting a cooldown on something it never touched. That is
+        // what vanilla's `!nPC.dontTakeDamage` at `Projectile.cs:12600` is for, and the cooldown
+        // is what makes it observable.
+        assert_eq!(
+            server.npcs.get(immortal).expect("there").immune_ticks,
+            0,
+            "nothing that cannot be hurt should come away with a hit cooldown"
+        );
+        assert!(
+            server.projectiles.iter().count() == 1,
+            "and the arrow should not have spent its one hit on either of them"
+        );
+    }
+
+    /// A shot with a hit budget spends one and dies when it runs out
+    /// (`Projectile.cs:14190-14206`). A wooden arrow's is one.
+    #[test]
+    fn a_single_hit_shot_is_spent_on_its_first_target() {
+        let mut server = server();
+        server.npcs.spawn(ZOMBIE, (2000.0, 2000.0)).expect("a slot");
+        let arrow = server
+            .projectiles
+            .launch(WOODEN_ARROW, (2009.0, 2020.0), (0.0, 0.0), 20, 0)
+            .expect("a known type");
+        assert_eq!(
+            server.projectiles.get(arrow).expect("up").penetrate,
+            1,
+            "an arrow goes through one thing"
+        );
+        server.tick_friendly_projectile_hits();
+        assert!(server.projectiles.get(arrow).is_none());
+    }
+
+    /// The Zoologist's claw stops where it was swung. `AI_183_ZoologistStrike`
+    /// (`Projectile.cs:43893-43907`): it keeps a fifth of its sideways speed each tick and never
+    /// falls, and the drag runs *before* the move exactly as vanilla's `AI()` does - so a swipe
+    /// thrown at twenty-four pixels a tick travels 24/5 + 24/25 + ... = **six pixels in total**
+    /// and then dies at eighteen ticks. It is a claw swung at arm's length, not a projectile.
+    /// Unarmed it crossed four hundred and thirty.
+    #[test]
+    fn the_zoologists_claw_stops_where_it_was_swung() {
+        let tiles =
+            crate::game::server::WorldTiles(&crate::world::World::empty(500, 300, "claw probe"));
+        let mut store = crate::game::projectile::ProjectileStore::new();
+        let index = store
+            .launch(ZOOLOGIST_CLAW, (2000.0, 2000.0), (24.0, 0.0), 15, 0)
+            .expect("a known type");
+        let start = store.get(index).expect("up").position.0;
+        for _ in 0..18 {
+            if crate::game::projectile::step(
+                store.get_mut(index).expect("up"),
+                &tiles,
+                &mut Vec::new(),
+            ) == crate::game::projectile::Outcome::Spent
+            {
+                break;
+            }
+        }
+        let travelled = store.get(index).map_or(0.0, |p| p.position.0 - start);
+        assert!(
+            (5.0..7.0).contains(&travelled),
+            "the geometric sum of 24 at a fifth, applied before the move, is 6; it went {travelled}"
+        );
+    }
+
+    /// The Princess's weapon lasts sixty ticks, not the 180 its table declares.
+    /// `AI_186_PrincessWeapon` (`Projectile.cs:43454-43462`) is the only thing that knows.
+    #[test]
+    fn the_princesss_weapon_lasts_a_second() {
+        let tiles =
+            crate::game::server::WorldTiles(&crate::world::World::empty(500, 300, "weapon probe"));
+        let mut store = crate::game::projectile::ProjectileStore::new();
+        let index = store
+            .launch(PRINCESS_WEAPON, (2000.0, 2000.0), (0.0, 0.0), 15, 0)
+            .expect("a known type");
+        assert_eq!(store.get(index).expect("up").time_left, 180, "its table's");
+        for _ in 0..59 {
+            crate::game::projectile::step(
+                store.get_mut(index).expect("up"),
+                &tiles,
+                &mut Vec::new(),
+            );
+        }
+        assert!(store.get(index).is_some(), "still up on its 59th tick");
+        assert_eq!(
+            crate::game::projectile::step(
+                store.get_mut(index).expect("up"),
+                &tiles,
+                &mut Vec::new()
+            ),
+            crate::game::projectile::Outcome::Spent,
+            "and gone on its 60th"
+        );
+    }
+
+    /// The Truffle's spore does not travel: its velocity is overwritten every tick with a pure
+    /// vertical bob (`Projectile.cs:34860`), so it hangs where it was put.
+    #[test]
+    fn the_truffles_spore_hangs_where_it_was_put() {
+        let tiles =
+            crate::game::server::WorldTiles(&crate::world::World::empty(500, 300, "spore probe"));
+        let mut store = crate::game::projectile::ProjectileStore::new();
+        // Launched with a real speed, which the arm must throw away on its first tick.
+        let index = store
+            .launch(TRUFFLE_SPORE, (2000.0, 2000.0), (6.0, 6.0), 40, 0)
+            .expect("a known type");
+        let start = store.get(index).expect("up").position;
+        for _ in 0..180 {
+            crate::game::projectile::step(
+                store.get_mut(index).expect("up"),
+                &tiles,
+                &mut Vec::new(),
+            );
+        }
+        let now = store.get(index).expect("up").position;
+        assert_eq!(now.0, start.0, "it never moves sideways at all");
+        assert!(
+            (now.1 - start.1).abs() < 2.0,
+            "and its bob is a closed sine over 180 ticks, not a drift: {} -> {}",
+            start.1,
+            now.1
+        );
+    }
+
+    /// A Mechanic mid-swing with her wrench just thrown, at vanilla's launch point and speed
+    /// (`NPC.cs:55068`: her centre plus sixteen across and two up, at ten pixels a tick).
+    fn mechanic_with_a_wrench(velocity: (f32, f32)) -> (GameServer, u8, u16) {
+        let mut server = server();
+        // Not slot zero: an unwritten `ai[1]` already reads as zero, so a Mechanic standing there
+        // would make "found its thrower" and "found nothing" the same answer.
+        server.npcs.spawn(488, (100.0, 100.0)).expect("a filler");
+        let mechanic = server
+            .npcs
+            .spawn(MECHANIC, (2000.0, 2000.0))
+            .expect("a slot");
+        let at = server.npcs.get(mechanic).expect("there").center();
+        let wrench = server
+            .projectiles
+            .launch(MECHANIC_WRENCH, (at.0 + 16.0, at.1 - 2.0), velocity, 11, 0)
+            .expect("a known type");
+        (server, mechanic, wrench)
+    }
+
+    /// The wrench is a boomerang: thirty ticks out, then home, then gone when it arrives.
+    ///
+    /// `aiStyle 109` (`Projectile.cs:34652-34690`). Ours flew out and kept going, so the
+    /// Mechanic's wrench left the town at ten pixels a tick and never came back.
+    #[test]
+    fn the_mechanics_wrench_turns_round_and_comes_home() {
+        let (mut server, mechanic, wrench) = mechanic_with_a_wrench((10.0, 0.0));
+        let home = server.npcs.get(mechanic).expect("there").center();
+
+        for _ in 0..30 {
+            server.tick_projectiles();
+        }
+        let out = server.projectiles.get(wrench).expect("still up");
+        assert_eq!(out.ai[0], 0.0, "still outbound on its thirtieth tick");
+        assert_eq!(
+            out.ai[1],
+            f32::from(mechanic),
+            "and it recovered its thrower into the slot vanilla puts her in"
+        );
+        let away = (out.center().0 - home.0).abs();
+        assert!(away > 250.0, "it has actually gone somewhere: {away}");
+
+        server.tick_projectiles();
+        assert_eq!(
+            server.projectiles.get(wrench).expect("up").ai[0],
+            1.0,
+            "and turns on the thirty-first"
+        );
+
+        // The lerp is four per cent a tick, so coming back takes a while; it must arrive.
+        for _ in 0..600 {
+            if server.projectiles.get(wrench).is_none() {
+                break;
+            }
+            server.tick_projectiles();
+        }
+        assert!(
+            server.projectiles.get(wrench).is_none(),
+            "it should end on reaching her rather than flying off"
+        );
+    }
+
+    /// A wrench with no Mechanic to return to simply ends
+    /// (`if (type != 582 || !npc[ai[1]].active || npc[ai[1]].type != 124) Kill()`).
+    #[test]
+    fn a_wrench_whose_mechanic_is_gone_ends() {
+        let (mut server, mechanic, wrench) = mechanic_with_a_wrench((10.0, 0.0));
+        for _ in 0..31 {
+            server.tick_projectiles();
+        }
+        assert!(server.projectiles.get(wrench).is_some(), "on its way home");
+        // Her slot is *refilled* rather than emptied, because an empty slot proves only that the
+        // lookup failed. Vanilla checks the type as well (`npc[ai[1]].type != 124`), and a slot
+        // freed by a despawn is handed straight to the next spawn - so a wrench that only checked
+        // "is somebody there" would come home to a stranger.
+        server.npcs.remove(mechanic);
+        let stranger = server
+            .npcs
+            .spawn(ZOMBIE, (2000.0, 2000.0))
+            .expect("her slot back");
+        assert_eq!(stranger, mechanic, "the same slot, a different NPC");
+        server.tick_projectiles();
+        assert!(server.projectiles.get(wrench).is_none());
+    }
+
+    /// Landing on something turns it for home there and then, and puts seven ticks of immunity on
+    /// what it hit rather than the usual ten (`Projectile.cs:14106-14113`).
+    #[test]
+    fn a_wrench_that_lands_turns_for_home_at_once() {
+        let (mut server, _, wrench) = mechanic_with_a_wrench((10.0, 0.0));
+        let at = server.projectiles.get(wrench).expect("up").center();
+        let zombie = server.npcs.spawn(ZOMBIE, (at.0, at.1)).expect("a slot");
+
+        server.tick_friendly_projectile_hits();
+        assert_eq!(
+            server.npcs.get(zombie).expect("there").immune_ticks,
+            7,
+            "the wrench's own cooldown, not the default ten"
+        );
+        assert_eq!(
+            server.projectiles.get(wrench).expect("up").ai[0],
+            1.0,
+            "and it is on its way back before its thirty ticks are up"
+        );
+    }
+
+    /// A townsperson's swing goes through the target's armour and then through its cooldown.
+    ///
+    /// `StrikeNPCNoInteraction` is `StrikeNPC(..., owner: 255)` (`NPC.cs:82012`), whose inner half
+    /// runs the damage through `CalculateDamageNPCsTake(Damage, defense)` (`:82068`) - this path
+    /// applied the face value - and the swing's own gate is `nPC2.immune[myPlayer] == 0`
+    /// (`:55635`), which this path did not have at all. State 15 has no `localAI[3]` gate and
+    /// swings against whatever is in the box on every tick it runs, so a Tax Collector's twelve
+    /// was landing twelve a tick for the whole state instead of once.
+    ///
+    /// Driven through the real `tick_npcs` - the melee application is inline there - with a floor
+    /// under both of them, because `try_combat` will not open a fight for an NPC that is falling.
+    #[test]
+    fn a_melee_swing_goes_through_armour_and_then_waits() {
+        /// `NPCID.TaxCollector`, `AttackType 3`.
+        const TAX_COLLECTOR: u16 = 441;
+        const FLOOR: i32 = 130;
+
+        let mut world = crate::world::World::empty(500, 300, "melee probe");
+        for x in 100..160 {
+            for y in FLOOR..(FLOOR + 4) {
+                world.set_tile(x, y, terrustia_proto::tile::Tile::block(1));
+            }
+        }
+        let mut server = GameServer::new(Config::default(), world);
+        let ground = FLOOR as f32 * crate::game::npc::TILE;
+        let collector = server
+            .npcs
+            .spawn(TAX_COLLECTOR, (2000.0, ground - 40.0))
+            .expect("a slot");
+        let zombie = server
+            .npcs
+            .spawn(ZOMBIE, (2010.0, ground - 40.0))
+            .expect("a slot");
+        let (was, defense) = {
+            let npc = server.npcs.get(zombie).expect("there");
+            (npc.life, npc.defense)
+        };
+        assert!(defense > 0, "the target has armour for this to go through");
+
+        // Long enough for the collector to land, roll its gate open and swing several times.
+        let (mut lost, mut first_blow, mut swung_for) = (0, 0, 0);
+        for _ in 0..600 {
+            server.tick_npcs();
+            let Some(npc) = server.npcs.get(zombie) else {
+                break;
+            };
+            lost = was - npc.life;
+            if first_blow == 0 && lost > 0 {
+                first_blow = lost;
+                // Keep going for the rest of the swing state. Stopping on the first landed blow
+                // is what let the cooldown gate be deleted with this test still green: state 15
+                // swings every tick it runs, so the ticks *after* the first are the ones that
+                // prove one blow is one blow.
+                swung_for = 1;
+            } else if first_blow > 0 {
+                swung_for += 1;
+                if swung_for > server.npcs.get(collector).map_or(0, |c| c.ai[1] as i32 + 4) {
+                    break;
+                }
+            }
+        }
+        assert!(first_blow > 0, "the collector never landed a swing at all");
+        assert_eq!(
+            lost, first_blow,
+            "the rest of the attack state must land nothing more"
+        );
+        let crate::game::ai::town_combat::AttackKind::Melee { damage, .. } =
+            crate::game::ai::town_combat::town_combat(TAX_COLLECTOR)
+                .expect("the Tax Collector fights")
+                .kind
+        else {
+            panic!("the Tax Collector is `AttackType 3`");
+        };
+        assert_eq!(
+            lost,
+            damage_taken(damage, defense, false),
+            "one blow, through armour - not one a tick and not at face value"
+        );
+        assert!(
+            lost < damage,
+            "and the armour really did take something off it"
+        );
     }
 }

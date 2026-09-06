@@ -402,14 +402,97 @@ stops killing the circle on sight. Seventeen neutralisations, all caught; one of
 only after fixing a test that passed because the Dryad happened to occupy slot zero, which is the
 value an unwritten `ai[1]` already holds.
 
-**15 types remain, across thirteen styles**: 45, 65, 98, 102 (2), 109, 112 (2), 135, 136, 149,
-157, 183, 186, 187. **Coverage is 65 of 80.** None of them falls. Ranked by how far a straight line
-is from what the style actually does, the next two are both town NPCs' and both are round trips:
-**109, the Mechanic's wrench** (`Projectile.cs:34652-34690`), which flies out for thirty ticks and
-then turns and comes home to her, dying when it arrives (ours never turns and leaves on a straight
-line); and **112, the Truffle's spore and the Dandelion seed** (`:34741-34900`), two unrelated
-bodies under one style number - the seed rides the wind toward a player and the spore is a drifting
-cloud.
+**The ranged half of "the town fights back" never delivered any damage, closed 2026-09-06, and it
+is the largest single thing this lane turned up.** `Projectile.Damage()` splits in two
+(`Projectile.cs:12502-12529`): `Damage_EVP` (hostile hits player) is behind `Main.netMode != 2` and
+is each client's, while `Damage_PVE` (projectile hits NPC) is behind `owner == Main.myPlayer` - and
+`Main.myPlayer` on a dedicated server is 255 (`Netplay.cs:250`), which is exactly the owner every
+`NewProjectile` in `AI_007_TownEntities` passes. **The server is the machine that lands a town
+NPC's shots, and nothing here did it.** Twenty-two of the twenty-eight combat-capable townsfolk are
+ranged; their projectiles were decided, aimed, launched, synced, flown and expired without ever
+being tested against a hitbox. The only two things that could reduce an NPC's life were a client's
+packet 28 and a town NPC's melee swing.
+
+**The test that was meant to cover it was reading a recycled NPC slot.**
+`every_newly_covered_town_npc_actually_fights` waited for a health drop on `n.index ==
+hostile.index` alone; a despawn frees that slot to the next natural spawn, and the test runs a live
+world for thousands of events, so it had been watching somebody else's health for a fixed target's.
+Adding `n.generation == hostile.generation` turns it red on the first NPC in its list against the
+old build, and it now passes in 38 seconds rather than 61 because the hits land instead of the
+event budget running out.
+
+`NPC.immune[255]` is now `Npc::immune_ticks`. Vanilla gives every NPC 256 hit cooldowns, one per
+player, and index 255 is the server's own; one number rather than an array because a server never
+simulates a player's weapon. **The melee half needed it too**: state 15 has no `localAI[3]` gate
+and swings against whatever is in its box on every tick it runs, and vanilla's only brake is
+`nPC2.immune[myPlayer] = (int)ai[1] + 2` (`NPC.cs:55639`) - so a Tax Collector's nine was landing
+nine a tick for the whole state. That path also skipped the target's armour entirely, where
+`StrikeNPCNoInteraction` is `StrikeNPC(..., 255)` and runs `CalculateDamageNPCsTake` at `:82068`.
+
+Four arms and one attack shape landed with it:
+
+- **Style 183, the Zoologist's claw** (`:43893-43907`): a fifth of its sideways speed each tick, no
+  fall, and the drag runs before the move - so twenty-four pixels a tick is **six pixels of travel**
+  and it dies at eighteen. Unarmed it crossed 430, which made the shortest-ranged attack in the
+  roster (`DangerDetectRange` 100, the smallest there is) one of the longest.
+- **Style 186, the Princess's weapon** (`:43454-43462`): sixty ticks. Everything else in the method
+  is drawing, and its table says 180.
+- **Style 112, the Truffle's spore** (`:34822-34865`): its velocity is overwritten every tick with a
+  vertical bob, so it does not travel at all.
+- **Style 109, the Mechanic's wrench** (`:34652-34690`), a boomerang: thirty ticks out, a
+  four-per-cent-a-tick turn home, gone within one tick's travel of her (which is why one never
+  reaches her sprite). It stops colliding the moment it turns, a wall on the way *out* turns it
+  rather than killing it (`:19677-19684`), and landing on something turns it too, with seven ticks
+  of cooldown rather than ten (`:14106-14113`). Ours flew out and kept going.
+- **`AttackKind::AtTarget`**: the Truffle's and the Princess's are not thrown at all - both are
+  rolled into a box on the enemy and spawned at rest (`NPC.cs:55499-55529`). This module's doc
+  called that "not worth the complexity" while "both still deal real damage on a real cooldown";
+  neither half was true. The size of the scatter box is the one thing still approximated, and says
+  so at its own field.
+
+Twenty-four neutralisations. Six survived the first pass and every one was a test bug rather than a
+pass: an arrow spent on its first target cannot prove a cooldown; `strike` refuses an invulnerable
+target on its own, so health alone cannot prove the `dontTakeDamage` filter; stopping on the first
+landed blow is exactly what a missing melee cooldown looks like; an emptied NPC slot proves only
+that a lookup failed, not that the type was checked; and one roll of a scatter box cannot tell the
+right size from one ten times too big.
+
+**11 types remain, across ten styles**: 45, 65, 98, 102 (2), 112, 135, 136, 149, 157, 187.
+**Coverage is 69 of 80**, counted by the audit tool rather than by hand. Style 112 counts as one of
+the eleven and not as closed: it is three unrelated bodies keyed on the type inside the arm,
+exactly as vanilla keys them, and only the Truffle's spore is transcribed - crediting the style
+would credit the Dandelion seed for the spore's arm.
+
+- **45, the Rain Nimbus (264), is already right** and should not be counted as a movement gap: its
+  branch (`:28486-28509`) sets a rotation and bounces off shimmer, and nothing else. Its only
+  divergence is a 300-tick fuse where the table says 120.
+- **Six of the ten are blocked on the same thing.** `Shot` carries no `ai` values, and 65 (the
+  sharknado bolt: a cosine bob at `ai[1] == 0`, a homing bolt above it), 187 (the shadow hand,
+  whose four variations are chosen by an `ai[0]` of 0/180/300/390 at launch), 102 (the jellyfish
+  and the nebula eye, which hover by the parent in `ai[1]` and then fire at a player) and 98 (the
+  cultist's shards, which converge on the point in `ai[0..1]`) all pick their whole behaviour from
+  what they are launched with. `boss/fishron.rs:390` already writes this down at its own launch
+  site. Ninety-eight `Shot` literals and one mechanical field.
+- **135, the Queen Slime's smash** (`:69740-69790`) and **157, the Deerclops ice spike**
+  (`:52268-52400`) need nothing plumbed and are the two cheapest left. The smash is nine ticks,
+  stationary, and **grows its own hitbox from 80 to 480 pixels**; the spike never touches its
+  velocity and dies at twenty, where ours is launched with 300.
+- **136, Betsy's flame breath** (`:69858-69910`) is welded to her and dies at 78, the deathray's
+  shape again. **149, the golf ball** is the only large one: `BallCollision.Step`
+  (`Terraria.Physics/BallCollision.cs:24-90`) plus per-tile friction from `TileGolfPhysics`.
+
+**A neighbouring audit this lane opened and did not close: the invented shot lifetimes.** Forty
+`Shot` literals carry a `time_left` that is not the projectile's own table value, plus nine copies
+of a `const SHOT_LIFETIME: u16 = 300`, one of which documents itself as "matching the other ported
+routines". The obvious reading - that all of them are inventions - is **wrong**, and checking
+before acting is the only reason this is not a list of forty new bugs: vanilla really does write
+`Main.projectile[n].timeLeft = 300;` at nineteen places in `NPC.cs`, always on the line after an
+NPC borrows a player's weapon (BallofFire, Bone, SpikyBall, Bomb, PurificationPowder, WaterBolt),
+whose tables all say 3600. So a flat 300 is vanilla's own number for a large part of the roster and
+an invention for the rest. The job is per-site: for each of ours, find vanilla's launch and check
+whether an override follows. Known wrong already, from this lane's reading: the Rain Nimbus (300
+against a table of 120 and no override), the Queen Slime's smash (600 against an arm that ends at
+9) and the Deerclops ice spike (300 against an arm that ends at 20).
 
 **The explosion is the other half of style 16 and is not modelled.** A bomb reaches the ground and
 expires; `Projectile.Kill`'s own switch widens the hitbox and breaks tiles, so a grenade lands and

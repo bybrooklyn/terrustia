@@ -668,6 +668,41 @@ fn try_combat<T: TileView>(
             }),
             ..TownUpdate::default()
         },
+        AttackKind::AtTarget {
+            projectile,
+            damage,
+            scatter,
+            tries,
+            ..
+        } => TownUpdate {
+            shot: Some(Shot {
+                projectile,
+                damage: town_combat::town_npc_damage(damage, world.conditions.expert),
+                // `while (num74 > 0 && WorldGen.SolidTile(...)) { num74--; <re-roll> }`
+                // (`NPC.cs:55505-55510` and `:55521-55525`): vanilla rolls a point, and keeps
+                // rolling while it is inside a wall, but gives up after a fixed number of tries
+                // and uses the last one regardless - so a target buried in stone still gets
+                // something, it is just inside the stone.
+                position: {
+                    let mut at = (hostile.center.0, hostile.center.1);
+                    for _ in 0..tries {
+                        at = (
+                            hostile.center.0 + rng.random_range(-scatter.0..scatter.0),
+                            hostile.center.1 + rng.random_range(-scatter.1..scatter.1),
+                        );
+                        let tile = world.tiles.tile((at.0 / TILE) as i32, (at.1 / TILE) as i32);
+                        if !(tile.is_active() && solid(tile.block)) {
+                            break;
+                        }
+                    }
+                    at
+                },
+                // No aim and no speed: both of these are `NewProjectile(..., 0f, 0f, ...)`.
+                velocity: (0.0, 0.0),
+                time_left: town_combat::shot_lifetime(npc.npc_type),
+            }),
+            ..TownUpdate::default()
+        },
         AttackKind::Melee {
             damage,
             knockback,
@@ -684,6 +719,10 @@ fn try_combat<T: TileView>(
                         damage: town_combat::town_npc_damage(damage, world.conditions.expert),
                         knockback,
                         direction: npc.direction,
+                        // `(int)ai[1] + 2` (`NPC.cs:55639`), read after this tick's decrement, as
+                        // vanilla's is: the swing gate is inside the same block that already did
+                        // `ai[1]--` above.
+                        immune_for: npc.ai[1] as i32 + 2,
                     }),
                     ..TownUpdate::default()
                 }
@@ -911,6 +950,90 @@ mod tests {
         let mut r = rng();
         let (result, _) = attack_within(&mut merchant, &w, &mut r, 20_000);
         assert_eq!(result.shot.expect("a shot").time_left, 0);
+    }
+
+    /// The Truffle's spore and the Princess's weapon appear *on* the enemy, at rest.
+    ///
+    /// `NPC.cs:55499-55529`. Both roll a point in a box around the target and spawn there with no
+    /// velocity; neither is thrown from the caster. Modelled as an aimed six-pixel shot before
+    /// this, which is the same thing right up until the projectiles get their arms - a style-112
+    /// spore overwrites its velocity every tick and so goes nowhere, and a spore that goes nowhere
+    /// from the Truffle's own hand never reaches anything.
+    #[test]
+    fn the_truffle_and_the_princess_put_their_shot_on_the_enemy() {
+        // Twenty attacks each rather than one, because a single roll cannot tell a box of the
+        // right size from one ten times too big - it just has to land near the middle once. The
+        // spread over twenty is what pins the size from both ends.
+        const ATTACKS: usize = 20;
+        for (npc_type, projectile, scatter) in [
+            (160u16, 590u16, (45.0f32, 100.0f32)),
+            (663, 950, (9.0, 20.0)),
+        ] {
+            let tiles = flat(0, 400);
+            let mut npc = stand_on(npc_type, 200);
+            let mut w = day(&tiles);
+            let target = (npc.center().0 + 300.0, npc.center().1);
+            w.hostile = Some(Target {
+                slot: 9,
+                center: target,
+                velocity: (0.0, 0.0),
+                alive: true,
+            });
+            let mut r = rng();
+            let (mut widest_x, mut widest_y) = (0.0f32, 0.0f32);
+            for _ in 0..ATTACKS {
+                let (result, _) = attack_within(&mut npc, &w, &mut r, 20_000);
+                let shot = result.shot.expect("both of these are ranged");
+                assert_eq!(shot.projectile, projectile, "npc {npc_type}");
+                assert_eq!(
+                    shot.velocity,
+                    (0.0, 0.0),
+                    "npc {npc_type}'s is `NewProjectile(..., 0f, 0f, ...)`"
+                );
+                let (dx, dy) = (shot.position.0 - target.0, shot.position.1 - target.1);
+                assert!(
+                    dx.abs() <= scatter.0 && dy.abs() <= scatter.1,
+                    "npc {npc_type} should sprout it on the enemy, not throw it: \
+                     {:?} off a target at {target:?}, box {scatter:?}",
+                    (dx, dy)
+                );
+                widest_x = widest_x.max(dx.abs());
+                widest_y = widest_y.max(dy.abs());
+            }
+            assert!(
+                widest_x > scatter.0 * 0.5 && widest_y > scatter.1 * 0.5,
+                "npc {npc_type}'s box should actually be used: widest {:?} of {scatter:?}",
+                (widest_x, widest_y)
+            );
+        }
+    }
+
+    /// A townsperson's swing carries the cooldown that makes it one blow per attack.
+    ///
+    /// `nPC2.immune[myPlayer] = (int)ai[1] + 2` (`NPC.cs:55639`). State 15 has no `localAI[3]`
+    /// gate and swings against whatever is in the box on every tick it runs, so without a cooldown
+    /// on the target a twelve-damage swing is twelve damage a tick for the whole state.
+    #[test]
+    fn a_melee_swing_carries_its_targets_cooldown() {
+        let tiles = flat(0, 400);
+        // The Tax Collector, `AttackType 3`.
+        let mut collector = stand_on(441, 200);
+        let mut w = day(&tiles);
+        w.hostile = Some(Target {
+            slot: 9,
+            center: (collector.center().0 + 20.0, collector.center().1),
+            velocity: (0.0, 0.0),
+            alive: true,
+        });
+        let mut r = rng();
+        let (result, _) = attack_within(&mut collector, &w, &mut r, 20_000);
+        let hit = result.melee.expect("a swing");
+        assert_eq!(
+            hit.immune_for,
+            collector.ai[1] as i32 + 2,
+            "the rest of the attack state plus two"
+        );
+        assert!(hit.immune_for > 2, "and the state has real time left on it");
     }
 
     /// A solid wall, floor to well above head height, at one tile column. Contiguous with no

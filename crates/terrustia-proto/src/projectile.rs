@@ -390,6 +390,22 @@ pub mod ids {
     /// velocity at all (`NPC.cs:55463-55469` sets no speed for `type == 20`), so it hangs where it
     /// was cast for its whole life.
     pub const DRYADS_WARD: u16 = 586;
+
+    /// `ProjectileID.MechanicWrench`, which is a boomerang and not a thrown tool.
+    ///
+    /// `aiStyle 109` (`Projectile.cs:34652-34690`) flies it out for thirty ticks and then turns it
+    /// round and brings it home to the Mechanic, whose index it carries in `ai[1]`
+    /// (`NPC.cs:55068`). It dies when it reaches her, or on a wall, which bounces it straight back
+    /// and starts the return early.
+    pub const MECHANIC_WRENCH: u16 = 582;
+
+    /// `ProjectileID.TruffleSpore`, which does not travel: `aiStyle 112`'s `type == 590` body
+    /// (`Projectile.cs:34822-34865`) overwrites its velocity every tick with a pure vertical bob.
+    pub const TRUFFLE_SPORE: u16 = 590;
+
+    /// `ProjectileID.PrincessWeapon`, whose `aiStyle 186` (`Projectile.cs:43454-43462`) is sixty
+    /// ticks of drawing and then `Kill`. Its table says 180.
+    pub const PRINCESS_WEAPON: u16 = 950;
 }
 
 #[cfg(test)]

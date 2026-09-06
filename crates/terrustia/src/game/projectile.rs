@@ -5,25 +5,27 @@
 //! decided to shoot has been emitting its aim and cadence for a while; this is what makes those
 //! decisions land.
 //!
-//! Fifteen behaviours are transcribed here, and ten more in `server::systems` (see below). This
-//! file used to say "a handful of behaviours cover everything the roster and the world's traps
-//! fire"; the count, when it was finally taken, was **43 of the 79 types something here can launch
-//! reaching no arm at all**. It is 15 of 80 now.
+//! Eighteen behaviours are transcribed here, and eleven more in `server::systems` (see below).
+//! This file used to say "a handful of behaviours cover everything the roster and the world's
+//! traps fire"; the count, when it was finally taken, was **43 of the 79 types something here can
+//! launch reaching no arm at all**. It is 11 of 80 now.
 //!
-//! The 15 left are not all straight lines, and saying so would be the same mistake again. Read
-//! against `Projectile.cs`: two of their styles genuinely never touch a velocity, twelve steer
-//! inline, and eleven delegate to an `AI_NNN_` method of their own. What they have in common is
-//! that none of them *falls*: they are lasers, deathrays, homing bolts and hovering clouds, and a
-//! straight line is a poorer approximation of them than it was of a thrown bone, not a free one.
-//! `TODO.md`'s C6 has the list, by style, with what each one does.
+//! The 11 left are not all straight lines, and saying so would be the same mistake again. Read
+//! against `Projectile.cs`: none of them *falls* - they are lasers, homing bolts, hovering clouds
+//! and shockwaves - so a straight line is a poorer approximation of them than it was of a thrown
+//! bone, not a free one. One of the eleven, the Rain Nimbus, is in fact **already right**: style
+//! 45's branch for it sets a rotation and nothing else. Six of the rest are blocked on the same
+//! thing, which is that `Shot` carries no `ai` values and their whole behaviour is chosen by what
+//! they are launched with. `TODO.md`'s C6 has the list, by style, with what each one does.
 //!
 //! **A style whose arm needs to see anything but tiles lives in `server::systems` instead**, and
 //! is no less transcribed for it: a projectile cannot search the player list, walk the NPC table
 //! or read the boss that launched it from inside its own tick. Styles 80 (the Saucer's missile),
-//! 84 (the Moon Lord's deathray), 85 (his brand), 111 (the Dryad's ward), 127/128 (the Sand
-//! Elemental's mark and tornado), 133 (the Dark Mage's sigils) and 171/180 (two of the Empress's)
-//! are all there, called from `tick_projectiles` before the movement below, in vanilla's own
-//! order.
+//! 84 (the Moon Lord's deathray), 85 (his brand), 109 (the Mechanic's wrench), 111 (the Dryad's
+//! ward), 127/128 (the Sand Elemental's mark and tornado), 133 (the Dark Mage's sigils) and
+//! 171/180 (two of the Empress's) are all there, called from `tick_projectiles` before the
+//! movement below, in vanilla's own order. So is `tick_friendly_projectile_hits`, which is
+//! `Damage_PVE` and runs after the movement, where `Projectile.Update` puts it.
 //!
 //! * **Style 1**, the arc: it flies straight for a quarter of a second and then starts falling, a
 //!   tenth of a pixel a tick, capped at sixteen. Feathers, stingers, snowballs, skulls and darts.
@@ -61,6 +63,16 @@
 //!   which is the thing that burns.
 //! * **Style 126**, the geyser: it rises out of its vent until the way ahead is clear, then hangs
 //!   there for a second. If it never gets clear it dies inside the wall.
+//! * **Style 183**, the Zoologist's claw: it keeps a fifth of its sideways speed each tick and
+//!   never falls, and the drag runs before the move - so a swipe thrown at twenty-four pixels a
+//!   tick travels six pixels in total and then dies at eighteen ticks. It is a claw at arm's
+//!   length, not a projectile; unarmed it crossed four hundred and thirty.
+//! * **Style 186**, the Princess's weapon: sixty ticks and then gone. Everything else in its
+//!   method is drawing, and its own table says 180, so nothing but the arm knows the real number.
+//! * **Style 112**, the Truffle's spore: it does not travel. Its velocity is overwritten every
+//!   tick with a pure vertical bob, a sine over three seconds, so it hangs where the Truffle put
+//!   it. Style 112 is three unrelated bodies keyed on the type inside the arm, exactly as vanilla
+//!   keys them, and the Dandelion seed's is not transcribed.
 //!
 //! Style 25 was the one doing real harm by its absence. A Boulder Statue launches its boulder *at
 //! rest*, so with no arm to give it gravity it never moved at all: a wired statue put a stationary
@@ -94,6 +106,16 @@ const SCYTHE_UNTIL: f32 = 100.0;
 const SCYTHE_ACCEL: f32 = 1.06;
 /// ...and how fast it spins.
 const SCYTHE_SPIN: f32 = 0.8;
+
+/// What a Zoologist's claw keeps of its sideways speed each tick (`velocity.X *= 0.2f`).
+const ZOOLOGIST_DRAG: f32 = 0.2;
+/// How long the Princess's weapon lasts, which is not what its table says.
+const PRINCESS_WEAPON_LIFE: f32 = 60.0;
+/// `ProjectileID.TruffleSpore`, the one style-112 type this server can launch.
+const TRUFFLE_SPORE: u16 = 590;
+/// Its bob: a full sine over three seconds, fifteen hundredths of a pixel at the extremes.
+const SPORE_PERIOD: f32 = 180.0;
+const SPORE_BOB: f32 = 0.15;
 
 /// One projectile in flight.
 #[derive(Debug, Clone, Copy)]
@@ -295,6 +317,10 @@ const SANDNADO_SLENDER: f32 = 0.2 * 0.65;
 /// and lives in `systems::tick_saucer_missiles`; what is read here is the tile-collision flag that
 /// phase turns on.
 const SAUCER_MISSILE_STYLE: i32 = 80;
+/// The Mechanic's wrench (`Projectile.cs:34652-34690`). Its return leg needs the NPC table and
+/// lives in `systems::tick_mechanic_wrenches`; what is read here is the tile collision, which it
+/// has on the way out and not on the way home, and the bounce that turns it round.
+const WRENCH_STYLE: i32 = 109;
 /// A dropped present (`Projectile.cs:29337-29366`): it drifts for half a second, tips over, and
 /// then settles into a slow fall it never exceeds.
 const PRESENT_DRIFT: f32 = 30.0;
@@ -584,6 +610,45 @@ pub fn step(
                     projectile.velocity.0 *= ALE_DRAG;
                 }
             }
+            183 => {
+                // The Zoologist's claw (`Projectile.cs:43893-43907`, `AI_183_ZoologistStrike`).
+                // Four lines, three of them facing, and the fourth is the whole point: it sheds
+                // four fifths of its sideways speed every tick and never falls, so a swipe thrown
+                // at twenty-four pixels a tick has travelled about thirty when it stops and dies at
+                // eighteen. Without this it crossed four hundred and thirty pixels, which turned
+                // the shortest-ranged attack in the roster (`DangerDetectRange[633]` is 100, the
+                // smallest there is) into one of the longest.
+                projectile.velocity.0 *= ZOOLOGIST_DRAG;
+                projectile.velocity.1 = 0.0;
+            }
+            186 => {
+                // The Princess's weapon (`Projectile.cs:43454-43462`, `AI_186_PrincessWeapon`).
+                // Everything in that method except its first four lines is drawing - opacity, an
+                // eased scale envelope, four kinds of dust and a particle burst - and the four that
+                // are not say it lives sixty ticks. Its own table says 180, so nothing but the arm
+                // knows the real number.
+                projectile.ai[0] += 1.0;
+                if projectile.ai[0] >= PRINCESS_WEAPON_LIFE {
+                    return Outcome::Spent;
+                }
+            }
+            112 if projectile.projectile_type == TRUFFLE_SPORE => {
+                // The Truffle's spore (`Projectile.cs:34822-34865`). Style 112 is three unrelated
+                // bodies under one number, keyed on the type inside the arm exactly as vanilla
+                // keys them, and this is the only one the server puts in the air today: a spore
+                // that **does not travel at all**. Its velocity is overwritten every tick with a
+                // pure vertical bob, a sine over three seconds at fifteen hundredths of a pixel,
+                // so it hangs where the Truffle put it for its whole nine hundred ticks and
+                // anything standing in it keeps taking the forty.
+                projectile.velocity = (
+                    0.0,
+                    (std::f32::consts::TAU * projectile.ai[0] / SPORE_PERIOD).sin() * SPORE_BOB,
+                );
+                projectile.ai[0] += 1.0;
+                if projectile.ai[0] >= SPORE_PERIOD {
+                    projectile.ai[0] = 0.0;
+                }
+            }
             10 => {
                 // A lob: it falls from the moment it leaves, and slows as it goes.
                 projectile.velocity.1 = (projectile.velocity.1 + 0.41).min(TERMINAL);
@@ -672,22 +737,39 @@ pub fn step(
             projectile.position.0 + projectile.velocity.0,
             projectile.position.1 + projectile.velocity.1,
         );
-        // Two styles change their own `tileCollide` mid-flight. Vanilla flips the projectile's own
-        // field; ours lives in the shared stats table, so the condition is read here instead.
+        // Three styles change their own `tileCollide` mid-flight. Vanilla flips the projectile's
+        // own field; ours lives in the shared stats table, so the condition is read here instead.
         //
         // A falling star does not collide until it has been clear of terrain once, which its arm
         // latches into `ai[1]` above (`Projectile.cs:24170-24176`). A Saucer missile is the other
         // way round: it starts with collision *off* so it can leave the hull it was fired from, and
         // `tileCollide = true` is the first thing its homing phase does (`:31473`). That phase is
         // driven from `systems::tick_saucer_missiles`, which is why only the flag it sets is read
-        // here.
+        // here. The Mechanic's wrench is the Saucer's shape again: it collides on the way out and
+        // stops on the way home (`:34676`), so it cannot be stopped by the wall it is coming back
+        // through.
         let collides = match projectile.stats.ai_style {
             STAR_STYLE => projectile.stats.tile_collide && projectile.ai[1] != 0.0,
             SAUCER_MISSILE_STYLE => projectile.ai[0] == 1.0,
+            WRENCH_STYLE => projectile.stats.tile_collide && projectile.ai[0] == 0.0,
             _ => projectile.stats.tile_collide,
         };
         if collides {
-            if projectile.stats.ai_style == 14 {
+            if projectile.stats.ai_style == WRENCH_STYLE {
+                // A boomerang that meets a wall does not stop and does not die: it turns round
+                // there and starts its return early (`Projectile.cs:19677-19684`, the shared
+                // `aiStyle 3 || 13 || 69 || 109` collision block). `ai[0] = 1f` is the switch and
+                // `velocity = -lastVelocity` is the turn, on both axes at once rather than per
+                // axis - so a wrench that clips a floor comes back the way it went out rather than
+                // skidding along it.
+                if hits_terrain(tiles, next, size) {
+                    projectile.ai[0] = 1.0;
+                    projectile.velocity = (-projectile.velocity.0, -projectile.velocity.1);
+                    projectile.dirty = true;
+                } else {
+                    projectile.position = next;
+                }
+            } else if projectile.stats.ai_style == 14 {
                 // A rolling ball bounces off what it hits instead of dying on it, and each axis is
                 // settled on its own: a ball that lands on a floor keeps travelling along it, which
                 // is why a spiky ball trap fills a corridor rather than a doorway. Rolling balls

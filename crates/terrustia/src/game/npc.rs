@@ -252,6 +252,17 @@ pub struct Npc {
     /// NPC's position and health, this sends its buff list, and a burning enemy standing still
     /// needs only the second.
     pub buffs_dirty: bool,
+    /// Ticks before this NPC can be hit *by the server* again. `NPC.immune[255]`.
+    ///
+    /// Vanilla gives every NPC a 256-wide array of hit cooldowns, one per player, and index 255 is
+    /// the server's own: `Main.myPlayer` is 255 on a dedicated server (`Netplay.cs:250`), so every
+    /// hit the server originates - a town NPC's projectile and a town NPC's melee swing, which are
+    /// the only two there are - checks and sets this slot. The other 255 are the clients' and
+    /// arrive as packet 28, where the client has already applied its own.
+    ///
+    /// One number rather than an array because a server only ever needs its own: nothing here
+    /// simulates a player's weapon. It counts down once per NPC update (`NPC.cs:91564-91567`).
+    pub immune_ticks: i32,
     /// The personal name a town NPC, pet or slime carries on top of its type.
     ///
     /// Empty for everything else. A client asks for this the moment the NPC comes into view and
@@ -351,6 +362,7 @@ impl Npc {
             hit_by_player: false,
             buffs: super::buffs::Buffs::new(),
             buffs_dirty: false,
+            immune_ticks: 0,
             net_spam: 0,
             net_stream: 0,
             given_name: String::new(),
