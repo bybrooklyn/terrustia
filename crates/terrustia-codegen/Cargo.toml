@@ -16,6 +16,12 @@ version = "0.0.1"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 publish = false
+# Which binary a bare `cargo run -p terrustia-codegen -- <table>` means. Without it, every line of
+# `just regen` exited 101 with "could not determine which binary to run" from the day the
+# `deadwrite` lint was added as a second binary (2026-08-31) until this was noticed - so the one
+# documented way to change a generated table did not run at all, while rule 7 went on telling
+# people it was the only way. `deadwrite`'s own recipe names `--bin deadwrite` and is unaffected.
+default-run = "codegen"
 
 [[bin]]
 name = "codegen"

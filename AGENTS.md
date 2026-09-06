@@ -49,12 +49,19 @@ Recipes live in the `justfile`; each is a thin wrapper over `cargo`, so plain `c
 - `just soak [SECONDS]` runs a real server with three real clients (the CI soak).
 - `just fuzz [TARGET] [SECONDS]` fuzzes a decoder target (needs nightly + `cargo-fuzz`).
 - `just regen` regenerates every data table from a decompiled tree (dev-only; see below).
-- `just check-data` is the qualification-time data pass, run locally and never in CI, because four of
-  its five parts need a decompiled tree that can never ship to a hosted runner. It is `just fuzz`'s
-  neighbour, not `just check`'s: run it before a release candidate.
-  - `check-drops` and `check-recipes` compare the committed tables against the game's own source.
+- `just check-data` is the qualification-time data pass, run locally and never in CI, because eight
+  of its nine parts need a decompiled tree that can never ship to a hosted runner (`check-dead-writes`
+  is the exception). It is `just fuzz`'s neighbour, not `just check`'s: run it before a release
+  candidate.
+  - `check-drops` and `check-recipes` compare the committed tables against the game's own source,
+    and `check-npc-data`, `check-placed-items` and `check-tile-object` do the same for the three
+    tables that are not plain codegen output.
+  - `check-citations` is a report, not a gate, and sits outside the `check-data` chain: it asks
+    whether the vanilla lines a citation names actually contain the numbers written beside it,
+    which is the question `check-parity` explicitly does not ask.
   - `check-parity` re-checks every vanilla citation in `crates/*/src` against the tree. Rule 2 below
-    makes every transcription cite its source, so those ~2000 `NPC.cs:12345` references are data;
+    makes every transcription cite its source, so those thousands of `NPC.cs:12345` references are
+    data (`just check-parity` prints the current count; hard-coding one here only ages);
     `docs/parity-index.tsv` is derived from them and keys each one by a hash of the cited vanilla
     lines and a hash of our own item's body, so a "checked against the game" claim expires on its
     own and the failure says which side moved. It never judges whether a transcription is *correct*.
@@ -129,7 +136,10 @@ built.
    `just regen` from a decompiled tree and are checked in only so an ordinary build needs nothing but
    Rust: `recipes.rs`, `npc_drops.rs`, `projectile_data.rs`, `banners.rs`, `buffs.rs`, `angler.rs`,
    `shimmer.rs`, `hurt_tiles.rs`, `town_names.rs`, `travel_shop.rs`, `tile_death.rs`,
-   `net_variants.rs`, `tile_object.rs` (all in `terrustia-proto/src`).
+   `net_variants.rs`, `golf_physics.rs`, `tile_object.rs` (all in `terrustia-proto/src`).
+   `golf_physics.rs` was missing from this list until 2026-09-06 while carrying "Do not edit by
+   hand" in its own header, which is the one way a generated file gets hand-edited by someone
+   following the rules.
    To change one, change the generator and rerun `just regen`, then review the diff before committing.
    Their size is fine; they are excluded from the file-splitting refactor in `TODO.md`.
    `tile_object.rs` is the odd one: its generator emits the file's hand-written half (the struct,
@@ -156,13 +166,15 @@ These apply to every agent, tool-agnostically.
 
 ## Verifying against the real game
 
-Correctness here is proven against Terraria itself, not only against our own code. The
-`terrustia-client` examples are the tools: `probe` dumps and compares the packet sequence against a
-real `TerrariaServer`; `conform`/`roundtrip_wld` check decoding and `.wld` round-trips at the byte
-level; `verify` joins, spawns things, and confirms enemies move, shoot, hurt, and drop loot;
-`stress`/`crowd`/`load` hold a full world while the server reports per-phase tick costs; `bot` joins
-and reports for comparison against both servers; `bestiary` walks all 691 NPC types over the wire;
-`fuzz` throws malformed packets at a running server. The web panel is verified in a real browser with
+Correctness here is proven against Terraria itself, not only against our own code. The examples are
+the tools, and they are split across both crates, so each needs its `-p`: in `terrustia-client`,
+`conform` re-encodes a real server's own bytes and `verify` joins, spawns things, and confirms
+enemies move, shoot, hurt and drop loot, while `load` and `soak` hold a world open and `playthrough`
+walks the loot spine boss by boss to the Moon Lord. In `terrustia`, `probe` dumps and compares the
+packet sequence against a real `TerrariaServer`, `roundtrip_wld` checks `.wld` round-trips at the
+byte level, `stress`/`crowd` hold a full world while the server reports per-phase tick costs,
+`bestiary` walks all 691 NPC types over the wire, and `fuzz` throws malformed packets at a running
+server. The web panel is verified in a real browser with
 Playwright. When you fix a bug, add a test that fails against the bug first, then passes.
 
 ## Where to look
