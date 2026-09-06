@@ -519,8 +519,30 @@ there for the whole three seconds while the shards converge on him. Ours raises 
 to converge on. That is a real ordering divergence in the ritual and worth its own fix; the shards
 are `damage: 0`, so reordering a boss's arrival for a visual is not this lane's trade.
 
-**8 types remain, across seven styles**: 45, 98, 102 (2), 112, 136, 149, 187.
-**Coverage is 72 of 80**, counted by the audit tool rather than by hand. Style 112 counts as one of
+**Style 187, Deerclops's shadow hands, closed the same day and was the first thing `Shot::ai` paid
+for.** `AI_187_ShadowHand` (`Projectile.cs:43274-43377`) is four routines under one number, and
+**the arm does not choose between them** - the band `ai[0]` starts in does, and
+`RandomizeInsanityShadowFor` (`:43179-43272`) picks one at the launch site along with where the
+hand appears and how fast. A hand launched with nothing runs the first, which is exactly what all
+six of a wave did. The four: drift and slow over 180 ticks; swing around a pivot seventy pixels to
+one side over 120, placed on the circle rather than steered onto it; lunge along a fixed heading
+over 90, fast out of the dark and eight times faster through you; and arc over 90 at a constant
+turn. Each ends one tick short of its own band.
+
+Two narrowings, both from carrying one target rather than 255 players: vanilla re-rolls the
+placement up to eight times to avoid landing on *another* player and steps to the next routine each
+time it does, and with one target there is nobody else to land on. The hitbox offset and the alpha
+gate on `Damage_GetHitbox` (`:15506-15512`) are not modelled either.
+
+Twelve neutralisations, all caught. One survived at first and the label was the giveaway: the
+drift's launch speed is *derived* (`num3 / (num4 + 10)`, and `num4` is the one local that gets a
+`+= 10f` on that arm alone), so it was the only one of the four a wrong constant could move without
+moving anything the placement test could see. Two of the file's own tests also had to be rewritten
+rather than adjusted: both asserted a flat distance band, which is what our invented placement
+produced and none of vanilla's four.
+
+**7 types remain, across six styles**: 45, 98, 102 (2), 112, 136, 149.
+**Coverage is 73 of 80**, counted by the audit tool rather than by hand. Style 112 counts as one of
 the eight and not as closed: it is three unrelated bodies keyed on the type inside the arm,
 exactly as vanilla keys them, and only the Truffle's spore is transcribed - crediting the style
 would credit the Dandelion seed for the spore's arm.
@@ -528,12 +550,9 @@ would credit the Dandelion seed for the spore's arm.
 - **45, the Rain Nimbus (264), is already right** and should not be counted as a movement gap: its
   branch (`:28486-28509`) sets a rotation and bounces off shimmer, and nothing else. Its only
   divergence is a 300-tick fuse where the table says 120.
-- **Three still need what `Shot::ai` now provides, and are the next ones up.** 187, the shadow
-  hand, whose four variations are chosen by an `ai[0]` of 0, 180, 300 or 390 set by
-  `Projectile.RandomizeInsanityShadowFor` (`Projectile.cs:43179-43270`) at the launch site rather
-  than by the arm; and 102, the Stardust Jellyfish and the Nebula Eye, which hover by the parent
-  named in `ai[1]` for 210 and 180 ticks and then fire at a player (the Eye spawning a second
-  projectile and starting over rather than leaving).
+- **102, the Stardust Jellyfish and the Nebula Eye**, is the last one `Shot::ai` unblocks: both
+  hover by the parent named in `ai[1]` for 210 and 180 ticks and then fire at a player, the Eye
+  spawning a second projectile and starting over rather than leaving.
 - **136, Betsy's flame breath** (`:69858-69910`) is welded to her and dies at 78, the deathray's
   shape again. **149, the golf ball** is the only large one: `BallCollision.Step`
   (`Terraria.Physics/BallCollision.cs:24-90`) plus per-tile friction from `TileGolfPhysics`.

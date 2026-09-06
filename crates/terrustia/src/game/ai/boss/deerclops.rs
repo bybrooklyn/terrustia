@@ -34,6 +34,7 @@ use terrustia_proto::tile_solid::solid;
 
 use crate::game::ai::{Shot, World};
 use crate::game::npc::{Npc, TILE, TileView};
+use crate::game::npc_ai::Target;
 
 /// What a tick of the fight produced.
 #[derive(Debug, Default)]
@@ -81,6 +82,102 @@ fn spikes<T: TileView>(npc: &Npc, world: &World<'_, T>, direction: i8, out: &mut
             time_left: 0,
             ai: [0.0; 3],
         });
+    }
+}
+
+/// Where a shadow hand comes out of the dark, how fast, and which of style 187's four routines it
+/// runs. `Projectile.RandomizeInsanityShadowFor` (`Projectile.cs:43179-43272`), hostile arm.
+///
+/// The whole of the shadow-hand attack is decided here rather than in the projectile: `ai[0]` is
+/// the band the arm reads to pick a routine (0 drift, 180 swing, 300 lunge, 390 arc) and `ai[1]`
+/// is that routine's one parameter. A hand launched without them drifts, which is what all six of
+/// a wave used to do.
+///
+/// Two narrowings, both because this server carries one target rather than 255 players. Vanilla
+/// rolls the placement up to eight times, rejecting any that lands on top of *another* player and
+/// stepping to the next routine each time it does (`:43250-43270`); with one target there is
+/// nobody else to land on, so the first roll stands. `num` - the side a drifting hand comes from -
+/// is flipped away from the direction the target is *moving*, and that is read here off the
+/// target's own velocity exactly as vanilla reads it.
+fn shadow_hand(target: &Target, rng: &mut SmallRng) -> ((f32, f32), (f32, f32), f32, f32) {
+    use std::f32::consts::{FRAC_PI_2, PI, TAU};
+
+    /// `num5`: how far ahead of the target a drifting hand is aimed, and `num4 + 10 + 10` for the
+    /// speed that covers the ring in that many ticks. The `+= 10f` fires on this arm alone.
+    const LEAD: f32 = 30.0;
+    const DRIFT_OVER: f32 = 50.0;
+    /// The arc's backwards walk: sixty steps of eight pixels, turning by up to a quarter-turn
+    /// spread over all of them.
+    const ARC_STEPS: i32 = 60;
+    const ARC_STEP: f32 = 8.0;
+    /// What a swinging or lunging hand is already moving at when it appears.
+    const ON_RING: f32 = 4.0;
+
+    let mut side = if rng.random::<bool>() { 1.0f32 } else { -1.0 };
+    if target.velocity.0 * side > 0.0 {
+        side = -side;
+    }
+    // On the ring, pointed inward: the swing and the lunge share a placement and differ only in
+    // what they do with it afterwards.
+    let on_ring = |rng: &mut SmallRng| {
+        let angle = TAU * rng.random::<f32>();
+        let (sin, cos) = angle.sin_cos();
+        (
+            (
+                target.center.0 - cos * DEER_PASSIVE_SHADOW_RING,
+                target.center.1 - sin * DEER_PASSIVE_SHADOW_RING,
+            ),
+            (cos * ON_RING, sin * ON_RING),
+            angle,
+        )
+    };
+    match rng.random_range(0..4) {
+        1 => {
+            let (at, velocity, angle) = on_ring(rng);
+            // Vanilla passes `num10 - PI/2` and `AI_187`'s swing never reads it: the swing works
+            // off `rotation`, which a fresh projectile starts at zero. Carried anyway, because a
+            // value the game sends is a value a client may read.
+            (at, velocity, 180.0, angle - FRAC_PI_2)
+        }
+        2 => {
+            let (at, velocity, angle) = on_ring(rng);
+            (at, velocity, 300.0, angle)
+        }
+        // The arc. Vanilla walks the curve *backwards* from where the target will be in sixty
+        // ticks, one eight-pixel step at a time and rotating as it goes, so the hand starts
+        // wherever that walk ends up and the turn it is handed is the one that brings it back.
+        3 => {
+            let heading = TAU * rng.random::<f32>();
+            let turn = FRAC_PI_2 / ARC_STEPS as f32 * (rng.random::<f32>() * 2.0 - 1.0);
+            let mut at = (
+                target.center.0 + target.velocity.0 * ARC_STEPS as f32,
+                target.center.1 + target.velocity.1 * ARC_STEPS as f32,
+            );
+            let mut step = (heading.cos() * ARC_STEP, heading.sin() * ARC_STEP);
+            let (sin, cos) = (-turn).sin_cos();
+            for _ in 0..ARC_STEPS {
+                at = (at.0 - step.0, at.1 - step.1);
+                step = (step.0 * cos - step.1 * sin, step.0 * sin + step.1 * cos);
+            }
+            (at, step, 390.0, turn)
+        }
+        // The drift, which is vanilla's `default:` arm: straight in from one side, aimed a second
+        // ahead of where the target is going, at the speed that covers the ring in fifty ticks.
+        _ => {
+            let jitter = (rng.random::<f32>() * 2.0 - 1.0) * PI * 0.125;
+            let (sin, cos) = jitter.sin_cos();
+            let out = -side * DEER_PASSIVE_SHADOW_RING;
+            let speed = side * DEER_PASSIVE_SHADOW_RING / DRIFT_OVER;
+            (
+                (
+                    target.center.0 + target.velocity.0 * LEAD + out * cos,
+                    target.center.1 + target.velocity.1 * LEAD + out * sin,
+                ),
+                (speed * cos, speed * sin),
+                0.0,
+                0.0,
+            )
+        }
     }
 }
 
@@ -219,19 +316,20 @@ pub fn update<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallR
                 == wave % DEER_PASSIVE_SHADOW_ROTATION;
             let reach = (target.center.0 - bx).hypot(target.center.1 - by);
             if in_rotation && reach <= DEER_PASSIVE_SHADOW_RANGE {
-                // One hand out of the dark around the target, at the two hundred pixels
-                // `RandomizeInsanityShadowFor` places a hostile one at (`Projectile.cs:43187`).
-                let angle = rng.random::<f32>() * std::f32::consts::TAU;
+                // One hand out of the dark around the target, placed and pointed by
+                // [`shadow_hand`] - which is also what decides which of style 187's four routines
+                // it runs. This used to roll its own angle and send the hand straight at the
+                // target, which is one of the four and only by accident.
+                let (position, velocity, ai0, ai1) = shadow_hand(&target, rng);
                 out.shots.push(Shot {
                     projectile: DEER_SHADOW_HAND,
                     damage: DEER_SHADOW_DAMAGE_PASSIVE,
-                    position: (
-                        target.center.0 + angle.cos() * DEER_PASSIVE_SHADOW_RING,
-                        target.center.1 + angle.sin() * DEER_PASSIVE_SHADOW_RING,
-                    ),
-                    velocity: (-angle.cos() * 4.0, -angle.sin() * 4.0),
-                    time_left: 300,
-                    ai: [0.0; 3],
+                    position,
+                    velocity,
+                    // Zero: the arm ends each hand one tick short of its own band, so a lifetime
+                    // here could only ever cut a routine off partway.
+                    time_left: 0,
+                    ai: [ai0, ai1, 0.0],
                 });
             }
         }
@@ -364,19 +462,17 @@ pub fn update<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallR
             && let Some(target) = world.target
         {
             for _ in 0..DEER_SHADOW_HANDS_COUNT {
-                // They come out of the dark around whoever it is looking at, not out of Deerclops.
-                let angle = rng.random::<f32>() * std::f32::consts::TAU;
-                let radius = 300.0 + rng.random::<f32>() * 200.0;
+                // They come out of the dark around whoever it is looking at, not out of Deerclops
+                // - and each rolls its own routine, so a wave of six is a mix of drifts, swings,
+                // lunges and arcs rather than six of the same thing thrown off a ring.
+                let (position, velocity, ai0, ai1) = shadow_hand(&target, rng);
                 out.shots.push(Shot {
                     projectile: DEER_SHADOW_HAND,
                     damage: DEER_SHADOW_DAMAGE,
-                    position: (
-                        target.center.0 + angle.cos() * radius,
-                        target.center.1 + angle.sin() * radius,
-                    ),
-                    velocity: (-angle.cos() * 4.0, -angle.sin() * 4.0),
-                    time_left: 300,
-                    ai: [0.0; 3],
+                    position,
+                    velocity,
+                    time_left: 0,
+                    ai: [ai0, ai1, 0.0],
                 });
             }
         }
@@ -623,6 +719,30 @@ mod tests {
         assert!(spread > 0.5, "the chunks fan out, got spread {spread}");
     }
 
+    /// Where `RandomizeInsanityShadowFor` puts a hand and how fast it leaves, given the band it
+    /// rolled.
+    ///
+    /// Three of the four routines place it exactly on the two-hundred-pixel ring and start it at
+    /// four; the arc is the exception on both counts, because vanilla walks it backwards from
+    /// where the target will be in a second, sixty eight-pixel steps at a time - so it starts
+    /// anywhere up to that path length away, moving at the eight those steps are long.
+    ///
+    /// The speed is checked as well as the place because the drift's is *derived*
+    /// (`num3 / (num4 + 10)`, and `num4` is the one local that gets a `+= 10f` on this arm alone),
+    /// so it is the only one of the four that a wrong constant can move without moving anything
+    /// this can otherwise see.
+    fn placed_right(shot: &Shot, around: (f32, f32)) -> bool {
+        let away = (shot.position.0 - around.0).hypot(shot.position.1 - around.1);
+        let speed = shot.velocity.0.hypot(shot.velocity.1);
+        match shot.ai[0] {
+            b if b == 0.0 || b == 180.0 || b == 300.0 => {
+                (away - DEER_PASSIVE_SHADOW_RING).abs() < 1.0 && (speed - 4.0).abs() < 0.01
+            }
+            390.0 => away <= 60.0 * 8.0 + 1.0 && (speed - 8.0).abs() < 0.01,
+            _ => false,
+        }
+    }
+
     #[test]
     fn the_shadow_hands_come_out_of_the_dark_around_you() {
         let tiles = snowfield();
@@ -636,13 +756,45 @@ mod tests {
         }
         assert_eq!(thrown.len(), DEER_SHADOW_HANDS_COUNT);
         assert!(thrown.iter().all(|s| s.projectile == DEER_SHADOW_HAND));
+        // Each hand is placed by the routine it rolled, not on one ring: this used to assert a
+        // flat 250-to-600 band, which is what our own invented placement produced and none of
+        // vanilla's four.
         assert!(
-            thrown.iter().all(|s| {
-                let d = (s.position.0 - player.center.0).hypot(s.position.1 - player.center.1);
-                (250.0..600.0).contains(&d)
-            }),
-            "they should ring the player"
+            thrown.iter().all(|s| placed_right(s, player.center)),
+            "each hand should be placed the way its own band says: {:?}",
+            thrown
+                .iter()
+                .map(|s| (s.ai[0], s.position))
+                .collect::<Vec<_>>()
         );
+    }
+
+    /// Every one of style 187's four routines really is rolled, and the arm knows all four bands.
+    ///
+    /// `RandomizeInsanityShadowFor` picks `Main.rand.Next(4)` and writes the band into `ai[0]`
+    /// (`Projectile.cs:43186`, `:43211`/`:43219`/`:43226`/`:43245`). A hand with no band drifts,
+    /// which is what all six of a wave did before `Shot` could carry one.
+    #[test]
+    fn a_wave_of_hands_is_a_mix_of_all_four_routines() {
+        let tiles = snowfield();
+        let player = player_at(200.0 * TILE + 400.0, 299.0 * TILE);
+        let t = Some(player);
+        let mut bands = std::collections::HashSet::new();
+        // Six hands a wave is not enough to see all four reliably; several waves is.
+        for seed in 0..12u64 {
+            let mut d = deerclops(200);
+            d.ai[0] = DEER_SHADOW_HANDS;
+            let mut r = SmallRng::seed_from_u64(seed);
+            for _ in 0..(DEER_SHADOW_TICKS as i32) {
+                for s in update(&mut d, &tundra(&tiles, t), &mut r).shots {
+                    assert!(placed_right(&s, player.center), "band {}", s.ai[0]);
+                    bands.insert(s.ai[0].to_bits());
+                }
+            }
+        }
+        let mut seen: Vec<f32> = bands.into_iter().map(f32::from_bits).collect();
+        seen.sort_by(f32::total_cmp);
+        assert_eq!(seen, vec![0.0, 180.0, 300.0, 390.0]);
     }
 
     /// DEER-1: in Expert Mode a passive rain of shadow hands runs throughout the fight, apart from
@@ -704,10 +856,11 @@ mod tests {
 
         let (near, at) = hands(400.0);
         assert_eq!(near.len(), 1, "one hand a cycle, not three");
-        let reach = (near[0].position.0 - at.0).hypot(near[0].position.1 - at.1);
         assert!(
-            (reach - DEER_PASSIVE_SHADOW_RING).abs() < 1.0,
-            "it comes up two hundred pixels out, got {reach}"
+            placed_right(&near[0], at),
+            "it comes up where its own routine puts it: band {} at {:?}, player at {at:?}",
+            near[0].ai[0],
+            near[0].position
         );
 
         assert!(

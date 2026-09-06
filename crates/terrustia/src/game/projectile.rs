@@ -5,12 +5,12 @@
 //! decided to shoot has been emitting its aim and cadence for a while; this is what makes those
 //! decisions land.
 //!
-//! Twenty-one behaviours are transcribed here, and twelve more in `server::systems` (see below).
+//! Twenty-two behaviours are transcribed here, and twelve more in `server::systems` (see below).
 //! This file used to say "a handful of behaviours cover everything the roster and the world's
 //! traps fire"; the count, when it was finally taken, was **43 of the 79 types something here can
-//! launch reaching no arm at all**. It is 8 of 80 now.
+//! launch reaching no arm at all**. It is 7 of 80 now.
 //!
-//! The 8 left are not all straight lines, and saying so would be the same mistake again. Read
+//! The 7 left are not all straight lines, and saying so would be the same mistake again. Read
 //! against `Projectile.cs`: none of them *falls* - they are hovering clouds, shockwaves and
 //! convergences - so a straight line is a poorer approximation of them than it was of a thrown
 //! bone, not a free one. One of the eight, the Rain Nimbus, is in fact **already right**: style
@@ -79,6 +79,9 @@
 //!   without it a boss's shockwave was a thirty-pixel box you could stand beside.
 //! * **Style 157**, the Deerclops ice spike: it never touches its velocity, because what it is
 //!   launched with is a facing rather than a speed. Twenty ticks and then gone.
+//! * **Style 187**, Deerclops's shadow hands: four routines under one number - drift, swing,
+//!   lunge, arc - and the arm does not choose between them. The band `ai[0]` starts in does, and
+//!   the launch site picks it. A hand with no band drifts, which is what a whole wave used to do.
 //! * **Style 65**, Duke Fishron's mouth bubbles: they bob, tracing a cosine around the speed they
 //!   were thrown at over thirty ticks. That is the half of style 65 with no target; the half with
 //!   one re-aims at a player every tick and is in `server::systems`, and a zero `ai[1]` is what
@@ -138,6 +141,41 @@ const SHARKNADO_STYLE: i32 = 65;
 /// `num523 = MathF.PI / 15f` and `num524 = 4f`: a cosine over thirty ticks, four pixels either way.
 const BOLT_BOB_RATE: f32 = std::f32::consts::PI / 15.0;
 const BOLT_BOB_AMPLITUDE: f32 = 4.0;
+/// Deerclops's shadow hands (`Projectile.cs:43274-43377`, `AI_187_ShadowHand`). Four routines
+/// under one style, chosen not by the arm but by the `ai[0]` the hand is launched with: the bands
+/// below are `AI_187_ShadowHand_GetVariation`'s own, and a hand that starts at 180 runs the swing
+/// and nothing else. `RandomizeInsanityShadowFor` is what picks one, and it lives at the launch
+/// site in `boss/deerclops.rs` because it needs the target it is being placed around.
+const SHADOW_HAND_STYLE: i32 = 187;
+/// `(start, length)` per variation, in the order `GetVariation` walks them.
+const SHADOW_HAND_BANDS: [(f32, f32); 4] =
+    [(0.0, 180.0), (180.0, 120.0), (300.0, 90.0), (390.0, 90.0)];
+/// The swing's pivot distance, `num2 = 70f` before it is signed by the facing.
+const SHADOW_HAND_PIVOT: f32 = 70.0;
+/// ...and the drag it keeps while it swings, above a floor of a tenth of a pixel.
+const SHADOW_HAND_SWING_DRAG: f32 = 0.95;
+const SHADOW_HAND_SWING_FLOOR: f32 = 0.1;
+/// What the drifting variation keeps each tick.
+const SHADOW_HAND_DRIFT: f32 = 0.98;
+
+/// `MathHelper.Lerp(toMin, toMax, GetLerpValue(fromMin, fromMax, value, clamped: true))`
+/// (`Utils.cs:345`). Vanilla's `Remap` clamps by default, which is what makes each of the shadow
+/// hand's easing windows a window rather than a line that keeps going.
+fn remap(value: f32, from_min: f32, from_max: f32, to_min: f32, to_max: f32) -> f32 {
+    let t = if (from_max - from_min).abs() < f32::EPSILON {
+        0.0
+    } else {
+        ((value - from_min) / (from_max - from_min)).clamp(0.0, 1.0)
+    };
+    to_min + (to_max - to_min) * t
+}
+
+/// `MathHelper.WrapAngle`: back into (-pi, pi].
+fn wrap_angle(angle: f32) -> f32 {
+    let wrapped = (angle + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU);
+    wrapped - std::f32::consts::PI
+}
+
 /// How long a Deerclops ice spike stands: `num10 = 20` for `type == 961`.
 const SPIKE_LIFE: f32 = 20.0;
 
@@ -664,6 +702,92 @@ pub fn step(
                 // `if (wet) { position.Y -= 16f; Kill(); }` is not modelled: a projectile here
                 // carries no wetness, and the Duke fights over the ocean, so this is the one
                 // narrowing in the arm rather than an oversight.
+            }
+            SHADOW_HAND_STYLE => {
+                // Deerclops's shadow hands (`Projectile.cs:43274-43377`). One style, four
+                // routines, and **the arm does not choose between them** - the band `ai[0]` starts
+                // in does, which is why this needed `Shot::ai` before it could exist at all. A
+                // hand launched at 0 drifts and slows, at 180 it swings around a pivot beside it,
+                // at 300 it eases along a fixed heading, and at 390 it arcs at a constant turn.
+                // Each band also carries its own length, and the hand ends one tick short of it.
+                let (start, length) = SHADOW_HAND_BANDS
+                    .into_iter()
+                    .find(|(start, length)| {
+                        projectile.ai[0] >= *start && projectile.ai[0] < start + length
+                    })
+                    .unwrap_or(SHADOW_HAND_BANDS[0]);
+                let counter = projectile.ai[0] - start;
+                if counter >= length - 1.0 {
+                    return Outcome::Spent;
+                }
+                let through = counter / length;
+                let facing = if projectile.velocity.0 > 0.0 {
+                    1.0
+                } else {
+                    -1.0
+                };
+                match start {
+                    // Drifting: it slows and nothing else.
+                    s if s == SHADOW_HAND_BANDS[0].0 => {
+                        projectile.velocity.0 *= SHADOW_HAND_DRIFT;
+                        projectile.velocity.1 *= SHADOW_HAND_DRIFT;
+                    }
+                    // Swinging. The pivot is seventy pixels to whichever side it is facing, and
+                    // the hand is *placed* on the circle around it rather than steered onto one:
+                    // vanilla derives the pivot from the current rotation, turns the rotation, and
+                    // puts the centre back. The two easing windows are a slow quarter-turn and
+                    // then a fast eight-times swipe back through it.
+                    s if s == SHADOW_HAND_BANDS[1].0 => {
+                        let speed = projectile.velocity.0.hypot(projectile.velocity.1);
+                        if speed > SHADOW_HAND_SWING_FLOOR {
+                            projectile.velocity.0 *= SHADOW_HAND_SWING_DRAG;
+                            projectile.velocity.1 *= SHADOW_HAND_SWING_DRAG;
+                        }
+                        let arm = SHADOW_HAND_PIVOT * facing;
+                        let centre = projectile.center();
+                        let pivot = (
+                            centre.0 - projectile.rotation.cos() * arm,
+                            centre.1 - projectile.rotation.sin() * arm,
+                        );
+                        let out = remap(through, 0.3, 0.5, 0.0, 1.0)
+                            * remap(through, 0.45, 0.5, 1.0, 0.0);
+                        let back = remap(through, 0.5, 0.55, 0.0, 1.0)
+                            * remap(through, 0.5, 1.0, 1.0, 0.0);
+                        let turn = out * std::f32::consts::PI / 60.0
+                            + back * -std::f32::consts::PI * 8.0 / 60.0;
+                        projectile.rotation = wrap_angle(projectile.rotation + turn * -facing);
+                        let at = (
+                            pivot.0 + projectile.rotation.cos() * arm,
+                            pivot.1 + projectile.rotation.sin() * arm,
+                        );
+                        projectile.position = (
+                            at.0 - projectile.width() / 2.0,
+                            at.1 - projectile.height() / 2.0,
+                        );
+                    }
+                    // Lunging along the heading it was given: fast out of the dark, almost still
+                    // in the middle, then eight times faster through you.
+                    s if s == SHADOW_HAND_BANDS[2].0 => {
+                        let heading = projectile.ai[1];
+                        let speed = remap(through, 0.0, 0.4, 1.0, 0.0) * 2.0
+                            + remap(through, 0.3, 0.4, 0.0, 1.0)
+                                * remap(through, 0.4, 1.0, 1.0, 0.0)
+                                * 8.0
+                            + 0.01;
+                        projectile.velocity = (heading.cos() * speed, heading.sin() * speed);
+                    }
+                    // Arcing: a constant turn every tick, which is the curve it was launched on.
+                    _ => {
+                        let turn = projectile.ai[1];
+                        let (sin, cos) = turn.sin_cos();
+                        projectile.velocity = (
+                            projectile.velocity.0 * cos - projectile.velocity.1 * sin,
+                            projectile.velocity.0 * sin + projectile.velocity.1 * cos,
+                        );
+                    }
+                }
+                projectile.ai[0] += 1.0;
+                projectile.dirty = true;
             }
             135 => {
                 // The Queen Slime's ground smash (`Projectile.cs:69740-69756`,
@@ -2310,6 +2434,73 @@ mod tests {
             step(&mut smash, &tiles, &mut Vec::new()),
             Outcome::Spent,
             "and gone on the tenth"
+        );
+    }
+
+    /// Deerclops's shadow hands run four different routines, and `ai[0]` is what picks one.
+    ///
+    /// `AI_187_ShadowHand` (`Projectile.cs:43274-43377`) plus `GetVariation`'s bands. A hand
+    /// launched with nothing runs the first, which is why all six of a wave used to drift: `Shot`
+    /// could not carry a band until this session.
+    #[test]
+    fn a_shadow_hand_runs_the_routine_its_band_names() {
+        let tiles = Air::default();
+        let run = |band: f32, parameter: f32, velocity: (f32, f32)| {
+            let mut hand = launched(965, velocity);
+            hand.ai = [band, parameter, 0.0];
+            let start = hand.position;
+            let mut ticks = 0;
+            while step(&mut hand, &tiles, &mut Vec::new()) == Outcome::Flying {
+                ticks += 1;
+                if ticks > 1000 {
+                    panic!("band {band} never ended");
+                }
+            }
+            (ticks, start, hand)
+        };
+
+        // Each band runs one tick short of its own length, and they are not the same length.
+        assert_eq!(run(0.0, 0.0, (4.0, 0.0)).0, 179, "the drift is 180 long");
+        assert_eq!(run(180.0, 0.0, (4.0, 0.0)).0, 119, "the swing is 120");
+        assert_eq!(run(300.0, 0.0, (4.0, 0.0)).0, 89, "the lunge is 90");
+        assert_eq!(run(390.0, 0.0, (4.0, 0.0)).0, 89, "so is the arc");
+
+        // The drift slows to a stop; nothing else does.
+        let mut drifting = launched(965, (4.0, 0.0));
+        drifting.ai = [0.0, 0.0, 0.0];
+        for _ in 0..100 {
+            step(&mut drifting, &tiles, &mut Vec::new());
+        }
+        assert!(
+            drifting.velocity.0 < 4.0 * 0.99f32.powi(50),
+            "a 0.98 a tick decay should be well under a tenth by now: {}",
+            drifting.velocity.0
+        );
+
+        // The lunge ignores the velocity it was launched with and rebuilds it from `ai[1]`, so a
+        // hand pointed up flies up however it was thrown.
+        let mut lunging = launched(965, (4.0, 0.0));
+        lunging.ai = [300.0, -std::f32::consts::FRAC_PI_2, 0.0];
+        step(&mut lunging, &tiles, &mut Vec::new());
+        assert!(
+            lunging.velocity.1 < 0.0 && lunging.velocity.0.abs() < 0.01,
+            "it should be going straight up: {:?}",
+            lunging.velocity
+        );
+
+        // The arc turns by a fixed amount each tick, so its heading has swung round after enough
+        // of them while its speed is untouched.
+        let mut arcing = launched(965, (4.0, 0.0));
+        arcing.ai = [390.0, 0.05, 0.0];
+        for _ in 0..40 {
+            step(&mut arcing, &tiles, &mut Vec::new());
+        }
+        let speed = arcing.velocity.0.hypot(arcing.velocity.1);
+        assert!((speed - 4.0).abs() < 0.01, "an arc is a turn, not a brake");
+        assert!(
+            arcing.velocity.1 > 1.0,
+            "and forty ticks of 0.05 is two radians round: {:?}",
+            arcing.velocity
         );
     }
 
