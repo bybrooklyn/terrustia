@@ -73,7 +73,12 @@ fn spikes<T: TileView>(npc: &Npc, world: &World<'_, T>, direction: i8, out: &mut
             damage: DEER_SPIKE_DAMAGE,
             position: ((x * 16 + 8) as f32, (y * 16 - 8) as f32),
             velocity: (lean.sin(), -lean.cos()),
-            time_left: 300,
+            // Zero, meaning the type's own, because the spike's arm ends it at twenty ticks
+            // (`aiStyle 157`) long before any table value matters. The 300 that used to sit here
+            // was invented and was doing the ending: vanilla passes no lifetime at
+            // `NPC.cs:45055`, and a wall of twenty spikes stood for five seconds rather than a
+            // third of one.
+            time_left: 0,
         });
     }
 }
@@ -544,6 +549,19 @@ mod tests {
         }
         assert!(!thrown.is_empty(), "should have raised spikes");
         assert!(thrown.iter().all(|s| s.projectile == DEER_SPIKE));
+        // A spike is launched with a *facing*, not a speed: `new Vector2(0f, -1f).RotatedBy(...)`
+        // (`NPC.cs:45054`) is a unit vector, and `aiStyle 157` never touches it again, so the
+        // spike creeps a pixel a tick for its twenty and stands where it grew. Anything larger
+        // here would send a wall of ice across the arena.
+        assert!(
+            thrown
+                .iter()
+                .all(|s| (s.velocity.0.hypot(s.velocity.1) - 1.0).abs() < 1e-4),
+            "each spike's launch vector should be unit length"
+        );
+        // Zero means the type's own; the arm ends it at twenty long before that matters, and the
+        // 300 that used to sit here was invented.
+        assert!(thrown.iter().all(|s| s.time_left == 0));
         assert!(
             thrown.iter().all(|s| s.position.0 >= d.center().0 - 64.0),
             "all out in front of it"

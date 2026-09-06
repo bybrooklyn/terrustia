@@ -249,7 +249,10 @@ fn movement(
                         damage: QUEEN_SLIME_DIVE_DAMAGE,
                         position: (cx, npc.position.1 + npc.height()),
                         velocity: (0.0, 0.0),
-                        time_left: 600,
+                        // Zero, meaning the type's own, because `aiStyle 135` ends it at nine
+                        // ticks. Vanilla passes no lifetime (`NPC.cs:46057`); the 600 here was
+                        // invented and was five times even the table's own 120.
+                        time_left: 0,
                     });
                     return out;
                 }
@@ -591,6 +594,13 @@ mod tests {
         assert_eq!(shot.projectile, QUEEN_SLIME_DIVE_SHOT);
         assert_eq!(shot.damage, QUEEN_SLIME_DIVE_DAMAGE);
         assert_eq!(shot.velocity, (0.0, 0.0), "stationary, not aimed");
+        // Zero means the type's own. `aiStyle 135` ends the smash at nine ticks so nothing here
+        // observes the difference, which is exactly why the invented 600 could sit here unnoticed:
+        // it is pinned so the number cannot drift back to something that looks meaningful.
+        assert_eq!(
+            shot.time_left, 0,
+            "vanilla passes no lifetime at `NPC.cs:46057`"
+        );
         assert_eq!(q.ai[0], state::WAITING, "and it goes back to waiting");
     }
 

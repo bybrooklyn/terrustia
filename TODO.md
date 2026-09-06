@@ -457,9 +457,31 @@ landed blow is exactly what a missing melee cooldown looks like; an emptied NPC 
 that a lookup failed, not that the type was checked; and one roll of a scatter box cannot tell the
 right size from one ten times too big.
 
-**11 types remain, across ten styles**: 45, 65, 98, 102 (2), 112, 135, 136, 149, 157, 187.
-**Coverage is 69 of 80**, counted by the audit tool rather than by hand. Style 112 counts as one of
-the eleven and not as closed: it is three unrelated bodies keyed on the type inside the arm,
+**Two more closed the same day, and they were the two that needed nothing plumbed.**
+
+- **Style 135, the Queen Slime's ground smash** (`Projectile.cs:69740-69756`,
+  `AI_135_OgreStomp`). Nine ticks, stationary, and **its whole point is that it grows its own
+  hitbox**: from five tiles across to thirty, eased over those nine, around a fixed centre.
+  Vanilla stashes the centre, resizes, and puts the centre back, so the box widens both ways
+  rather than off its top-left corner. Ours was a thirty-pixel box that flew off at whatever it
+  was launched with and hung about for six hundred ticks - a boss's shockwave you could stand next
+  to. The full width is 480 pixels.
+- **Style 157, the Deerclops ice spike** (`:52268-52400`, `AI_157_SharpTears`). It never touches
+  its velocity, because it is launched with a *facing* rather than a speed (`NPC.cs:45054` is a
+  unit vector), and its clock is the attack: fade in over ten, fade out from ten, gone at twenty.
+  Ours was launched with 300, so a wall of twenty spikes stood for five seconds and drifted three
+  hundred pixels upward while it did. The flags are read *before* the increment, which is why the
+  last live tick is the one that reads twenty rather than the one that reaches it.
+
+Both `time_left`s at their launch sites went to zero with them. That change is **not** a behaviour
+fix and is not claimed as one - the arms end both projectiles long before any lifetime matters -
+but the invented numbers were what had been doing the ending, and a number that looks load-bearing
+and is not is exactly what let a 600 sit under a nine-tick attack. Both are now pinned by an
+assertion in their boss's own test.
+
+**9 types remain, across eight styles**: 45, 65, 98, 102 (2), 112, 136, 149, 187.
+**Coverage is 71 of 80**, counted by the audit tool rather than by hand. Style 112 counts as one of
+the nine and not as closed: it is three unrelated bodies keyed on the type inside the arm,
 exactly as vanilla keys them, and only the Truffle's spore is transcribed - crediting the style
 would credit the Dandelion seed for the spore's arm.
 
@@ -473,10 +495,6 @@ would credit the Dandelion seed for the spore's arm.
   cultist's shards, which converge on the point in `ai[0..1]`) all pick their whole behaviour from
   what they are launched with. `boss/fishron.rs:390` already writes this down at its own launch
   site. Ninety-eight `Shot` literals and one mechanical field.
-- **135, the Queen Slime's smash** (`:69740-69790`) and **157, the Deerclops ice spike**
-  (`:52268-52400`) need nothing plumbed and are the two cheapest left. The smash is nine ticks,
-  stationary, and **grows its own hitbox from 80 to 480 pixels**; the spike never touches its
-  velocity and dies at twenty, where ours is launched with 300.
 - **136, Betsy's flame breath** (`:69858-69910`) is welded to her and dies at 78, the deathray's
   shape again. **149, the golf ball** is the only large one: `BallCollision.Step`
   (`Terraria.Physics/BallCollision.cs:24-90`) plus per-tile friction from `TileGolfPhysics`.

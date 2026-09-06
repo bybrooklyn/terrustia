@@ -5,12 +5,12 @@
 //! decided to shoot has been emitting its aim and cadence for a while; this is what makes those
 //! decisions land.
 //!
-//! Eighteen behaviours are transcribed here, and eleven more in `server::systems` (see below).
+//! Twenty behaviours are transcribed here, and eleven more in `server::systems` (see below).
 //! This file used to say "a handful of behaviours cover everything the roster and the world's
 //! traps fire"; the count, when it was finally taken, was **43 of the 79 types something here can
-//! launch reaching no arm at all**. It is 11 of 80 now.
+//! launch reaching no arm at all**. It is 9 of 80 now.
 //!
-//! The 11 left are not all straight lines, and saying so would be the same mistake again. Read
+//! The 9 left are not all straight lines, and saying so would be the same mistake again. Read
 //! against `Projectile.cs`: none of them *falls* - they are lasers, homing bolts, hovering clouds
 //! and shockwaves - so a straight line is a poorer approximation of them than it was of a thrown
 //! bone, not a free one. One of the eleven, the Rain Nimbus, is in fact **already right**: style
@@ -73,6 +73,11 @@
 //!   tick with a pure vertical bob, a sine over three seconds, so it hangs where the Truffle put
 //!   it. Style 112 is three unrelated bodies keyed on the type inside the arm, exactly as vanilla
 //!   keys them, and the Dandelion seed's is not transcribed.
+//! * **Style 135**, the Queen Slime's smash: nine ticks, stationary, and it **grows its own
+//!   hitbox** from five tiles across to thirty around a fixed centre. The hitbox is the attack;
+//!   without it a boss's shockwave was a thirty-pixel box you could stand beside.
+//! * **Style 157**, the Deerclops ice spike: it never touches its velocity, because what it is
+//!   launched with is a facing rather than a speed. Twenty ticks and then gone.
 //!
 //! Style 25 was the one doing real harm by its absence. A Boulder Statue launches its boulder *at
 //! rest*, so with no arm to give it gravity it never moved at all: a wired statue put a stationary
@@ -116,6 +121,13 @@ const TRUFFLE_SPORE: u16 = 590;
 /// Its bob: a full sine over three seconds, fifteen hundredths of a pixel at the extremes.
 const SPORE_PERIOD: f32 = 180.0;
 const SPORE_BOB: f32 = 0.15;
+/// The Queen Slime's smash: nine ticks, and a hitbox easing from five tiles across to thirty.
+/// (`num = 40f` is the Ogre's; `if (type == 922) num = 30f` is hers.)
+const SMASH_TICKS: f32 = 9.0;
+const SMASH_FROM: f32 = 5.0;
+const SMASH_TO: f32 = 30.0;
+/// How long a Deerclops ice spike stands: `num10 = 20` for `type == 961`.
+const SPIKE_LIFE: f32 = 20.0;
 
 /// One projectile in flight.
 #[derive(Debug, Clone, Copy)]
@@ -612,14 +624,60 @@ pub fn step(
             }
             183 => {
                 // The Zoologist's claw (`Projectile.cs:43893-43907`, `AI_183_ZoologistStrike`).
-                // Four lines, three of them facing, and the fourth is the whole point: it sheds
-                // four fifths of its sideways speed every tick and never falls, so a swipe thrown
-                // at twenty-four pixels a tick has travelled about thirty when it stops and dies at
-                // eighteen. Without this it crossed four hundred and thirty pixels, which turned
-                // the shortest-ranged attack in the roster (`DangerDetectRange[633]` is 100, the
-                // smallest there is) into one of the longest.
+                // Four lines, three of them facing, and the fourth is the whole point: it keeps a
+                // fifth of its sideways speed each tick and never falls. The drag runs before the
+                // move, as vanilla's `AI()` does, so a swipe thrown at twenty-four pixels a tick
+                // travels 24/5 + 24/25 + ... = **six pixels in total** and then dies at eighteen
+                // ticks. It is a claw at arm's length, not a projectile. Without this it crossed
+                // four hundred and thirty, which turned the shortest-ranged attack in the roster
+                // (`DangerDetectRange[633]` is 100, the smallest there is) into one of the longest.
                 projectile.velocity.0 *= ZOOLOGIST_DRAG;
                 projectile.velocity.1 = 0.0;
+            }
+            135 => {
+                // The Queen Slime's ground smash (`Projectile.cs:69740-69756`,
+                // `AI_135_OgreStomp`). It does not travel and it does not last: nine ticks, and
+                // **its whole point is that it grows its own hitbox** from five tiles across to
+                // thirty, centred on the spot it was dropped. Vanilla stashes the centre, resizes,
+                // and puts the centre back, so the box widens both ways rather than growing off
+                // its top-left corner. Without it the smash was a thirty-pixel box that flew off
+                // at whatever it was launched with and hung about for its table's 120: a boss's
+                // shockwave you could stand next to.
+                //
+                // The Ogre shares this style at forty tiles; only 922 reaches it here, and the
+                // per-type number is transcribed rather than folded away.
+                projectile.ai[0] += 1.0;
+                if projectile.ai[0] > SMASH_TICKS {
+                    return Outcome::Spent;
+                }
+                projectile.velocity = (0.0, 0.0);
+                let centre = projectile.center();
+                let across = TILE
+                    * (SMASH_FROM + (SMASH_TO - SMASH_FROM) * (projectile.ai[0] / SMASH_TICKS));
+                projectile.stats.width = across as i32;
+                projectile.stats.height = across as i32;
+                projectile.position = (
+                    centre.0 - projectile.width() / 2.0,
+                    centre.1 - projectile.height() / 2.0,
+                );
+                projectile.dirty = true;
+            }
+            157 => {
+                // The Deerclops ice spike (`Projectile.cs:52268-52400`, `AI_157_SharpTears`).
+                // It never touches its velocity - it is launched with a *direction*, a unit
+                // vector, so it creeps a pixel a tick - and everything else in the method is an
+                // opacity envelope and a scale. What matters is the clock: it fades in over ten
+                // ticks, fades out from ten, and is gone at twenty.
+                //
+                // The flags are read *before* the increment, which is why the last live tick is
+                // the one that reads twenty rather than the one that reaches it. Ours was launched
+                // with three hundred, so a wall of twenty spikes stood for five seconds and drifted
+                // three hundred pixels upward while it did.
+                let ending = projectile.ai[0] >= SPIKE_LIFE;
+                projectile.ai[0] += 1.0;
+                if ending {
+                    return Outcome::Spent;
+                }
             }
             186 => {
                 // The Princess's weapon (`Projectile.cs:43454-43462`, `AI_186_PrincessWeapon`).
@@ -2184,5 +2242,77 @@ mod tests {
         // it, so this has not quietly made a colliding projectile immortal.
         ward.velocity = (4.0, 0.0);
         assert_eq!(step(&mut ward, &tiles, &mut Vec::new()), Outcome::Spent);
+    }
+
+    /// The Queen Slime's smash widens where it landed, and is gone in nine ticks.
+    ///
+    /// `AI_135_OgreStomp` (`Projectile.cs:69740-69756`). The hitbox is the attack: it eases from
+    /// five tiles across to thirty around a fixed centre, so what looked like a thirty-pixel box
+    /// is really four hundred and eighty by the end. Ours flew off at its launch velocity and hung
+    /// about for the table's 120.
+    #[test]
+    fn the_queen_slimes_smash_widens_where_it_landed_and_is_gone_in_nine_ticks() {
+        let tiles = Air::default();
+        let mut smash = launched(922, (0.0, 0.0));
+        let centre = smash.center();
+        assert_eq!((smash.width(), smash.height()), (30.0, 30.0), "its table's");
+
+        // Tick one: five tiles across, plus the first ninth of the growth.
+        assert_eq!(step(&mut smash, &tiles, &mut Vec::new()), Outcome::Flying);
+        let first = smash.width();
+        assert!(
+            (80.0..140.0).contains(&first),
+            "five tiles is eighty pixels, plus a ninth of the way to 480; got {first}"
+        );
+        assert_eq!(smash.center(), centre, "and it grew around its own centre");
+
+        for _ in 0..8 {
+            assert_eq!(step(&mut smash, &tiles, &mut Vec::new()), Outcome::Flying);
+        }
+        assert_eq!(
+            smash.width(),
+            480.0,
+            "thirty tiles across on its ninth tick"
+        );
+        assert_eq!(smash.center(), centre, "still centred where it landed");
+        assert_eq!(
+            step(&mut smash, &tiles, &mut Vec::new()),
+            Outcome::Spent,
+            "and gone on the tenth"
+        );
+    }
+
+    /// A Deerclops ice spike stands for twenty ticks and then goes.
+    ///
+    /// `AI_157_SharpTears` (`Projectile.cs:52268-52400`), whose `num10` is 20 for type 961. It
+    /// never touches its velocity - it is launched with a unit vector for its *facing*, so it
+    /// creeps a pixel a tick - and its flags are read before the increment, which is why the last
+    /// live tick is the one that reads twenty rather than the one that reaches it.
+    #[test]
+    fn a_deerclops_ice_spike_stands_for_twenty_ticks() {
+        let tiles = Air::default();
+        let mut spike = launched(961, (0.0, -1.0));
+        assert_eq!(
+            spike.time_left, 3600,
+            "its table would keep it for a minute"
+        );
+        let start = spike.position;
+        for tick in 1..=20 {
+            assert_eq!(
+                step(&mut spike, &tiles, &mut Vec::new()),
+                Outcome::Flying,
+                "still standing on tick {tick}"
+            );
+        }
+        assert_eq!(
+            step(&mut spike, &tiles, &mut Vec::new()),
+            Outcome::Spent,
+            "and gone on the twenty-first"
+        );
+        assert!(
+            (spike.position.1 - start.1).abs() < 25.0,
+            "a unit vector is a facing, not a speed: it moved {} pixels",
+            start.1 - spike.position.1
+        );
     }
 }

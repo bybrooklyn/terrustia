@@ -732,6 +732,7 @@ crates/terrustia/src/game/ai/boss/cultist.rs	mod tests :: fn the_guess_is_the_fi
 crates/terrustia/src/game/ai/boss/cultist.rs	struct CultistOutcome	NPC.cs	65194-65207	5823a787a0a3	b81f1d067423
 crates/terrustia/src/game/ai/boss/cultist.rs	struct CultistOutcome	NPC.cs	65229-65256	1afe10f8005e	b81f1d067423
 crates/terrustia/src/game/ai/boss/deerclops.rs	fn rubble_up	NPC.cs	44913-44932	57f9b7a60ccb	d8dae5e84071
+crates/terrustia/src/game/ai/boss/deerclops.rs	fn spikes	NPC.cs	45055	c0d8f0781424	b7d8178abf75
 crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	NPC.cs	44522-44524,44890-44912	3ef17ca5cd7a	9d2fb375f5c2
 crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	NPC.cs	44718-44739	f30b03b06771	9d2fb375f5c2
 crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	NPC.cs	47474-47494	2a9d82bd773e	9d2fb375f5c2
@@ -739,6 +740,7 @@ crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	Projectile.cs	43187	bf7
 crates/terrustia/src/game/ai/boss/deerclops.rs	mod tests :: fn it_will_not_re_roar_while_its_slow_is_still_up	NPC.cs	44653-44654	4e6df28e4a48	d8ec541d6c0d
 crates/terrustia/src/game/ai/boss/deerclops.rs	mod tests :: fn the_passive_rain_picks_one_wave_in_three_and_stops_at_range	NPC.cs	47474-47494	2a9d82bd773e	55668347d98d
 crates/terrustia/src/game/ai/boss/deerclops.rs	mod tests :: fn the_passive_rain_picks_one_wave_in_three_and_stops_at_range	Projectile.cs	43187	bf743f5c3149	55668347d98d
+crates/terrustia/src/game/ai/boss/deerclops.rs	mod tests :: fn up_close_it_throws_a_wall_of_spikes_forward	NPC.cs	45054	436478f586cf	9ed756059a4b
 crates/terrustia/src/game/ai/boss/destroyer.rs	fn destroyer	NPC.cs	50399	20d9f8d814c8	0b02e34bbec0
 crates/terrustia/src/game/ai/boss/destroyer.rs	fn destroyer	NPC.cs	50498-50507	a4a84326f18d	0b02e34bbec0
 crates/terrustia/src/game/ai/boss/destroyer.rs	mod tests :: fn a_destroyer_already_on_course_trims_twice	NPC.cs	50633-50651	6620932fd001	c8fa8b9f2e18
@@ -988,9 +990,10 @@ crates/terrustia/src/game/ai/boss/queen_bee.rs	mod tests :: fn she_repositions_t
 crates/terrustia/src/game/ai/boss/queen_bee.rs	mod tests :: fn she_will_not_call_bees_through_a_wall	NPC.cs	30829	749bad63ad4b	83af696015c9
 crates/terrustia/src/game/ai/boss/queen_bee.rs	mod tests :: fn she_will_not_spit_stingers_through_a_wall	NPC.cs	30923	281653a3bab0	b35520abeb27
 crates/terrustia/src/game/ai/boss/queen_bee.rs	mod tests :: fn the_sting_phase_lasts_its_full_length	NPC.cs	31044-31051	5b2376ee2b0b	81a06a29291f
-crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	45703-45708	13b9885391d1	a86bde1a13d0
-crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	46024-46118	fb07b7ed2545	a86bde1a13d0
-crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	46159-46236	ff5c589a00ca	a86bde1a13d0
+crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	45703-45708	13b9885391d1	6a06d4b6413d
+crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	46024-46118	fb07b7ed2545	6a06d4b6413d
+crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	46057	ab16c1d95ab0	6a06d4b6413d
+crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	46159-46236	ff5c589a00ca	6a06d4b6413d
 crates/terrustia/src/game/ai/boss/queen_slime.rs	fn queen_slime	NPC.cs	46251-46309	10c9bea7cbb1	144d25df14d1
 crates/terrustia/src/game/ai/boss/queen_slime.rs	fn shed_minions	NPC.cs	46251-46309	10c9bea7cbb1	142202e35d69
 crates/terrustia/src/game/ai/boss/queen_slime.rs	fn shed_minions	NPC.cs	46263-46270	f0691b463ddb	142202e35d69
@@ -1573,30 +1576,33 @@ crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	48354	96b6b5078339
 crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	48378-48399	eb10839c0918	4425ece6bbd4
 crates/terrustia/src/game/projectile.rs	fn boulder	Projectile.cs	26361	684228bf3682	33118dd7193d
 crates/terrustia/src/game/projectile.rs	fn boulder	Projectile.cs	26596-26746	316f71664a22	33118dd7193d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	16781	651cda76400c	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	17308	6bcc82a4f969	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19056-19099	227d301575d8	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19677-19684	17854a3e7d6a	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19872-19886	424f6fd70985	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23907-23930	2e8c5b0e8c10	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23945-23947	9f860f2ea5fa	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24170-24176	45ba72dd4bea	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24618-24641	a3a3d50ea0ac	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	29337-29366	c0c2724d47dc	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30655-30677	681d2a8a6429	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	31473	20db8144f6b0	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34676	da2cc4ba8be1	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34822-34865	8b72ab9bdcbf	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	36689-36703	2f7bd1ccd9f0	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43454-43462	922f88e4c77f	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43893-43907	aea516c9abba	80c90720425d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	45853-45866	931a3a7d8d10	80c90720425d
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	16781	651cda76400c	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	17308	6bcc82a4f969	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19056-19099	227d301575d8	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19677-19684	17854a3e7d6a	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19872-19886	424f6fd70985	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23907-23930	2e8c5b0e8c10	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23945-23947	9f860f2ea5fa	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24170-24176	45ba72dd4bea	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24618-24641	a3a3d50ea0ac	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	29337-29366	c0c2724d47dc	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30655-30677	681d2a8a6429	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	31473	20db8144f6b0	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34676	da2cc4ba8be1	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34822-34865	8b72ab9bdcbf	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	36689-36703	2f7bd1ccd9f0	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43454-43462	922f88e4c77f	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43893-43907	aea516c9abba	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	45853-45866	931a3a7d8d10	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	52268-52400	cacd56e74068	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	69740-69756	144b99986931	e71f6e9b9f59
 crates/terrustia/src/game/projectile.rs	impl Powder :: fn step	Projectile.cs	24366-24372	80818f04371c	ec35674f69cd
 crates/terrustia/src/game/projectile.rs	impl Projectile :: fn can_damage	Projectile.cs	12491-12494	0387966662de	039cb5d97aea
 crates/terrustia/src/game/projectile.rs	impl ProjectileStore :: fn launch	Projectile.cs	14916-14919	2c62941898b4	39a262f21b0e
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_boulder_breaks_on_a_wall_but_not_on_the_floor	Projectile.cs	19084-19098	e7edd7286905	bf1d28be30f9
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_boulder_cannot_hurt_anybody_for_its_first_seven_ticks	Projectile.cs	12491-12494	0387966662de	83131b47225a
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_boulder_falls_and_then_rolls_away_from_the_wall_beside_it	Projectile.cs	26596-26746	316f71664a22	7846d609d40c
+crates/terrustia/src/game/projectile.rs	mod tests :: fn a_deerclops_ice_spike_stands_for_twenty_ticks	Projectile.cs	52268-52400	cacd56e74068	f769e042171b
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_falling_star_passes_through_terrain_until_it_is_clear_of_it	Projectile.cs	24170-24176	45ba72dd4bea	e08c68f613b8
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_grenade_bounces_off_a_wall_and_settles_on_the_floor	Projectile.cs	19872-19886	424f6fd70985	b568eea70619
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_grenade_bounces_off_a_wall_and_settles_on_the_floor	Projectile.cs	48378-48399	eb10839c0918	b568eea70619
@@ -1611,6 +1617,7 @@ crates/terrustia/src/game/projectile.rs	mod tests :: fn a_thrown_bone_flies_flat
 crates/terrustia/src/game/projectile.rs	mod tests :: fn an_empress_lance_hangs_and_then_fires	Projectile.cs	45853-45866	931a3a7d8d10	07f49c59fe5a
 crates/terrustia/src/game/projectile.rs	mod tests :: fn an_empress_rainbow_eases_into_its_curve	Projectile.cs	46264-46275	c3c50c4a30a1	5ca3828601c5
 crates/terrustia/src/game/projectile.rs	mod tests :: fn only_the_ball_of_fire_falls_among_the_fireballs	Projectile.cs	24618-24621	655a6b541fb8	8554a3f3a2fa
+crates/terrustia/src/game/projectile.rs	mod tests :: fn the_queen_slimes_smash_widens_where_it_landed_and_is_gone_in_nine_ticks	Projectile.cs	69740-69756	144b99986931	55822aad0db9
 crates/terrustia/src/game/projectile.rs	struct Powder	Projectile.cs	14787-14808	17307615afc0	6d1d94f29de7
 crates/terrustia/src/game/projectile.rs	struct Powder	Projectile.cs	15040	f768b5f890db	6d1d94f29de7
 crates/terrustia/src/game/rescues.rs	(file)	NPC.cs	1693-1697	b8dc16f691bc	4f9f148eb6ae
