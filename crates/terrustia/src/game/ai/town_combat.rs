@@ -102,6 +102,25 @@ pub struct TownCombat {
     pub attack_time: i32,
 }
 
+/// The two town NPCs whose shot is given an explicit lifetime, and how long.
+///
+/// Zero means the projectile's own table value, which is what `NewProjectile` leaves every other
+/// town shot with. These two are overridden a line after they are made
+/// (`NPC.cs:55070-55077`) and they are the *only* two in the whole of
+/// `AI_007_TownEntities`, checked by sweeping the function for `timeLeft`.
+///
+/// It matters more than a flourish. The Goblin Tinkerer's spiky ball declares 4,800 ticks and the
+/// Golfer's ball 3,600, so without this a defending town leaves balls lying around for over a
+/// minute each rather than eight seconds - which is a pile of live entities, and the Golfer's is
+/// already the one projectile in this roster whose sheer count has shown up in a test.
+pub fn shot_lifetime(npc_type: u16) -> u16 {
+    match npc_type {
+        // Goblin Tinkerer (`NPC.cs:55074-55077`) and Golfer (`:55070-55073`).
+        107 | 588 => 480,
+        _ => 0,
+    }
+}
+
 /// The hardmode-only rungs. There is exactly one ladder in the game behind `if (Main.hardMode)`,
 /// and it is the Arms Dealer's (`NPC.cs:55129-55147`).
 ///

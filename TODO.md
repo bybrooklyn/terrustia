@@ -381,7 +381,12 @@ Three separate bugs, and the arm was only the third:
   each takes its own table value; 300 cut the ward's 570-tick arm off at little over half, and
   ran the Princess's weapon 120 ticks past its own 180. The same shape as the Empress's seven,
   where a made-up 900 stopped a homing streak from ever homing. Now zero, which `launch` already
-  reads as "the projectile's own".
+  reads as "the projectile's own" - **except for the two vanilla really does give a lifetime**,
+  which the first pass at this missed and which are in `town_combat::shot_lifetime`. Sweeping
+  `AI_007_TownEntities` for `timeLeft` finds exactly two, a line after their `NewProjectile`
+  (`NPC.cs:55070-55077`): the Golfer's ball and the Goblin Tinkerer's spiky ball, both cut to
+  480. They are also the two longest-declared shots in the roster, 3,600 and 4,800, so handing
+  them their own value strews a defending town with live balls for over a minute each.
 - **A projectile at rest died on the ground it was left on.** `advance` walks from its start point
   inclusive and a zero-length walk is only its own start, so a colliding projectile launched with
   no velocity was killed on its first tick. Vanilla cannot do this by construction: every clause

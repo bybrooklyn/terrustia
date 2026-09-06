@@ -661,8 +661,10 @@ fn try_combat<T: TileView>(
                 // wrong in both directions - it cut the Dryad's ward off at 300 ticks when its arm
                 // runs to 570, and it kept the Princess's weapon alive for 300 when its own table
                 // says 180. This is the same shape as the Empress's seven shots, where a made-up
-                // 900 stopped a homing streak from ever homing.
-                time_left: 0,
+                // 900 stopped a homing streak from ever homing. The Goblin Tinkerer and the Golfer
+                // are the two exceptions, and vanilla's are explicit; see
+                // [`town_combat::shot_lifetime`].
+                time_left: town_combat::shot_lifetime(npc.npc_type),
             }),
             ..TownUpdate::default()
         },
@@ -866,6 +868,49 @@ mod tests {
             (shot.position.0 - dryad.center().0).abs() > 8.0,
             "the launch point is still the outstretched-hand offset"
         );
+    }
+
+    /// The Golfer's ball and the Goblin Tinkerer's spiky ball keep vanilla's explicit 480.
+    ///
+    /// These two are the only shots in `AI_007_TownEntities` whose lifetime is set at all
+    /// (`NPC.cs:55070-55077`), and they are also the two with the longest declared lifetimes in
+    /// the table - 3,600 and 4,800. Handing them their own value, which is what "zero" does for
+    /// everyone else, leaves a defending town strewn with balls for over a minute each instead of
+    /// eight seconds.
+    #[test]
+    fn the_two_town_shots_vanilla_gives_a_lifetime_keep_it() {
+        for (npc_type, projectile, table) in [(588u16, 721u16, 3600), (107, 24, 4800)] {
+            let tiles = flat(0, 400);
+            let mut npc = stand_on(npc_type, 200);
+            let mut w = day(&tiles);
+            w.hostile = Some(Target {
+                slot: 9,
+                center: (npc.center().0 + 60.0, npc.center().1),
+                velocity: (0.0, 0.0),
+                alive: true,
+            });
+            let mut r = rng();
+            let (result, _) = attack_within(&mut npc, &w, &mut r, 20_000);
+            let shot = result.shot.expect("both of these are ranged");
+            assert_eq!(shot.projectile, projectile, "npc {npc_type}");
+            assert_eq!(
+                shot.time_left, 480,
+                "npc {npc_type}'s shot is given 480 rather than its table's {table}"
+            );
+        }
+        // And nobody else is: the Merchant's pistol shot takes its own.
+        let tiles = flat(0, 400);
+        let mut merchant = stand_on(17, 200);
+        let mut w = day(&tiles);
+        w.hostile = Some(Target {
+            slot: 9,
+            center: (merchant.center().0 + 100.0, merchant.center().1),
+            velocity: (0.0, 0.0),
+            alive: true,
+        });
+        let mut r = rng();
+        let (result, _) = attack_within(&mut merchant, &w, &mut r, 20_000);
+        assert_eq!(result.shot.expect("a shot").time_left, 0);
     }
 
     /// A solid wall, floor to well above head height, at one tile column. Contiguous with no
