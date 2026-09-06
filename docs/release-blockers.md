@@ -42,7 +42,7 @@ citation no longer does.
 | Zero unknown protocol IDs | MET | `docs/packet-ids.tsv` has no `unknown` row and no row that is `none`/`none` |
 | Fuzzing green | MET | `fuzz/artifacts/` is empty; both targets run per-push in CI |
 | p99 tick under the 16.67 ms budget at 255 players | MET | `TODO.md`'s soak table, four runs, with a neutralised control run proving the `BiomeCache` cap is what holds it |
-| **Peak RSS under 1 GiB at 255 players** | **BOUNDED 2026-09-05, NOT RE-MEASURED** | Run 2 reached 1536 MiB because nothing bounded the sum of the outbound queues. A 256 MiB server-wide budget now does. The soak has not been re-run since. See "The memory ceiling" below |
+| **Peak RSS under 1 GiB at 255 players** | **PARTIALLY RE-MEASURED 2026-09-06; the full 30-minute hold is still not done** | Two runs at the full 255 since the queue budget landed, reaching 14:43 and 12:19 of the required 30:00 before the machine's memory watchdog killed the *harness*. Peaks 562 and 296 MiB against the 1 GiB ceiling, both falling after about six minutes, both taking a clean shutdown save under full load. Encouraging and not sufficient: the clause says thirty minutes. See "The memory ceiling" below for why it could not finish here |
 | Differential against a real `TerrariaServer` | RUN 2026-09-05, passed on what it covers | 66,542 bytes of Re-Logic's own output re-framed with nothing left over; every id with an encoder re-encoded byte-identically, including all 15 `TileSection` frames. Coverage is partial by construction; see "The differential" below |
 | Test suite on every release platform | MET, 2026-09-05 | The three host-native matrix entries now run the suite for real. Closing it cost four bug fixes; see "What running the tests on Windows found" below |
 | Human fresh-world Moon Lord playthrough | NOT RUN | Waivable by `TODO.md`'s own wording, but only "if the automated and differential evidence is otherwise complete", and the two rows above say it is not |
@@ -103,6 +103,32 @@ whose own queue filled. Depth covers the transient, the budget covers the aggreg
 one term that could reach the tens of gigabytes. It does not re-measure the gate: the soak wants a
 quiet machine and has not been re-run since. Until it is, the honest statement is that the unbounded
 term is bounded, not that the clause is met.
+
+### Re-measured 2026-09-06, twice, and stopped by the harness rather than the server
+
+Two runs at the full 255 players since the budget landed. Neither finished the 30-minute hold: the
+operating system's memory watchdog killed the whole process group at 14:43 and 12:19.
+
+| run | reached | server RSS over the hold (MiB) | peak | shutdown save |
+|---|---|---|---|---|
+| A | 14:43 | 95, 159, 331, 562, 336, 339, 256, 279 | 562 | clean, 146 ms |
+| B | 12:19 | 65, 117, 185, 296, 223, 252, 209 | 296 | clean, 170 ms |
+
+Both stayed comfortably under the 1 GiB ceiling, both **fell** after about six minutes rather than
+climbing, and both took a clean world save on the way down with 255 players attached - which is the
+"clean world save under load" clause getting incidental evidence it did not have before.
+
+**What stopped them is the test rig, not the server, and the arithmetic says so.** `soak_scale.sh`
+runs each simulated player as its own process. A single client was measured at **13.7 MiB** (24 of
+them, 328 MiB total), so 255 of them need about **3.5 GB before the server allocates anything** -
+against a server that peaked at 0.3 to 0.6 GB. On this 16 GB machine, with a qemu VM, two browsers
+and the editor holding roughly 2 GB between them, that is what ran out.
+
+So the clause is still not met, and the reason is worth separating from the thing being measured:
+nothing here suggests the server has a memory problem, and two runs at full player count say the
+opposite. Closing it needs either about 4 GB of headroom on the box, or a soak client that holds
+many connections in one process instead of one each - the latter being the change that would make
+this clause measurable on an ordinary machine rather than only on an empty one.
 
 ## The differential
 
