@@ -497,6 +497,7 @@ fn run_head_attack(
                     position: npc.center(),
                     velocity: (aim.0 / length, aim.1 / length),
                     time_left: 0,
+                    ai: [0.0; 3],
                 });
             }
         }
@@ -569,6 +570,7 @@ fn fire_fan(
             position: (cx, cy),
             velocity: (angle.cos() * speed, angle.sin() * speed),
             time_left: 600,
+            ai: [0.0; 3],
         });
     }
 }
@@ -663,6 +665,7 @@ pub fn free_eye(
                     position: (cx, cy),
                     velocity: (aim.0 / length, aim.1 / length),
                     time_left: 0,
+                    ai: [0.0; 3],
                 });
             }
             drag(npc, 0.95);
@@ -737,6 +740,7 @@ fn aimed(npc: &Npc, player: (f32, f32), projectile: u16, damage: i32, speed: f32
         position: (cx, cy),
         velocity: (aim.0 / length * speed, aim.1 / length * speed),
         time_left: 600,
+        ai: [0.0; 3],
     }
 }
 

@@ -200,6 +200,7 @@ fn breath(npc: &mut Npc, player: (f32, f32), out: &mut BetsyOutcome) {
             position: (cx, cy),
             velocity: npc.velocity,
             time_left: BETSY_BREATH_RUN as u16,
+            ai: [0.0; 3],
         });
     }
 
@@ -260,6 +261,7 @@ fn run(npc: &mut Npc, player: (f32, f32), out: &mut BetsyOutcome) {
                 ),
                 velocity: npc.velocity,
                 time_left: 600,
+                ai: [0.0; 3],
             });
         }
     }

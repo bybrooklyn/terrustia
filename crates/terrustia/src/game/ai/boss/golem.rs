@@ -306,6 +306,7 @@ pub fn head(
             position: from,
             velocity: aim,
             time_left: 600,
+            ai: [0.0; 3],
         });
     }
 
@@ -340,6 +341,7 @@ pub fn head(
                     position: (cx, cy),
                     velocity: aim,
                     time_left: 300,
+                    ai: [0.0; 3],
                 });
             }
         }
@@ -593,6 +595,7 @@ pub fn free_head(
                 GOLEM_FIREBALL_SPEED,
             ),
             time_left: 600,
+            ai: [0.0; 3],
         });
     }
 
@@ -639,6 +642,7 @@ pub fn free_head(
                 position: (cx, cy),
                 velocity: aim,
                 time_left: 300,
+                ai: [0.0; 3],
             });
         }
     }

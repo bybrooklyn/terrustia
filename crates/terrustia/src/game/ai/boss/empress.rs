@@ -206,6 +206,7 @@ pub fn empress(
                     position: (t.center.0, t.center.1 - 100.0),
                     velocity: (0.0, 0.0),
                     time_left: 0,
+                    ai: [0.0; 3],
                 });
             }
             if npc.ai[1] >= 120.0 {
@@ -252,6 +253,7 @@ pub fn empress(
                             out_of.1 * EMPRESS_RAINBOW_SPEED,
                         ),
                         time_left: 0,
+                        ai: [0.0; 3],
                     });
                 }
             }
@@ -284,6 +286,7 @@ pub fn empress(
                         position: (cx, cy - 100.0),
                         velocity: (angle.cos(), angle.sin()),
                         time_left: 0,
+                        ai: [0.0; 3],
                     });
                     along += step;
                 }
@@ -562,6 +565,7 @@ fn blasts(
         position: hand,
         velocity,
         time_left: 0,
+        ai: [0.0; 3],
     });
 }
 
@@ -633,6 +637,7 @@ fn bolts(
         position: origin,
         velocity: unit(along),
         time_left: 0,
+        ai: [0.0; 3],
     });
 }
 
@@ -730,6 +735,7 @@ fn lance_wall(
             position: origin,
             velocity: aim,
             time_left: 0,
+            ai: [0.0; 3],
         });
         along += step;
     }
@@ -762,6 +768,7 @@ fn planted(npc: &Npc, projectile: u16, damage: i32, at: (f32, f32)) -> Shot {
         position: (cx + at.0, cy + at.1),
         velocity: (0.0, 0.0),
         time_left: 0,
+        ai: [0.0; 3],
     }
 }
 

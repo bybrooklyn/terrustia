@@ -48,6 +48,7 @@ pub fn nebula_brain(
                 position: npc.center(),
                 velocity: floater_launch(rng),
                 time_left: 1800,
+                ai: [0.0; 3],
             });
         }
     }

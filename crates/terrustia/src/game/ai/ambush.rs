@@ -79,6 +79,7 @@ pub fn antlion<T: TileView>(npc: &mut Npc, world: &World<'_, T>) -> Option<Shot>
             position: npc.center(),
             velocity: a,
             time_left: SHOT_LIFETIME,
+            ai: [0.0; 3],
         });
     }
 

@@ -432,6 +432,7 @@ fn throw(
             ),
             velocity,
             time_left: 600,
+            ai: [0.0; 3],
         });
     }
     straight

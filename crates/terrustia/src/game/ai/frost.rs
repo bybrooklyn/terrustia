@@ -43,6 +43,7 @@ pub fn update<T: TileView>(npc: &mut Npc, world: &World<'_, T>) -> Option<Shot> 
                     ),
                     velocity: (spec.speed * f32::from(npc.sprite_direction), 0.0),
                     time_left: SHOT_LIFETIME,
+                    ai: [0.0; 3],
                 });
                 npc.dirty = true;
             }
@@ -93,6 +94,7 @@ pub fn update<T: TileView>(npc: &mut Npc, world: &World<'_, T>) -> Option<Shot> 
                     position: muzzle,
                     velocity: (dx * k, dy * k),
                     time_left: SHOT_LIFETIME,
+                    ai: [0.0; 3],
                 });
                 npc.dirty = true;
             }

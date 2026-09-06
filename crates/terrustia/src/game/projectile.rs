@@ -5,18 +5,17 @@
 //! decided to shoot has been emitting its aim and cadence for a while; this is what makes those
 //! decisions land.
 //!
-//! Twenty behaviours are transcribed here, and eleven more in `server::systems` (see below).
+//! Twenty-one behaviours are transcribed here, and twelve more in `server::systems` (see below).
 //! This file used to say "a handful of behaviours cover everything the roster and the world's
 //! traps fire"; the count, when it was finally taken, was **43 of the 79 types something here can
-//! launch reaching no arm at all**. It is 9 of 80 now.
+//! launch reaching no arm at all**. It is 8 of 80 now.
 //!
-//! The 9 left are not all straight lines, and saying so would be the same mistake again. Read
-//! against `Projectile.cs`: none of them *falls* - they are lasers, homing bolts, hovering clouds
-//! and shockwaves - so a straight line is a poorer approximation of them than it was of a thrown
-//! bone, not a free one. One of the eleven, the Rain Nimbus, is in fact **already right**: style
-//! 45's branch for it sets a rotation and nothing else. Six of the rest are blocked on the same
-//! thing, which is that `Shot` carries no `ai` values and their whole behaviour is chosen by what
-//! they are launched with. `TODO.md`'s C6 has the list, by style, with what each one does.
+//! The 8 left are not all straight lines, and saying so would be the same mistake again. Read
+//! against `Projectile.cs`: none of them *falls* - they are hovering clouds, shockwaves and
+//! convergences - so a straight line is a poorer approximation of them than it was of a thrown
+//! bone, not a free one. One of the eight, the Rain Nimbus, is in fact **already right**: style
+//! 45's branch for it sets a rotation and nothing else. `TODO.md`'s C6 has the list, by style,
+//! with what each one does.
 //!
 //! **A style whose arm needs to see anything but tiles lives in `server::systems` instead**, and
 //! is no less transcribed for it: a projectile cannot search the player list, walk the NPC table
@@ -24,7 +23,9 @@
 //! 84 (the Moon Lord's deathray), 85 (his brand), 109 (the Mechanic's wrench), 111 (the Dryad's
 //! ward), 127/128 (the Sand Elemental's mark and tornado), 133 (the Dark Mage's sigils) and
 //! 171/180 (two of the Empress's) are all there, called from `tick_projectiles` before the
-//! movement below, in vanilla's own order. So is `tick_friendly_projectile_hits`, which is
+//! movement below, in vanilla's own order, and so is the seeking half of 65 (Duke Fishron's
+//! second bubble). So is `tick_friendly_projectile_hits`, which is `Damage_PVE` and runs *after*
+//! the movement, where `Projectile.Update` puts it. So is `tick_friendly_projectile_hits`, which is
 //! `Damage_PVE` and runs after the movement, where `Projectile.Update` puts it.
 //!
 //! * **Style 1**, the arc: it flies straight for a quarter of a second and then starts falling, a
@@ -78,6 +79,10 @@
 //!   without it a boss's shockwave was a thirty-pixel box you could stand beside.
 //! * **Style 157**, the Deerclops ice spike: it never touches its velocity, because what it is
 //!   launched with is a facing rather than a speed. Twenty ticks and then gone.
+//! * **Style 65**, Duke Fishron's mouth bubbles: they bob, tracing a cosine around the speed they
+//!   were thrown at over thirty ticks. That is the half of style 65 with no target; the half with
+//!   one re-aims at a player every tick and is in `server::systems`, and a zero `ai[1]` is what
+//!   tells the two apart.
 //!
 //! Style 25 was the one doing real harm by its absence. A Boulder Statue launches its boulder *at
 //! rest*, so with no arm to give it gravity it never moved at all: a wired statue put a stationary
@@ -126,6 +131,13 @@ const SPORE_BOB: f32 = 0.15;
 const SMASH_TICKS: f32 = 9.0;
 const SMASH_FROM: f32 = 5.0;
 const SMASH_TO: f32 = 30.0;
+/// Duke Fishron's mouth bubbles (`Projectile.cs:30012-30084`). The seeking half of style 65 needs
+/// the player list and lives in `systems::tick_sharknado_bolts`; what is here is the bob, and the
+/// zero `ai[1]` that tells the two apart.
+const SHARKNADO_STYLE: i32 = 65;
+/// `num523 = MathF.PI / 15f` and `num524 = 4f`: a cosine over thirty ticks, four pixels either way.
+const BOLT_BOB_RATE: f32 = std::f32::consts::PI / 15.0;
+const BOLT_BOB_AMPLITUDE: f32 = 4.0;
 /// How long a Deerclops ice spike stands: `num10 = 20` for `type == 961`.
 const SPIKE_LIFE: f32 = 20.0;
 
@@ -633,6 +645,25 @@ pub fn step(
                 // (`DangerDetectRange[633]` is 100, the smallest there is) into one of the longest.
                 projectile.velocity.0 *= ZOOLOGIST_DRAG;
                 projectile.velocity.1 = 0.0;
+            }
+            SHARKNADO_STYLE if projectile.ai[1] == 0.0 => {
+                // The Duke's mouth bubbles (`Projectile.cs:30058-30078`), the half of style 65
+                // that is *not* seeking. A zero `ai[1]` is what says so, and vanilla writes the
+                // bob as a difference rather than an absolute: it subtracts the offset its current
+                // tick number implies, advances the tick, and adds the new one back, so the
+                // vertical speed traces a cosine around whatever it was launched with rather than
+                // being overwritten by one. The period is thirty ticks.
+                //
+                // The seeking half needs the player list and lives in
+                // `systems::tick_sharknado_bolts`.
+                let was = (BOLT_BOB_RATE * projectile.ai[0]).cos() - 0.5;
+                projectile.velocity.1 -= was * BOLT_BOB_AMPLITUDE;
+                projectile.ai[0] += 1.0;
+                let now = (BOLT_BOB_RATE * projectile.ai[0]).cos() - 0.5;
+                projectile.velocity.1 += now * BOLT_BOB_AMPLITUDE;
+                // `if (wet) { position.Y -= 16f; Kill(); }` is not modelled: a projectile here
+                // carries no wetness, and the Duke fights over the ocean, so this is the one
+                // narrowing in the arm rather than an oversight.
             }
             135 => {
                 // The Queen Slime's ground smash (`Projectile.cs:69740-69756`,
@@ -2280,6 +2311,50 @@ mod tests {
             Outcome::Spent,
             "and gone on the tenth"
         );
+    }
+
+    /// The Duke's mouth bubbles bob rather than fly straight, and only the ones with no target do.
+    ///
+    /// `aiStyle 65` (`Projectile.cs:30012-30084`) is two behaviours under one number, and a zero
+    /// `ai[1]` is what says which. The bob traces a cosine around the launch velocity over thirty
+    /// ticks; the seeking half is `systems::tick_sharknado_bolts` and must not be touched here,
+    /// because that arm has already set this tick's velocity by the time `step` runs.
+    #[test]
+    fn the_dukes_mouth_bubbles_bob_and_the_seeking_one_is_left_alone() {
+        let tiles = Air::default();
+
+        // No target: it bobs around the eight it was thrown at, and comes back to it after a full
+        // period rather than drifting off.
+        let mut bubble = launched(385, (2.0, 8.0));
+        let mut lowest = f32::MAX;
+        let mut highest = f32::MIN;
+        for _ in 0..30 {
+            step(&mut bubble, &tiles, &mut Vec::new());
+            lowest = lowest.min(bubble.velocity.1);
+            highest = highest.max(bubble.velocity.1);
+        }
+        assert!(
+            highest - lowest > 4.0,
+            "a cosine of amplitude four either way should swing at least that far: \
+             {lowest} to {highest}"
+        );
+        assert!(
+            (bubble.velocity.1 - 8.0).abs() < 0.01,
+            "and a full period returns it to its launch speed, not somewhere else: {}",
+            bubble.velocity.1
+        );
+        assert_eq!(
+            bubble.velocity.0, 2.0,
+            "it never touches the sideways speed"
+        );
+
+        // Handed a target, `step` must leave the velocity exactly as the seeking arm set it.
+        let mut seeker = launched(385, (0.0, 0.0));
+        seeker.ai = [1.0, 1.0, 0.0];
+        seeker.velocity = (3.0, 4.0);
+        step(&mut seeker, &tiles, &mut Vec::new());
+        assert_eq!(seeker.velocity, (3.0, 4.0));
+        assert_eq!(seeker.ai[0], 1.0, "and does not run the bob's own counter");
     }
 
     /// A Deerclops ice spike stands for twenty ticks and then goes.

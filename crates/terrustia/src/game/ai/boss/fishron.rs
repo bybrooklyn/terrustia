@@ -44,7 +44,7 @@ use crate::game::npc_ai::Spawn;
 
 /// The states, as `ai[0]` numbers them. The second and third phases repeat the first four at an
 /// offset of five and ten, which is exactly how the game numbers them.
-mod state {
+pub mod state {
     /// Before the fight: it hangs invisible for seventy-five ticks, then drops into `HOVERING`.
     pub const ARRIVING: f32 = -1.0;
     pub const HOVERING: f32 = 0.0;
@@ -384,19 +384,31 @@ pub fn fishron(npc: &mut Npc, world: &World<'_, impl TileView>) -> FishronOutcom
                                 FISHRON_BUBBLE_SPEED.1,
                             ),
                             time_left: 900,
+                            ai: [0.0; 3],
                         });
                     }
                 } else {
-                    // Narrowed: vanilla seeds this one's `ai` with `(1, target + 1, flag6)`, which
-                    // is what makes it home in and how hard it hits. `Shot` carries no `ai`, and
-                    // projectile 385 has no seeking routine here to read them, so the bubble is
-                    // launched without them and hangs where it was made.
+                    // `NewProjectile(..., 1f, target + 1, flag6 ? 1 : 0)` (`NPC.cs:50027`), and
+                    // those three numbers *are* the attack: `aiStyle 65` reads a non-zero `ai[1]`
+                    // as "seek the player one below me", and `ai[2]` as the enrage that makes it
+                    // sixteen pixels a tick rather than four. `flag6` is the same
+                    // out-of-the-ocean test this routine already runs above, so it is that flag
+                    // rather than a second reading of it.
+                    //
+                    // This site used to carry a standing narrowing - "`Shot` carries no `ai` ...
+                    // so the bubble is launched without them and hangs where it was made" - and it
+                    // is the site [`crate::game::ai::Shot::ai`] was added for.
                     out.shots.push(Shot {
                         projectile: FISHRON_BUBBLE,
                         damage: 0,
                         position: (cx, cy),
                         velocity: (0.0, 0.0),
                         time_left: 900,
+                        ai: [
+                            1.0,
+                            f32::from(target.slot) + 1.0,
+                            if enraged { 1.0 } else { 0.0 },
+                        ],
                     });
                 }
             }
@@ -926,6 +938,35 @@ mod tests {
         assert_eq!(bubbles[0].velocity, (0.0, 0.0), "and it does not drift");
         assert_eq!(bubbles[0].position, d.center(), "out of its own centre");
         assert_eq!(bubbles[0].damage, 0, "damage 0, as vanilla passes");
+        // `NewProjectile(..., 1f, target + 1, flag6 ? 1 : 0)` (`NPC.cs:50027`). These three are
+        // the attack: without them the bubble hangs where it was made for nine hundred ticks,
+        // which is what this site's own comment described for as long as `Shot` had no `ai`.
+        assert_eq!(bubbles[0].ai[0], 1.0, "the flag that turns seeking on");
+        assert_eq!(
+            bubbles[0].ai[1], 1.0,
+            "target 0, plus one so zero can mean nobody"
+        );
+        assert_eq!(bubbles[0].ai[2], 0.0, "not enraged, out over the ocean");
+    }
+
+    /// Out of the ocean the same bubble carries the enrage, which is what doubles its speed twice
+    /// over: `flag6` is `NPC.cs:49390`, and `aiStyle 65` reads it as `+12` on a base of four.
+    #[test]
+    fn an_enraged_dukes_bubble_is_told_so() {
+        let tiles = Sky(HashMap::new());
+        // High above the sky line is one of the three ways to be out of the ocean.
+        let w = world(&tiles, Some((600.0, 100.0)));
+        let mut d = duke(0.0, 0.0);
+        d.ai[0] = state::PHASE + state::BUBBLING;
+        d.life = d.life_max / 3;
+        d.direction = 1;
+
+        let mut bubbles = Vec::new();
+        for _ in 0..(FISHRON_BUBBLE_TICKS as i32 + 2) {
+            bubbles.extend(fishron(&mut d, &w).shots);
+        }
+        assert_eq!(bubbles.len(), 1);
+        assert_eq!(bubbles[0].ai[2], 1.0);
     }
 
     /// It arrives out of nothing rather than simply appearing (`ai[0] = -1`,

@@ -238,6 +238,7 @@ pub fn dreadnautilus(
                                 direction.1 * NAUTILUS_SPRAY_SPEED + jitter.1,
                             ),
                             time_left: 300,
+                            ai: [0.0; 3],
                         });
                     }
                 }

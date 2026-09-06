@@ -119,6 +119,7 @@ fn bolt(from: (f32, f32), toward: (f32, f32), rng: &mut SmallRng) -> Shot {
         position: from,
         velocity,
         time_left: 600,
+        ai: [0.0; 3],
     }
 }
 

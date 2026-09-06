@@ -314,6 +314,7 @@ fn second_form(
             position: (cx + aim.0 * TWIN_SHOT_LEAD, cy + aim.1 * TWIN_SHOT_LEAD),
             velocity: aim,
             time_left: 600,
+            ai: [0.0; 3],
         });
     }
 }
@@ -385,6 +386,7 @@ fn spazmatism_second_form(
                         position: (cx, cy),
                         velocity: aim,
                         time_left: 600,
+                        ai: [0.0; 3],
                     });
                 }
             }
@@ -451,6 +453,7 @@ fn aimed_shot(npc: &Npc, player: (f32, f32), t: &Twin, speed: f32, rng: &mut Sma
         position: (cx + aim.0 * t.shot_lead, cy + aim.1 * t.shot_lead),
         velocity: aim,
         time_left: 600,
+        ai: [0.0; 3],
     }
 }
 

@@ -398,6 +398,7 @@ pub fn eye<T: TileView>(
         position: (muzzle.0 + dx * k, muzzle.1 + dy * k),
         velocity: (dx * k, dy * k),
         time_left: 300,
+        ai: [0.0; 3],
     })
 }
 

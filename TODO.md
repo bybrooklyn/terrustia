@@ -479,22 +479,61 @@ but the invented numbers were what had been doing the ending, and a number that 
 and is not is exactly what let a 600 sit under a nine-tick attack. Both are now pinned by an
 assertion in their boss's own test.
 
-**9 types remain, across eight styles**: 45, 65, 98, 102 (2), 112, 136, 149, 187.
-**Coverage is 71 of 80**, counted by the audit tool rather than by hand. Style 112 counts as one of
-the nine and not as closed: it is three unrelated bodies keyed on the type inside the arm,
+**`Shot` carries `ai` now, which is the structural blocker rather than an arm.** Three lanes had
+already worked around its absence by *recovering* what they needed on a projectile's first tick -
+the Moon Lord's deathray finds the eye it is standing on, and the Dryad's ward and the Mechanic's
+wrench each find their caster - and that trade was right for all three, because each is an index a
+projectile can deduce from where it was launched. It does not generalise. **Five of the styles
+still missing choose their entire behaviour from what they are launched with**: the Duke's
+sharknado bolt, Deerclops's shadow hand, the Stardust Jellyfish, the Nebula Eye and the Cultist's
+shards. `boss/fishron.rs:390` had written the narrowing down at its own launch site and could not
+lift it.
+
+Ninety literals across forty-three files, given the field by a sweep rather than by hand. `Shot`
+is the only carrier; `launch` was left alone and the value is applied to the projectile at the one
+site that turns a `Shot` into one, because every other caller of `launch` would otherwise gain a
+sixth argument of `[0.0; 3]`. `world::wiring` has an unrelated `Shot` of its own, with a
+`projectile_type` and an `ai` it already carried, and the sweep had to learn to tell them apart.
+
+**Style 65, Duke Fishron's bubbles, closed with it, and it is two behaviours under one number.**
+A zero `ai[1]` is what says which (`Projectile.cs:30012-30084`):
+
+- **The mouth bubbles** (`ai[1] == 0`, thrown two at a time in the first bubbling phase) bob:
+  vanilla writes it as a difference rather than an absolute, subtracting the offset the current
+  tick number implies, advancing the tick and adding the new one back, so the vertical speed traces
+  a cosine around the launch velocity over thirty ticks rather than being overwritten by one.
+- **The seeking bubble** (`ai[1] > 0`, one from his own centre in the later phase) does not turn,
+  it **re-aims**: the velocity is rebuilt every tick as the unit vector at the player times a speed
+  that climbs by a twentieth a tick, so there is no outrunning it, only breaking line of sight or
+  letting it hit a wall. Four pixels a tick, and **sixteen when he is enraged** - `ai[2]` is the
+  same out-of-the-ocean flag (`NPC.cs:49390`) the routine already computes for his own stats. It
+  ends within fifty pixels of you rather than on contact. Before this it was launched with nothing
+  and, in its own site's words, "hangs where it was made" - for nine hundred ticks.
+
+**Style 98, the Cultist's shards, is not closed and the blocker is not the arm.** The arm is six
+lines (lerp toward the point in `ai[0..1]` at fifteen, die within one tick's travel), but the point
+is `Main.npc[ai[2]].Center` - the **Lunatic Cultist**, which vanilla creates *at the same instant
+it sets `ai[0] = -1`* and starts the tablet breaking (`NPC.cs:37202-37204`), so the boss stands
+there for the whole three seconds while the shards converge on him. Ours raises him from
+`ritual_complete` when the shatter *finishes*, so during the shards' entire flight there is nothing
+to converge on. That is a real ordering divergence in the ritual and worth its own fix; the shards
+are `damage: 0`, so reordering a boss's arrival for a visual is not this lane's trade.
+
+**8 types remain, across seven styles**: 45, 98, 102 (2), 112, 136, 149, 187.
+**Coverage is 72 of 80**, counted by the audit tool rather than by hand. Style 112 counts as one of
+the eight and not as closed: it is three unrelated bodies keyed on the type inside the arm,
 exactly as vanilla keys them, and only the Truffle's spore is transcribed - crediting the style
 would credit the Dandelion seed for the spore's arm.
 
 - **45, the Rain Nimbus (264), is already right** and should not be counted as a movement gap: its
   branch (`:28486-28509`) sets a rotation and bounces off shimmer, and nothing else. Its only
   divergence is a 300-tick fuse where the table says 120.
-- **Six of the ten are blocked on the same thing.** `Shot` carries no `ai` values, and 65 (the
-  sharknado bolt: a cosine bob at `ai[1] == 0`, a homing bolt above it), 187 (the shadow hand,
-  whose four variations are chosen by an `ai[0]` of 0/180/300/390 at launch), 102 (the jellyfish
-  and the nebula eye, which hover by the parent in `ai[1]` and then fire at a player) and 98 (the
-  cultist's shards, which converge on the point in `ai[0..1]`) all pick their whole behaviour from
-  what they are launched with. `boss/fishron.rs:390` already writes this down at its own launch
-  site. Ninety-eight `Shot` literals and one mechanical field.
+- **Three still need what `Shot::ai` now provides, and are the next ones up.** 187, the shadow
+  hand, whose four variations are chosen by an `ai[0]` of 0, 180, 300 or 390 set by
+  `Projectile.RandomizeInsanityShadowFor` (`Projectile.cs:43179-43270`) at the launch site rather
+  than by the arm; and 102, the Stardust Jellyfish and the Nebula Eye, which hover by the parent
+  named in `ai[1]` for 210 and 180 ticks and then fire at a player (the Eye spawning a second
+  projectile and starting over rather than leaving).
 - **136, Betsy's flame breath** (`:69858-69910`) is welded to her and dies at 78, the deathray's
   shape again. **149, the golf ball** is the only large one: `BallCollision.Step`
   (`Terraria.Physics/BallCollision.cs:24-90`) plus per-tile friction from `TileGolfPhysics`.

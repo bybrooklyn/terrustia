@@ -134,6 +134,7 @@ pub fn pumpking(
             position: from,
             velocity: (across * jitter(rng), rise * jitter(rng)),
             time_left: 600,
+            ai: [0.0; 3],
         });
     }
 
@@ -343,6 +344,7 @@ pub fn ice_queen(
                     position: drop,
                     velocity: (npc.velocity.0 * 0.25, npc.velocity.1.max(0.0) + 3.0),
                     time_left: 600,
+                    ai: [0.0; 3],
                 });
             }
         }
@@ -382,6 +384,7 @@ pub fn ice_queen(
                 ),
                 velocity: bearing,
                 time_left: 600,
+                ai: [0.0; 3],
             });
         }
 
@@ -444,6 +447,7 @@ pub fn ice_queen(
                     position: from,
                     velocity: (aim.0 / length * speed, aim.1 / length * speed),
                     time_left: 600,
+                    ai: [0.0; 3],
                 });
             }
         } else if npc.ai[3] < 0.0 {
@@ -538,6 +542,7 @@ pub fn santa(npc: &mut Npc, world: &World<'_, impl TileView>, rng: &mut SmallRng
                     position: muzzle,
                     velocity: (across * jitter(rng), rise * jitter(rng)),
                     time_left: 300,
+                    ai: [0.0; 3],
                 });
             }
             // C7-03: the burst runs 240 ticks, not 300 (`NPC.cs:34067`, `ai[1] > 240`). The old
@@ -607,6 +612,7 @@ fn santa_hardpoints(
             position: hardpoint,
             velocity: lob,
             time_left: 600,
+            ai: [0.0; 3],
         });
     }
 
@@ -636,6 +642,7 @@ fn santa_hardpoints(
                 position: hardpoint,
                 velocity: (aim.0 * jitter(rng, 0.015), aim.1 * jitter(rng, 0.015)),
                 time_left: 600,
+                ai: [0.0; 3],
             });
         }
         if npc.local_ai[1] >= SANTA_VOLLEY_TICKS {
@@ -666,6 +673,7 @@ fn santa_hardpoints(
                 position: hardpoint,
                 velocity: (up.0 * jitter(rng, 0.01), up.1 * jitter(rng, 0.01)),
                 time_left: 600,
+                ai: [0.0; 3],
             });
         }
         if npc.local_ai[2] >= SANTA_VOLLEY_TICKS {

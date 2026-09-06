@@ -155,6 +155,7 @@ pub fn update<T: TileView>(
                     // `Main.rand.NextFloatDirection()` is a float in [-1, 1).
                     velocity: (npc.velocity.0, (rng.random::<f32>() * 2.0 - 1.0) * 3.0),
                     time_left: SHOT_LIFETIME,
+                    ai: [0.0; 3],
                 });
             }
         }
@@ -212,6 +213,7 @@ pub fn update<T: TileView>(
                             -4.0 - 10.0 * rng.random::<f32>(),
                         ),
                         time_left: SHOT_LIFETIME,
+                        ai: [0.0; 3],
                     });
                 }
                 out.died = true;
@@ -238,6 +240,7 @@ pub fn update<T: TileView>(
                         position: (cx + away * 20.0, cy),
                         velocity: (away * 7.0, 0.0),
                         time_left: SHOT_LIFETIME,
+                        ai: [0.0; 3],
                     });
                 }
                 if npc.ai[1] >= 60.0 {

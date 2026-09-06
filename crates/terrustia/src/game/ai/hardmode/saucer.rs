@@ -218,6 +218,7 @@ fn circuit(
             position: (cx, cy),
             velocity: (0.0, 0.0),
             time_left: SAUCER_HALF_BEAT as u16,
+            ai: [0.0; 3],
         });
     }
     if now == 3 && due(npc.ai[3], SAUCER_LASER_FROM, SAUCER_LASER_PERIOD) {
@@ -234,6 +235,7 @@ fn circuit(
                 position: (cx + side, cy),
                 velocity: aim,
                 time_left: 300,
+                ai: [0.0; 3],
             });
         }
     }
@@ -250,6 +252,7 @@ fn circuit(
                 position: (cx + side, cy),
                 velocity: (side.signum() * SAUCER_MISSILE_SPEED, 0.0),
                 time_left: 300,
+                ai: [0.0; 3],
             });
         }
     }
@@ -331,6 +334,7 @@ fn last_stand(
             position: npc.center(),
             velocity: (0.0, 0.0),
             time_left: SAUCER_HALF_BEAT as u16,
+            ai: [0.0; 3],
         });
     }
 

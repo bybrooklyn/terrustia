@@ -1139,6 +1139,13 @@ impl GameServer {
                 shot.damage,
                 i32::from(shot.time_left),
             ) {
+                // `NewProjectile`'s last two arguments, set here rather than threaded through
+                // `launch`: every other caller of it passes nothing, and a sixth parameter of
+                // `[0.0; 3]` at each of them says less than this does. See [`Shot::ai`] for why
+                // the field exists at all.
+                if let Some(p) = self.projectiles.get_mut(index) {
+                    p.ai = shot.ai;
+                }
                 self.broadcast_projectile(index);
             }
         }
@@ -2404,6 +2411,87 @@ impl GameServer {
         }
     }
 
+    /// Duke Fishron's second bubble seeks you, which is the half of style 65 it was missing.
+    ///
+    /// `aiStyle == 65`'s `ai[1] > 0` branch (`Projectile.cs:30014-30057`). The Duke's first
+    /// bubbling phase throws two out of his mouth that drift apart and bob; the second makes one
+    /// at his own centre with no velocity at all and hands it a target, and *that* one chases you
+    /// down. Vanilla seeds it with `(1f, target + 1, flag6 ? 1 : 0)` (`NPC.cs:50027`), and
+    /// `boss/fishron.rs` used to launch it with none of them and a standing note saying why - it
+    /// is the site [`crate::game::ai::Shot::ai`] was added for.
+    ///
+    /// It does not turn, it *re-aims*: the velocity is rebuilt from scratch every tick as the unit
+    /// vector at the player times a speed that climbs by a twentieth a tick, so there is no
+    /// outrunning it, only breaking line of sight or letting it hit a wall. Four pixels a tick to
+    /// start, and **sixteen when the Duke is enraged** - `ai[2]` is the same out-of-the-ocean flag
+    /// the routine already computes for his own stats. It ends within fifty pixels of you rather
+    /// than on contact.
+    fn tick_sharknado_bolts(&mut self) {
+        use terrustia_proto::projectile::ids::FISHRON_BUBBLE;
+
+        /// `num522 = 4f`, `+= 12f` when enraged, and `+= localAI[0] / 20f` every tick.
+        const SEEK_SPEED: f32 = 4.0;
+        const SEEK_ENRAGED_BONUS: f32 = 12.0;
+        const SEEK_ACCELERATION: f32 = 20.0;
+        /// `if (value6.Length() < 50f) Kill()`.
+        const SEEK_ARRIVES: f32 = 50.0;
+
+        let bolts: Vec<u16> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == FISHRON_BUBBLE && p.ai[1] != 0.0)
+            .map(|(index, _)| index)
+            .collect();
+        if bolts.is_empty() {
+            return;
+        }
+        let mut spent = Vec::new();
+        for index in bolts {
+            let Some(bolt) = self.projectiles.get(index) else {
+                continue;
+            };
+            // `int num518 = (int)ai[1] - 1; if (num518 < 255)`: the slot it was handed, one up so
+            // that zero can mean "no target". Vanilla's guard is against its own 255th slot, the
+            // blank player; ours is simply whether anybody is in that slot and playing.
+            let slot = bolt.ai[1] as i32 - 1;
+            let at = usize::try_from(slot)
+                .ok()
+                .and_then(|slot| self.players.get(slot))
+                .and_then(Option::as_ref)
+                .filter(|p| p.is_playing())
+                .map(|p| {
+                    (
+                        p.position.0 + crate::game::ai::PLAYER_WIDTH as f32 / 2.0,
+                        p.position.1 + crate::game::ai::PLAYER_HEIGHT as f32 / 2.0,
+                    )
+                });
+            let Some(at) = at else {
+                continue;
+            };
+            let Some(bolt) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            bolt.local_ai[0] += 1.0;
+            let centre = bolt.center();
+            let (dx, dy) = (at.0 - centre.0, at.1 - centre.1);
+            let away = dx.hypot(dy);
+            if away < SEEK_ARRIVES {
+                spent.push(index);
+                continue;
+            }
+            let mut speed = SEEK_SPEED;
+            if bolt.ai[2] == 1.0 {
+                speed += SEEK_ENRAGED_BONUS;
+            }
+            speed += bolt.local_ai[0] / SEEK_ACCELERATION;
+            bolt.velocity = (dx / away * speed, dy / away * speed);
+            bolt.dirty = true;
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
     /// The Mechanic's wrench comes back to her, which is the half of it that was missing.
     ///
     /// `aiStyle == 109` (`Projectile.cs:34652-34690`). It is a boomerang: thirty ticks out at
@@ -2835,6 +2923,8 @@ impl GameServer {
         self.tick_dryad_wards();
         // And the Mechanic's wrench, which turns round and comes back to her.
         self.tick_mechanic_wrenches();
+        // And the Duke's second bubble, which re-aims at whoever it was given.
+        self.tick_sharknado_bolts();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -16318,6 +16408,24 @@ mod town_shots_land {
         )
     }
 
+    /// A player in slot 0, standing where asked. `position` is their top-left, as the wire and the
+    /// server's own copy both are.
+    ///
+    /// **The receiver comes back and the caller must hold it.** Dropping it closes the outbound
+    /// channel, and the first tick that tries to send anything to this player finds a dead channel
+    /// and takes them off the server - so the NPC being tested loses its target one tick in and
+    /// every routine that needs one quietly stops. That is a plausible-looking "the boss just
+    /// hovers" with nothing wrong in the boss.
+    #[must_use]
+    fn seat(server: &mut GameServer, at: (f32, f32)) -> mpsc::Receiver<bytes::Bytes> {
+        let (out_tx, out_rx) = mpsc::channel(64);
+        let mut player = Player::new(0, "127.0.0.1:1".parse().expect("loopback"), out_tx);
+        player.state = ConnState::Playing;
+        player.position = at;
+        server.players[0] = Some(player);
+        out_rx
+    }
+
     /// A town NPC's shot damages the enemy it is flying through.
     ///
     /// `Projectile.Damage_PVE` under `owner == Main.myPlayer` (`Projectile.cs:12518`), and on a
@@ -16647,6 +16755,128 @@ mod town_shots_land {
             1.0,
             "and it is on its way back before its thirty ticks are up"
         );
+    }
+
+    /// The Duke's second bubble chases whoever it was handed, and speeds up while it does.
+    ///
+    /// `aiStyle 65`'s `ai[1] > 0` branch (`Projectile.cs:30014-30057`). Before [`Shot::ai`] there
+    /// was no way to hand it a target at all, so `boss/fishron.rs` launched it with nothing and a
+    /// note saying it "hangs where it was made" - which is exactly what it did, for nine hundred
+    /// ticks.
+    #[test]
+    fn the_dukes_seeking_bubble_chases_the_player_it_was_given() {
+        use terrustia_proto::projectile::ids::FISHRON_BUBBLE;
+
+        let mut server = server();
+        let _held = seat(&mut server, (2400.0, 2000.0));
+        let bolt = server
+            .projectiles
+            .launch(FISHRON_BUBBLE, (2000.0, 2000.0), (0.0, 0.0), 30, 0)
+            .expect("a known type");
+        {
+            let p = server.projectiles.get_mut(bolt).expect("up");
+            // `target + 1`, so that a zero can mean "nobody".
+            p.ai = [1.0, 1.0, 0.0];
+        }
+
+        // Through the real `tick_projectiles`, which is also the test that the arm is wired in:
+        // unhooked, the bubble keeps the nothing it was launched with and every other assertion
+        // here still passes, because the rest call the arm directly.
+        server.tick_projectiles();
+        let after = *server.projectiles.get(bolt).expect("up");
+        assert!(after.velocity.0 > 0.0, "it should turn toward the player");
+        let speed = after.velocity.0.hypot(after.velocity.1);
+        assert!(
+            (speed - 4.05).abs() < 0.01,
+            "four, plus a twentieth for its first tick; got {speed}"
+        );
+
+        // It re-aims from scratch every tick and climbs, so it is faster ten ticks later.
+        for _ in 0..10 {
+            server.tick_sharknado_bolts();
+        }
+        let later = server.projectiles.get(bolt).expect("up");
+        let faster = later.velocity.0.hypot(later.velocity.1);
+        assert!(faster > speed, "it accelerates: {speed} -> {faster}");
+    }
+
+    /// Enraged, the same bubble leaves at sixteen rather than four: `ai[2]` is the
+    /// out-of-the-ocean flag (`NPC.cs:49390`) the Duke's routine already computes for his own
+    /// stats, handed straight to the projectile.
+    #[test]
+    fn an_enraged_dukes_bubble_leaves_four_times_as_fast() {
+        use terrustia_proto::projectile::ids::FISHRON_BUBBLE;
+
+        let speed_with = |enraged: f32| {
+            let mut server = server();
+            let _held = seat(&mut server, (2400.0, 2000.0));
+            let bolt = server
+                .projectiles
+                .launch(FISHRON_BUBBLE, (2000.0, 2000.0), (0.0, 0.0), 30, 0)
+                .expect("a known type");
+            server.projectiles.get_mut(bolt).expect("up").ai = [1.0, 1.0, enraged];
+            server.tick_sharknado_bolts();
+            let p = server.projectiles.get(bolt).expect("up");
+            p.velocity.0.hypot(p.velocity.1)
+        };
+        let (calm, enraged) = (speed_with(0.0), speed_with(1.0));
+        assert!((enraged - calm - 12.0).abs() < 0.01, "{calm} vs {enraged}");
+    }
+
+    /// A `Shot`'s `ai` reaches the projectile it becomes, end to end through a real boss tick.
+    ///
+    /// Every other test of style 65 writes `ai` onto the projectile directly, which proves the
+    /// arms read it and nothing about whether a routine can *hand* it over - and the whole point
+    /// of the field is that the routine decides. Duke Fishron's second bubbling phase is the site
+    /// it was added for, so it is the one driven here: spawn him mid-phase, tick until the bubble
+    /// exists, and read what the launch gave it.
+    #[test]
+    fn a_routines_ai_survives_the_trip_from_shot_to_projectile() {
+        use terrustia_proto::npc_params::FISHRON;
+        use terrustia_proto::projectile::ids::FISHRON_BUBBLE;
+
+        let mut server = server();
+        let _held = seat(&mut server, (2400.0, 2000.0));
+        let duke = server
+            .npcs
+            .spawn(FISHRON, (2000.0, 2000.0))
+            .expect("a slot");
+        {
+            let d = server.npcs.get_mut(duke).expect("just spawned");
+            // Already arrived, in the later phase's bubbling state, and hurt enough to be in it.
+            d.local_ai[0] = 1.0;
+            d.ai[0] = crate::game::ai::boss::fishron::state::PHASE
+                + crate::game::ai::boss::fishron::state::BUBBLING;
+            d.life = d.life_max / 3;
+        }
+        for _ in 0..200 {
+            server.tick_npcs();
+            if server
+                .projectiles
+                .iter()
+                .any(|(_, p)| p.projectile_type == FISHRON_BUBBLE)
+            {
+                break;
+            }
+        }
+        let bubble = server
+            .projectiles
+            .iter()
+            .find(|(_, p)| p.projectile_type == FISHRON_BUBBLE)
+            .map(|(_, p)| *p)
+            .unwrap_or_else(|| {
+                let d = server.npcs.get(duke).expect("still there");
+                panic!(
+                    "he should have made one: ai {:?} local_ai {:?} life {}/{} projectiles {}",
+                    d.ai,
+                    d.local_ai,
+                    d.life,
+                    d.life_max,
+                    server.projectiles.iter().count()
+                )
+            });
+        assert_eq!(bubble.ai[0], 1.0, "the seeking flag the routine chose");
+        assert_eq!(bubble.ai[1], 1.0, "and the target it picked, plus one");
     }
 
     /// A townsperson's swing goes through the target's armour and then through its cooldown.

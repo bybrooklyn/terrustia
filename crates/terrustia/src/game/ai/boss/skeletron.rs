@@ -227,6 +227,7 @@ pub fn head<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallRng
                     position: (cx + aim.0 * 5.0, cy + aim.1 * 5.0),
                     velocity: aim,
                     time_left: 300,
+                    ai: [0.0; 3],
                 });
             }
         }

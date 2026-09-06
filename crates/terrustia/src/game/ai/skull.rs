@@ -213,6 +213,7 @@ pub fn update<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallR
         position: (cx, cy),
         velocity: (dx * k, dy * k),
         time_left: SHOT_LIFETIME,
+        ai: [0.0; 3],
     });
     out
 }

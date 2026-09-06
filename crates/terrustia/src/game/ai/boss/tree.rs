@@ -268,6 +268,7 @@ fn throw(npc: &Npc, player: (f32, f32), attack: &TreeAttack, rng: &mut SmallRng)
         position: from,
         velocity,
         time_left: 600,
+        ai: [0.0; 3],
     }
 }
 

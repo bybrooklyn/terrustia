@@ -114,6 +114,7 @@ pub fn rider(
                 position: from,
                 velocity: aimed(aim, RIDER_SHOT_SPEED),
                 time_left: 300,
+                ai: [0.0; 3],
             });
         }
         return out;
@@ -138,6 +139,7 @@ pub fn rider(
                 position: (cx, cy),
                 velocity: shot,
                 time_left: 600,
+                ai: [0.0; 3],
             });
         } else {
             // Between shots it tracks you, in eight steps: `ai[2]` is which way it is pointing.

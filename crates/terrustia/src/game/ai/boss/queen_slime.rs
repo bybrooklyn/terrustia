@@ -253,6 +253,7 @@ fn movement(
                         // ticks. Vanilla passes no lifetime (`NPC.cs:46057`); the 600 here was
                         // invented and was five times even the table's own 120.
                         time_left: 0,
+                        ai: [0.0; 3],
                     });
                     return out;
                 }
@@ -301,6 +302,7 @@ fn movement(
                             position: (cx, cy),
                             velocity: (QUEEN_SLIME_RING_SPEED * c, QUEEN_SLIME_RING_SPEED * s),
                             time_left: 600,
+                            ai: [0.0; 3],
                         });
                     }
                     npc.ai[0] = state::WAITING;

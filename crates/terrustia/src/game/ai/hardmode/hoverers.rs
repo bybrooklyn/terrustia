@@ -141,6 +141,7 @@ pub fn nimbus<T: TileView>(npc: &mut Npc, world: &World<'_, T>) -> Option<Shot> 
         ),
         velocity: (0.0, 5.0),
         time_left: 300,
+        ai: [0.0; 3],
     })
 }
 
@@ -208,6 +209,7 @@ pub fn copter<T: TileView>(
         position: muzzle,
         velocity: (aim.0 * k, aim.1 * k),
         time_left: 300,
+        ai: [0.0; 3],
     })
 }
 
@@ -388,6 +390,7 @@ pub fn ancient_doom(npc: &mut Npc, summoner_health: Option<f32>) -> Outcome {
                     -angle.cos() * DOOM_SHOT_SPEED,
                 ),
                 time_left: 300,
+                ai: [0.0; 3],
             });
         }
         out.spent = true;

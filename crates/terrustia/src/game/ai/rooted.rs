@@ -249,6 +249,7 @@ fn attack<T: TileView>(
             position: from,
             velocity: (dx, dy),
             time_left: SHOT_LIFETIME,
+            ai: [0.0; 3],
         });
     } else {
         out.spawn = Some(Spawn {

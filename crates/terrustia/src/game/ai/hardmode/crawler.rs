@@ -175,6 +175,7 @@ pub fn crawler(npc: &mut Npc, world: &World<'_, impl TileView>, rng: &mut SmallR
                     ay / length * CRAWLER_SPIT_SPEED,
                 ),
                 time_left: 300,
+                ai: [0.0; 3],
             });
         }
     }

@@ -98,6 +98,7 @@ fn attack<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallRng) 
                     position: from,
                     velocity: (dx * speed / d, dy * speed / d),
                     time_left: SHOT_LIFETIME,
+                    ai: [0.0; 3],
                 });
             }
         }
@@ -129,6 +130,7 @@ fn attack<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallRng) 
             position: from,
             velocity: (vx, vy),
             time_left: SHOT_LIFETIME,
+            ai: [0.0; 3],
         });
     }
     if npc.ai[3] > 0.0 {

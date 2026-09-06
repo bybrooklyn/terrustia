@@ -305,6 +305,7 @@ pub fn update<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallR
                             position: ((tx * 16 + 8) as f32, (ty * 16 + 8) as f32),
                             velocity: (0.0, 0.0),
                             time_left: SHOT_LIFETIME,
+                            ai: [0.0; 3],
                         })
                     }
                     (DESERT_DJINN, None) => None,
@@ -321,6 +322,7 @@ pub fn update<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallR
                             .target
                             .map_or((0.0, 0.0), |t| aim((x, y), t, thrown, rng)),
                         time_left: SHOT_LIFETIME,
+                        ai: [0.0; 3],
                     }),
                 };
             }

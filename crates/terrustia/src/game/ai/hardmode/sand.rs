@@ -399,6 +399,7 @@ fn raise_sandnadoes(
             velocity: (0.0, 0.0),
             // Its own arm ends it at 120, having spawned the tornado at 60.
             time_left: 0,
+            ai: [0.0; 3],
         });
     }
     shots

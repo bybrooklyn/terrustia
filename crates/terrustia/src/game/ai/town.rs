@@ -665,6 +665,7 @@ fn try_combat<T: TileView>(
                 // are the two exceptions, and vanilla's are explicit; see
                 // [`town_combat::shot_lifetime`].
                 time_left: town_combat::shot_lifetime(npc.npc_type),
+                ai: [0.0; 3],
             }),
             ..TownUpdate::default()
         },
@@ -700,6 +701,7 @@ fn try_combat<T: TileView>(
                 // No aim and no speed: both of these are `NewProjectile(..., 0f, 0f, ...)`.
                 velocity: (0.0, 0.0),
                 time_left: town_combat::shot_lifetime(npc.npc_type),
+                ai: [0.0; 3],
             }),
             ..TownUpdate::default()
         },

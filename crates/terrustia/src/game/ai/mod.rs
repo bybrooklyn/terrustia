@@ -328,6 +328,24 @@ pub struct Shot {
     pub position: (f32, f32),
     pub velocity: (f32, f32),
     pub time_left: u16,
+    /// The `ai` values `NewProjectile`'s last two arguments carry, which for a large family of
+    /// styles are not decoration but the whole behaviour.
+    ///
+    /// This was absent for a long time and three lanes worked around it by *recovering* what they
+    /// needed on a projectile's first tick: the Moon Lord's deathray finds the eye it is standing
+    /// on, and the Dryad's ward and the Mechanic's wrench each find their caster. That trade was
+    /// right for those three, because each is an index a projectile can deduce from where it was
+    /// launched. It does not generalise, and the count is why this field exists now: **five of the
+    /// styles still missing choose their entire behaviour from what they are launched with.** The
+    /// Duke's sharknado bolt bobs on the spot at `ai[1] == 0` and homes at a player above it;
+    /// Deerclops's shadow hand picks one of four routines from an `ai[0]` of 0, 180, 300 or 390;
+    /// the Stardust Jellyfish and the Nebula Eye hover by the parent named in `ai[1]`; the
+    /// Cultist's shards converge on the point in `ai[0..1]`. None of those is deducible from a
+    /// launch point.
+    ///
+    /// `boss/fishron.rs` had already written this down at its own launch site, as a narrowing it
+    /// could not lift.
+    pub ai: [f32; 3],
 }
 
 /// A melee hit a routine wants applied directly to another NPC — no projectile entity involved,
@@ -1054,6 +1072,7 @@ pub fn run<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallRng)
                     position: at,
                     velocity: (0.0, 0.0),
                     time_left: 300,
+                    ai: [0.0; 3],
                 });
             }
         }

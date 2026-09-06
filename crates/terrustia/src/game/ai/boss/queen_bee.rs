@@ -485,6 +485,7 @@ pub fn update<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallR
             position: muzzle,
             velocity: (aim.0 * k, aim.1 * k),
             time_left: 300,
+            ai: [0.0; 3],
         });
         npc.dirty = true;
     }

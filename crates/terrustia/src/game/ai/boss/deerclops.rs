@@ -79,6 +79,7 @@ fn spikes<T: TileView>(npc: &Npc, world: &World<'_, T>, direction: i8, out: &mut
             // `NPC.cs:45055`, and a wall of twenty spikes stood for five seconds rather than a
             // third of one.
             time_left: 0,
+            ai: [0.0; 3],
         });
     }
 }
@@ -114,6 +115,7 @@ fn rubble_up<T: TileView>(
         position: ((x * 16 + 8) as f32, (y * 16 - 8) as f32),
         velocity: (lean.sin() * speed, -lean.cos() * speed),
         time_left: 220,
+        ai: [0.0; 3],
     });
 }
 
@@ -229,6 +231,7 @@ pub fn update<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallR
                     ),
                     velocity: (-angle.cos() * 4.0, -angle.sin() * 4.0),
                     time_left: 300,
+                    ai: [0.0; 3],
                 });
             }
         }
@@ -373,6 +376,7 @@ pub fn update<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallR
                     ),
                     velocity: (-angle.cos() * 4.0, -angle.sin() * 4.0),
                     time_left: 300,
+                    ai: [0.0; 3],
                 });
             }
         }

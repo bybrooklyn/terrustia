@@ -731,18 +731,18 @@ crates/terrustia/src/game/ai/boss/cultist.rs	mod tests :: fn the_guess_is_the_fi
 crates/terrustia/src/game/ai/boss/cultist.rs	mod tests :: fn the_guess_is_the_fight	NPC.cs	65215-65262	950c56c14e4f	95ac1c1ed14f
 crates/terrustia/src/game/ai/boss/cultist.rs	struct CultistOutcome	NPC.cs	65194-65207	5823a787a0a3	b81f1d067423
 crates/terrustia/src/game/ai/boss/cultist.rs	struct CultistOutcome	NPC.cs	65229-65256	1afe10f8005e	b81f1d067423
-crates/terrustia/src/game/ai/boss/deerclops.rs	fn rubble_up	NPC.cs	44913-44932	57f9b7a60ccb	d8dae5e84071
-crates/terrustia/src/game/ai/boss/deerclops.rs	fn spikes	NPC.cs	45055	c0d8f0781424	b7d8178abf75
-crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	NPC.cs	44522-44524,44890-44912	3ef17ca5cd7a	9d2fb375f5c2
-crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	NPC.cs	44718-44739	f30b03b06771	9d2fb375f5c2
-crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	NPC.cs	47474-47494	2a9d82bd773e	9d2fb375f5c2
-crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	Projectile.cs	43187	bf743f5c3149	9d2fb375f5c2
+crates/terrustia/src/game/ai/boss/deerclops.rs	fn rubble_up	NPC.cs	44913-44932	57f9b7a60ccb	619321a686c9
+crates/terrustia/src/game/ai/boss/deerclops.rs	fn spikes	NPC.cs	45055	c0d8f0781424	67dbe933e463
+crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	NPC.cs	44522-44524,44890-44912	3ef17ca5cd7a	7f3c58189863
+crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	NPC.cs	44718-44739	f30b03b06771	7f3c58189863
+crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	NPC.cs	47474-47494	2a9d82bd773e	7f3c58189863
+crates/terrustia/src/game/ai/boss/deerclops.rs	fn update	Projectile.cs	43187	bf743f5c3149	7f3c58189863
 crates/terrustia/src/game/ai/boss/deerclops.rs	mod tests :: fn it_will_not_re_roar_while_its_slow_is_still_up	NPC.cs	44653-44654	4e6df28e4a48	d8ec541d6c0d
 crates/terrustia/src/game/ai/boss/deerclops.rs	mod tests :: fn the_passive_rain_picks_one_wave_in_three_and_stops_at_range	NPC.cs	47474-47494	2a9d82bd773e	55668347d98d
 crates/terrustia/src/game/ai/boss/deerclops.rs	mod tests :: fn the_passive_rain_picks_one_wave_in_three_and_stops_at_range	Projectile.cs	43187	bf743f5c3149	55668347d98d
 crates/terrustia/src/game/ai/boss/deerclops.rs	mod tests :: fn up_close_it_throws_a_wall_of_spikes_forward	NPC.cs	45054	436478f586cf	9ed756059a4b
-crates/terrustia/src/game/ai/boss/destroyer.rs	fn destroyer	NPC.cs	50399	20d9f8d814c8	0b02e34bbec0
-crates/terrustia/src/game/ai/boss/destroyer.rs	fn destroyer	NPC.cs	50498-50507	a4a84326f18d	0b02e34bbec0
+crates/terrustia/src/game/ai/boss/destroyer.rs	fn destroyer	NPC.cs	50399	20d9f8d814c8	83aeba8b1da1
+crates/terrustia/src/game/ai/boss/destroyer.rs	fn destroyer	NPC.cs	50498-50507	a4a84326f18d	83aeba8b1da1
 crates/terrustia/src/game/ai/boss/destroyer.rs	mod tests :: fn a_destroyer_already_on_course_trims_twice	NPC.cs	50633-50651	6620932fd001	c8fa8b9f2e18
 crates/terrustia/src/game/ai/boss/destroyer.rs	mod tests :: fn a_destroyer_already_on_course_trims_twice	NPC.cs	50652-50692	38736e0fdbe1	c8fa8b9f2e18
 crates/terrustia/src/game/ai/boss/destroyer.rs	mod tests :: fn an_ordinary_worm_trims_once	NPC.cs	52662-52679	bd1dc53c8f96	3333ecc4c69d
@@ -791,23 +791,24 @@ crates/terrustia/src/game/ai/boss/eye.rs	mod tests :: fn the_expert_second_forms
 crates/terrustia/src/game/ai/boss/eye.rs	mod tests :: fn the_expert_split_throws_servants_while_it_spins	NPC.cs	20363-20400	2583b15c0ccf	be19f109f904
 crates/terrustia/src/game/ai/boss/eye.rs	mod tests :: fn the_lunge_cycle_runs_five_times_and_then_hovers	NPC.cs	20649	9180ae2f58df	a462183900ea
 crates/terrustia/src/game/ai/boss/eye.rs	mod tests :: fn the_lunge_cycle_runs_five_times_and_then_hovers	NPC.cs	20746-20798	960d91527963	a462183900ea
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49307-49318	2e545602bed3	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49376-49389	8e3eeb32600c	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49390-49398	d9617fe3c548	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49399-49409	a6c2f85d092f	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49517-49566	85a25b29346e	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49624-49646	52378fd856da	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49647	3fc0111b8d4f	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49684	b60e42d4d2af	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49768	e35364ba8f95	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49801	aa69d25f05a2	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49897	c895363386ae	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49916-50015	33f324b3e1e3	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49999	57b978fe8dc2	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	50027	9ea16d3231c3	f4315b59b461
-crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	50278	4182e65395fb	f4315b59b461
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49307-49318	2e545602bed3	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49376-49389	8e3eeb32600c	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49390-49398	d9617fe3c548	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49399-49409	a6c2f85d092f	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49517-49566	85a25b29346e	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49624-49646	52378fd856da	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49647	3fc0111b8d4f	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49684	b60e42d4d2af	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49768	e35364ba8f95	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49801	aa69d25f05a2	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49897	c895363386ae	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49916-50015	33f324b3e1e3	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	49999	57b978fe8dc2	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	50027	9ea16d3231c3	32f65fdbbd0a
+crates/terrustia/src/game/ai/boss/fishron.rs	fn fishron	NPC.cs	50278	4182e65395fb	32f65fdbbd0a
 crates/terrustia/src/game/ai/boss/fishron.rs	fn phase_of	NPC.cs	49303-49304	ce6d4927fdc4	98228c6cdb83
 crates/terrustia/src/game/ai/boss/fishron.rs	fn phase_of	NPC.cs	49320-49353	205b79ef99ec	98228c6cdb83
+crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn an_enraged_dukes_bubble_is_told_so	NPC.cs	49390	3595ba5e3029	060c78a9d9d0
 crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn expert_moves_on_its_own_numbers	NPC.cs	49315-49318	64e8dd0477e6	0a6a09dc2091
 crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn expert_moves_on_its_own_numbers	NPC.cs	49320-49353	205b79ef99ec	0a6a09dc2091
 crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn fought_inland_it_enrages	NPC.cs	49390-49397	8003d1d1dd6d	5a49ec08290a
@@ -817,26 +818,26 @@ crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn it_arrives_faded_ou
 crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn it_arrives_faded_out_and_cannot_be_hurt_doing_it	NPC.cs	50278	4182e65395fb	92c67a4b6b12
 crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn the_hover_is_short_before_a_charge_and_long_before_a_burst	NPC.cs	49304	4d0a1da7b3da	6241ac87093b
 crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn the_hover_is_short_before_a_charge_and_long_before_a_burst	NPC.cs	49335-49338	5922445bf804	6241ac87093b
-crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn the_later_bubble_is_a_single_one_from_its_own_centre	NPC.cs	49801	aa69d25f05a2	8c8671d076a3
-crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn the_later_bubble_is_a_single_one_from_its_own_centre	NPC.cs	50027	9ea16d3231c3	8c8671d076a3
+crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn the_later_bubble_is_a_single_one_from_its_own_centre	NPC.cs	49801	aa69d25f05a2	b5f69b01d2ab
+crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn the_later_bubble_is_a_single_one_from_its_own_centre	NPC.cs	50027	9ea16d3231c3	b5f69b01d2ab
 crates/terrustia/src/game/ai/boss/fishron.rs	mod tests :: fn world	NPC.cs	49388	9a68fcb61271	b058e6b8b521
-crates/terrustia/src/game/ai/boss/golem.rs	(file)	NPC.cs	85913-85918	edeaf6f258c8	be537e96fa7f
+crates/terrustia/src/game/ai/boss/golem.rs	(file)	NPC.cs	85913-85918	edeaf6f258c8	f3ad3f29ba27
 crates/terrustia/src/game/ai/boss/golem.rs	fn body	NPC.cs	46006-46010	8179bcef958a	08158854df62
 crates/terrustia/src/game/ai/boss/golem.rs	fn fist	NPC.cs	19451-19453	b06d26c80ef1	c119275efe61
 crates/terrustia/src/game/ai/boss/golem.rs	fn fist	NPC.cs	19461-19482	519d587dd3e5	c119275efe61
 crates/terrustia/src/game/ai/boss/golem.rs	fn fist	NPC.cs	19483-19487	7bfe58a70fb1	c119275efe61
-crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31599-31603	1e07146a5db4	7a662b08f865
-crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31644-31661	f715fa05f7bd	7a662b08f865
-crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31645-31778	b3cff8dd86af	7a662b08f865
-crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31669-31672	0c21195c91dc	7a662b08f865
-crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31674-31693	bbce5aa78681	7a662b08f865
-crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31694-31778	cafe12eb1905	7a662b08f865
-crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31726-31734	e8d22e77008b	7a662b08f865
-crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	85913-85918	edeaf6f258c8	7a662b08f865
-crates/terrustia/src/game/ai/boss/golem.rs	fn head	NPC.cs	31399-31411	740cf4d80730	74fe30177e1b
-crates/terrustia/src/game/ai/boss/golem.rs	fn head	NPC.cs	31450-31459	7ab2b56cf864	74fe30177e1b
-crates/terrustia/src/game/ai/boss/golem.rs	fn head	NPC.cs	31485-31501	3435d3b9c863	74fe30177e1b
-crates/terrustia/src/game/ai/boss/golem.rs	fn head	NPC.cs	31566-31573	40ac210a43ea	74fe30177e1b
+crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31599-31603	1e07146a5db4	c1e35a9b8fe6
+crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31644-31661	f715fa05f7bd	c1e35a9b8fe6
+crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31645-31778	b3cff8dd86af	c1e35a9b8fe6
+crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31669-31672	0c21195c91dc	c1e35a9b8fe6
+crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31674-31693	bbce5aa78681	c1e35a9b8fe6
+crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31694-31778	cafe12eb1905	c1e35a9b8fe6
+crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	31726-31734	e8d22e77008b	c1e35a9b8fe6
+crates/terrustia/src/game/ai/boss/golem.rs	fn free_head	NPC.cs	85913-85918	edeaf6f258c8	c1e35a9b8fe6
+crates/terrustia/src/game/ai/boss/golem.rs	fn head	NPC.cs	31399-31411	740cf4d80730	04fcc75c2de0
+crates/terrustia/src/game/ai/boss/golem.rs	fn head	NPC.cs	31450-31459	7ab2b56cf864	04fcc75c2de0
+crates/terrustia/src/game/ai/boss/golem.rs	fn head	NPC.cs	31485-31501	3435d3b9c863	04fcc75c2de0
+crates/terrustia/src/game/ai/boss/golem.rs	fn head	NPC.cs	31566-31573	40ac210a43ea	04fcc75c2de0
 crates/terrustia/src/game/ai/boss/golem.rs	impl GolemState :: fn pace	NPC.cs	19554	ddbd6d3a6f49	027e1916249c
 crates/terrustia/src/game/ai/boss/golem.rs	mod tests :: fn a_golem_scaled_for_a_crowd_hops_faster	NPC.cs	19547	81db4b5faddf	e6c916d766a6
 crates/terrustia/src/game/ai/boss/golem.rs	mod tests :: fn for_the_worthy_chases_far_faster_in_the_air	NPC.cs	46006-46010	8179bcef958a	5c06b2bc102b
@@ -850,20 +851,20 @@ crates/terrustia/src/game/ai/boss/king_slime.rs	fn update	NPC.cs	43868-43869	58b
 crates/terrustia/src/game/ai/boss/king_slime.rs	mod tests :: fn a_distant_player_is_landed_on_even_in_plain_sight	NPC.cs	43643	176265285352	46c3d7571e77
 crates/terrustia/src/game/ai/boss/king_slime.rs	mod tests :: fn shed_slimes_wake_on_a_stagger	NPC.cs	43868-43869	58b1ab04a2f1	31cea546227f
 crates/terrustia/src/game/ai/boss/moon.rs	const PICK_A_MODE	NPC.cs	33961-33978	93b792af7b19	4ceadcbd3bc8
-crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33801	0812d29fe1d2	55249a8d1dbe
-crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33803	9c1d3be83a7b	55249a8d1dbe
-crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33903-33959	4f377a29a345	55249a8d1dbe
-crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33913	6ee628b75c58	55249a8d1dbe
-crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33955	9ea1944e8b25	55249a8d1dbe
-crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33961-33978	93b792af7b19	55249a8d1dbe
-crates/terrustia/src/game/ai/boss/moon.rs	fn pumpking	NPC.cs	33377-33387	17cef0c2554c	83c84d01965b
-crates/terrustia/src/game/ai/boss/moon.rs	fn pumpking	NPC.cs	33403-33407	000e9f977951	83c84d01965b
-crates/terrustia/src/game/ai/boss/moon.rs	fn pumpking	NPC.cs	33479	d8f661ad1c59	83c84d01965b
-crates/terrustia/src/game/ai/boss/moon.rs	fn santa	NPC.cs	33992	293170383d01	45eedf8ba240
-crates/terrustia/src/game/ai/boss/moon.rs	fn santa	NPC.cs	34011-34014	776476af0b81	45eedf8ba240
-crates/terrustia/src/game/ai/boss/moon.rs	fn santa	NPC.cs	34067	c12d3dca145b	45eedf8ba240
-crates/terrustia/src/game/ai/boss/moon.rs	fn santa	NPC.cs	34165-34168	173d030993c9	45eedf8ba240
-crates/terrustia/src/game/ai/boss/moon.rs	fn santa_hardpoints	NPC.cs	34073-34163	6de4d30b2572	e11428dbcb57
+crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33801	0812d29fe1d2	7bf00c398004
+crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33803	9c1d3be83a7b	7bf00c398004
+crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33903-33959	4f377a29a345	7bf00c398004
+crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33913	6ee628b75c58	7bf00c398004
+crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33955	9ea1944e8b25	7bf00c398004
+crates/terrustia/src/game/ai/boss/moon.rs	fn ice_queen	NPC.cs	33961-33978	93b792af7b19	7bf00c398004
+crates/terrustia/src/game/ai/boss/moon.rs	fn pumpking	NPC.cs	33377-33387	17cef0c2554c	67b28264cc80
+crates/terrustia/src/game/ai/boss/moon.rs	fn pumpking	NPC.cs	33403-33407	000e9f977951	67b28264cc80
+crates/terrustia/src/game/ai/boss/moon.rs	fn pumpking	NPC.cs	33479	d8f661ad1c59	67b28264cc80
+crates/terrustia/src/game/ai/boss/moon.rs	fn santa	NPC.cs	33992	293170383d01	6eb970fe949f
+crates/terrustia/src/game/ai/boss/moon.rs	fn santa	NPC.cs	34011-34014	776476af0b81	6eb970fe949f
+crates/terrustia/src/game/ai/boss/moon.rs	fn santa	NPC.cs	34067	c12d3dca145b	6eb970fe949f
+crates/terrustia/src/game/ai/boss/moon.rs	fn santa	NPC.cs	34165-34168	173d030993c9	6eb970fe949f
+crates/terrustia/src/game/ai/boss/moon.rs	fn santa_hardpoints	NPC.cs	34073-34163	6de4d30b2572	c2cdcc5272cf
 crates/terrustia/src/game/ai/boss/moon.rs	fn santa_tracks	NPC.cs	34188-34237	9e9d169a6b2c	9a0a6080e6f1
 crates/terrustia/src/game/ai/boss/moon.rs	fn santa_tracks	NPC.cs	34206	c699cada3c07	9a0a6080e6f1
 crates/terrustia/src/game/ai/boss/moon.rs	fn santa_tracks	NPC.cs	34225	84567757493b	9a0a6080e6f1
@@ -881,8 +882,8 @@ crates/terrustia/src/game/ai/boss/moon.rs	mod tests :: fn santas_missiles_go_up_
 crates/terrustia/src/game/ai/boss/moon.rs	mod tests :: fn the_ice_queen_rolls_a_fresh_mode_when_one_ends	NPC.cs	33961-33978	93b792af7b19	d42d5189e11b
 crates/terrustia/src/game/ai/boss/moon.rs	mod tests :: fn the_ice_queen_spins_and_sprays_in_its_third_mode	NPC.cs	33903-33959	4f377a29a345	e6100db24605
 crates/terrustia/src/game/ai/boss/moon.rs	mod tests :: fn the_sweep_holds_while_you_are_out_of_range	NPC.cs	33803	9c1d3be83a7b	b2d76abc94eb
-crates/terrustia/src/game/ai/boss/moon_lord.rs	(file)	NPC.cs	42032	50f0db685d96	f053226f8d1d
-crates/terrustia/src/game/ai/boss/moon_lord.rs	(file)	NPC.cs	42530	86d10d62e9c6	f053226f8d1d
+crates/terrustia/src/game/ai/boss/moon_lord.rs	(file)	NPC.cs	42032	50f0db685d96	cf35c14304a5
+crates/terrustia/src/game/ai/boss/moon_lord.rs	(file)	NPC.cs	42530	86d10d62e9c6	cf35c14304a5
 crates/terrustia/src/game/ai/boss/moon_lord.rs	const CLEAR_STAGE_AT	NPC.cs	41752	480837b3dea4	32aff60ba68e
 crates/terrustia/src/game/ai/boss/moon_lord.rs	const MOON_LORD_SHOTS	NPC.cs	41755-41758	f38d3925887d	4af68895cb00
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn attack_row	NPC.cs	42032	50f0db685d96	f82d732f9255
@@ -905,13 +906,13 @@ crates/terrustia/src/game/ai/boss/moon_lord.rs	fn eye_socket	NPC.cs	42600	20db81
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn eye_socket	NPC.cs	78873	6cca228bcef3	e4ee9a417653
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn fire_spread	NPC.cs	42297-42302	a46db92e1dcd	6d6aa7101d7c
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn fire_spread	NPC.cs	42760-42766	e70d107f9a0d	6d6aa7101d7c
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42900-43370	17847c0b2de3	eb5a740ca6cd
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42906-42911	dc912a656e4b	eb5a740ca6cd
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42988-42996	c3852161d74a	eb5a740ca6cd
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43072-43079	0096bc4137a6	eb5a740ca6cd
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43125-43178	145c219a5e7b	eb5a740ca6cd
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43196-43237	8f73b16a7a71	eb5a740ca6cd
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43326-43345	557a7bb1fac1	eb5a740ca6cd
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42900-43370	17847c0b2de3	512b14eb2f43
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42906-42911	dc912a656e4b	512b14eb2f43
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	42988-42996	c3852161d74a	512b14eb2f43
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43072-43079	0096bc4137a6	512b14eb2f43
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43125-43178	145c219a5e7b	512b14eb2f43
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43196-43237	8f73b16a7a71	512b14eb2f43
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn free_eye	NPC.cs	43326-43345	557a7bb1fac1	512b14eb2f43
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn openness	NPC.cs	42088	a1eddde699ad	b17f539dbd30
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn openness	NPC.cs	42173-42241	2da227a185b8	b17f539dbd30
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn openness	NPC.cs	42610	a1eddde699ad	b17f539dbd30
@@ -919,8 +920,8 @@ crates/terrustia/src/game/ai/boss/moon_lord.rs	fn openness	NPC.cs	42716	9f783e71
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn openness	NPC.cs	42722	a1eddde699ad	b17f539dbd30
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_hand_attack	NPC.cs	42128-42159	a736392ed7c8	09f7cc8fe6ba
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_hand_attack	NPC.cs	42184-42260	6f3b96ef1433	09f7cc8fe6ba
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_head_attack	NPC.cs	42606-42690	c5d483f2f2a7	96cc8300ddff
-crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_head_attack	NPC.cs	42719-42755	c4b840d95226	96cc8300ddff
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_head_attack	NPC.cs	42606-42690	c5d483f2f2a7	8900548bd75b
+crates/terrustia/src/game/ai/boss/moon_lord.rs	fn run_head_attack	NPC.cs	42719-42755	c4b840d95226	8900548bd75b
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn step_timeline	NPC.cs	42027-42055	74dc25d9455e	003abf9a015c
 crates/terrustia/src/game/ai/boss/moon_lord.rs	fn step_timeline	NPC.cs	42541-42566	f5834a75beec	003abf9a015c
 crates/terrustia/src/game/ai/boss/moon_lord.rs	mod tests :: fn a_free_eye_runs_its_whole_attack_script	NPC.cs	7009-7033	3717cd988a0b	ac86034282b9
@@ -939,11 +940,11 @@ crates/terrustia/src/game/ai/boss/plantera.rs	fn bite	NPC.cs	32400-32410	5fdfee1
 crates/terrustia/src/game/ai/boss/plantera.rs	fn hook	NPC.cs	32331-32335	020cc5297e29	d1ec5997b6fd
 crates/terrustia/src/game/ai/boss/plantera.rs	fn hook	NPC.cs	32440-32447	cff7696856c3	d1ec5997b6fd
 crates/terrustia/src/game/ai/boss/plantera.rs	fn hook	NPC.cs	32448-32455	1ed34f58a9a3	d1ec5997b6fd
-crates/terrustia/src/game/ai/boss/plantera.rs	fn plantera	NPC.cs	32235-32248	4172c82c6d04	3df9adbbd3e7
-crates/terrustia/src/game/ai/boss/plantera.rs	fn plantera	NPC.cs	32244	cb5dfc9df08b	3df9adbbd3e7
-crates/terrustia/src/game/ai/boss/plantera.rs	fn plantera	NPC.cs	32250-32264	eb54bbfe4eaf	3df9adbbd3e7
-crates/terrustia/src/game/ai/boss/plantera.rs	fn plantera	NPC.cs	32277-32315	9fe816f720c7	3df9adbbd3e7
-crates/terrustia/src/game/ai/boss/plantera.rs	fn plantera	NPC.cs	32505-32508	781d0f62ab58	3df9adbbd3e7
+crates/terrustia/src/game/ai/boss/plantera.rs	fn plantera	NPC.cs	32235-32248	4172c82c6d04	4a08bb1889bb
+crates/terrustia/src/game/ai/boss/plantera.rs	fn plantera	NPC.cs	32244	cb5dfc9df08b	4a08bb1889bb
+crates/terrustia/src/game/ai/boss/plantera.rs	fn plantera	NPC.cs	32250-32264	eb54bbfe4eaf	4a08bb1889bb
+crates/terrustia/src/game/ai/boss/plantera.rs	fn plantera	NPC.cs	32277-32315	9fe816f720c7	4a08bb1889bb
+crates/terrustia/src/game/ai/boss/plantera.rs	fn plantera	NPC.cs	32505-32508	781d0f62ab58	4a08bb1889bb
 crates/terrustia/src/game/ai/boss/plantera.rs	fn tentacle	NPC.cs	32504-32508	90ecd2a91674	38d1900c880f
 crates/terrustia/src/game/ai/boss/plantera.rs	fn tentacle	NPC.cs	32541-32545	d90b9faf8c03	38d1900c880f
 crates/terrustia/src/game/ai/boss/plantera.rs	fn tentacle	NPC.cs	32546-32547	49080ddeca6d	38d1900c880f
@@ -970,19 +971,19 @@ crates/terrustia/src/game/ai/boss/prime.rs	mod tests :: fn the_expert_spins_firs
 crates/terrustia/src/game/ai/boss/prime.rs	mod tests :: fn the_vice_and_the_laser_get_a_head_start	NPC.cs	27824	a05d91f6b699	63fea919b2f9
 crates/terrustia/src/game/ai/boss/prime.rs	mod tests :: fn the_vice_and_the_laser_get_a_head_start	NPC.cs	27831	a05d91f6b699	63fea919b2f9
 crates/terrustia/src/game/ai/boss/queen_bee.rs	fn close_on_hard	NPC.cs	31011-31042	9e46d570914a	feb2720a9a84
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30434-30471	2ba0d8d4c2f6	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30749	19e79c4f7446	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30787	b4f77fc78e47	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30821-30828	8806a3585642	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30829	749bad63ad4b	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30845-30890	576e02884560	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30910	b22b15a0e7cf	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30923	281653a3bab0	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30960-31005	14c183bdc754	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30972,31010	6b4bd436db53	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	31006-31043	292eb565a79f	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	31044-31051	5b2376ee2b0b	586201d3a36f
-crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	31053-31076	179f429d85ef	586201d3a36f
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30434-30471	2ba0d8d4c2f6	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30749	19e79c4f7446	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30787	b4f77fc78e47	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30821-30828	8806a3585642	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30829	749bad63ad4b	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30845-30890	576e02884560	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30910	b22b15a0e7cf	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30923	281653a3bab0	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30960-31005	14c183bdc754	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	30972,31010	6b4bd436db53	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	31006-31043	292eb565a79f	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	31044-31051	5b2376ee2b0b	8f7414fc060e
+crates/terrustia/src/game/ai/boss/queen_bee.rs	fn update	NPC.cs	31053-31076	179f429d85ef	8f7414fc060e
 crates/terrustia/src/game/ai/boss/queen_bee.rs	mod tests :: fn her_climb_has_no_hover_speed_cap	NPC.cs	30749	19e79c4f7446	88bafeb1420d
 crates/terrustia/src/game/ai/boss/queen_bee.rs	mod tests :: fn her_sting_approach_has_no_speed_cap	NPC.cs	31010	8216a76c3a9d	b55d41ab6831
 crates/terrustia/src/game/ai/boss/queen_bee.rs	mod tests :: fn out_running_her_makes_her_give_chase_not_despawn	NPC.cs	31053-31076	179f429d85ef	b9350fc7f3d0
@@ -990,10 +991,10 @@ crates/terrustia/src/game/ai/boss/queen_bee.rs	mod tests :: fn she_repositions_t
 crates/terrustia/src/game/ai/boss/queen_bee.rs	mod tests :: fn she_will_not_call_bees_through_a_wall	NPC.cs	30829	749bad63ad4b	83af696015c9
 crates/terrustia/src/game/ai/boss/queen_bee.rs	mod tests :: fn she_will_not_spit_stingers_through_a_wall	NPC.cs	30923	281653a3bab0	b35520abeb27
 crates/terrustia/src/game/ai/boss/queen_bee.rs	mod tests :: fn the_sting_phase_lasts_its_full_length	NPC.cs	31044-31051	5b2376ee2b0b	81a06a29291f
-crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	45703-45708	13b9885391d1	6a06d4b6413d
-crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	46024-46118	fb07b7ed2545	6a06d4b6413d
-crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	46057	ab16c1d95ab0	6a06d4b6413d
-crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	46159-46236	ff5c589a00ca	6a06d4b6413d
+crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	45703-45708	13b9885391d1	580ff3b37270
+crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	46024-46118	fb07b7ed2545	580ff3b37270
+crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	46057	ab16c1d95ab0	580ff3b37270
+crates/terrustia/src/game/ai/boss/queen_slime.rs	fn movement	NPC.cs	46159-46236	ff5c589a00ca	580ff3b37270
 crates/terrustia/src/game/ai/boss/queen_slime.rs	fn queen_slime	NPC.cs	46251-46309	10c9bea7cbb1	144d25df14d1
 crates/terrustia/src/game/ai/boss/queen_slime.rs	fn shed_minions	NPC.cs	46251-46309	10c9bea7cbb1	142202e35d69
 crates/terrustia/src/game/ai/boss/queen_slime.rs	fn shed_minions	NPC.cs	46263-46270	f0691b463ddb	142202e35d69
@@ -1006,12 +1007,12 @@ crates/terrustia/src/game/ai/boss/skeletron.rs	fn hand	NPC.cs	22428-22478	f88086
 crates/terrustia/src/game/ai/boss/skeletron.rs	fn hand	NPC.cs	22479-22489	1c6cb20bb10c	0b8ef377e881
 crates/terrustia/src/game/ai/boss/skeletron.rs	fn hand	NPC.cs	22496-22546	642beee75144	0b8ef377e881
 crates/terrustia/src/game/ai/boss/skeletron.rs	fn hand	NPC.cs	22547-22592	70e0f600c30d	0b8ef377e881
-crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22019	2f1f36f03409	e2ac65082101
-crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22059-22114	bc9e5298acd8	e2ac65082101
-crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22264	5f853802fde4	e2ac65082101
-crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22292-22332	6dd8ed34af4e	e2ac65082101
-crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22333-22342	d6de7340535f	e2ac65082101
-crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22357-22358	d3f1581adcdb	e2ac65082101
+crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22019	2f1f36f03409	d3900991d168
+crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22059-22114	bc9e5298acd8	d3900991d168
+crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22264	5f853802fde4	d3900991d168
+crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22292-22332	6dd8ed34af4e	d3900991d168
+crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22333-22342	d6de7340535f	d3900991d168
+crates/terrustia/src/game/ai/boss/skeletron.rs	fn head	NPC.cs	22357-22358	d3f1581adcdb	d3900991d168
 crates/terrustia/src/game/ai/boss/skeletron.rs	mod tests :: fn a_hand_damps_a_wrong_way_drift_at_its_own_rate	NPC.cs	22169	d0413edbf2a7	ae43ba58a760
 crates/terrustia/src/game/ai/boss/skeletron.rs	mod tests :: fn a_hand_damps_a_wrong_way_drift_at_its_own_rate	NPC.cs	22432	e8e554bfe01c	ae43ba58a760
 crates/terrustia/src/game/ai/boss/skeletron.rs	mod tests :: fn a_hand_winds_up_from_its_low_dock_and_lunges	NPC.cs	22422-22478	05a4bafab4eb	76983b7c75b5
@@ -1022,10 +1023,10 @@ crates/terrustia/src/game/ai/boss/skeletron.rs	mod tests :: fn expert_hands_dock
 crates/terrustia/src/game/ai/boss/skeletron.rs	mod tests :: fn expert_hands_dock_at_twice_the_rate	NPC.cs	22547-22592	70e0f600c30d	1d9dffbfd97f
 crates/terrustia/src/game/ai/boss/skeletron.rs	mod tests :: fn expert_hands_wind_up_half_again_as_fast	NPC.cs	22479-22489	1c6cb20bb10c	eb96a44c6f1b
 crates/terrustia/src/game/ai/boss/skeletron.rs	mod tests :: fn spinning_is_when_its_guard_drops	NPC.cs	22019	2f1f36f03409	4185bd709f17
-crates/terrustia/src/game/ai/boss/tablet.rs	fn tablet	NPC.cs	37183-37185	d217df246cf6	ef0ee8909d55
+crates/terrustia/src/game/ai/boss/tablet.rs	fn tablet	NPC.cs	37183-37185	d217df246cf6	7e5e5dd9818c
 crates/terrustia/src/game/ai/boss/tree.rs	fn ground_beneath	NPC.cs	33276,33286	a712c0a49b60	23bffa55ff85
 crates/terrustia/src/game/ai/boss/tree.rs	fn hover	NPC.cs	33274-33323	4cf96d5043be	baa9108d6c7e
-crates/terrustia/src/game/ai/boss/tree.rs	fn throw	NPC.cs	33088-33090	5fcb021edd52	6080f592357f
+crates/terrustia/src/game/ai/boss/tree.rs	fn throw	NPC.cs	33088-33090	5fcb021edd52	145b0f076d2d
 crates/terrustia/src/game/ai/boss/tree.rs	fn tree	NPC.cs	33044	bdfb5571c1e7	c6e3a8a0b7a5
 crates/terrustia/src/game/ai/boss/tree.rs	fn tree	NPC.cs	33087-33088	6a14646a9826	c6e3a8a0b7a5
 crates/terrustia/src/game/ai/boss/tree.rs	fn tree	NPC.cs	33274-33323	4cf96d5043be	c6e3a8a0b7a5
@@ -1033,17 +1034,17 @@ crates/terrustia/src/game/ai/boss/tree.rs	fn tree	NPC.cs	78735-78738	6bb152bcea3
 crates/terrustia/src/game/ai/boss/tree.rs	mod tests :: fn a_tree_moves_vertically	NPC.cs	33274-33323	4cf96d5043be	0221f6666ec8
 crates/terrustia/src/game/ai/boss/tree.rs	mod tests :: fn everscream_ornaments_scatter_and_loft	NPC.cs	33088-33090	5fcb021edd52	373158017b33
 crates/terrustia/src/game/ai/boss/tree.rs	mod tests :: fn it_aims_at_the_players_top_not_their_middle	NPC.cs	33087-33088	6a14646a9826	55d273752cde
-crates/terrustia/src/game/ai/boss/twins.rs	fn aimed_shot	NPC.cs	26794-26798	f87d2e26e669	f3ebe4d48baa
-crates/terrustia/src/game/ai/boss/twins.rs	fn second_form	NPC.cs	26944-26948	43bd691bc9ad	2dbeeac1e490
-crates/terrustia/src/game/ai/boss/twins.rs	fn spazmatism_second_form	NPC.cs	27555-27795	44c0e36871f9	d3578204bdcd
-crates/terrustia/src/game/ai/boss/twins.rs	fn spazmatism_second_form	NPC.cs	27757-27762	ab9d1d33b402	d3578204bdcd
+crates/terrustia/src/game/ai/boss/twins.rs	fn aimed_shot	NPC.cs	26794-26798	f87d2e26e669	9f8faeb59359
+crates/terrustia/src/game/ai/boss/twins.rs	fn second_form	NPC.cs	26944-26948	43bd691bc9ad	5564b8f020eb
+crates/terrustia/src/game/ai/boss/twins.rs	fn spazmatism_second_form	NPC.cs	27555-27795	44c0e36871f9	db850275cfe7
+crates/terrustia/src/game/ai/boss/twins.rs	fn spazmatism_second_form	NPC.cs	27757-27762	ab9d1d33b402	db850275cfe7
 crates/terrustia/src/game/ai/boss/twins.rs	fn twin	NPC.cs	26872-26876	847d71668f1a	658b505ec503
 crates/terrustia/src/game/ai/boss/twins.rs	fn twin	Projectile.cs	12781-12790	1e3d256227ba	658b505ec503
 crates/terrustia/src/game/ai/boss/twins.rs	mod tests :: fn a_hurt_eye_transforms	NPC.cs	26872-26876	847d71668f1a	0fcacbc8acee
 crates/terrustia/src/game/ai/boss/twins.rs	mod tests :: fn for_the_worthy_hovers_faster	NPC.cs	26944-26948	43bd691bc9ad	11565dedb965
 crates/terrustia/src/game/ai/boss/twins.rs	mod tests :: fn spazmatism_dashes_half_again_as_fast_in_expert	NPC.cs	27757-27762	ab9d1d33b402	69cb27767754
 crates/terrustia/src/game/ai/boss/wall.rs	fn ease_toward	NPC.cs	25902-25976	be19273f6307	117a165b6078
-crates/terrustia/src/game/ai/boss/wall.rs	fn eye	NPC.cs	26215-26217	98c6d4a38991	fe9787bba0a7
+crates/terrustia/src/game/ai/boss/wall.rs	fn eye	NPC.cs	26215-26217	98c6d4a38991	393b572a427e
 crates/terrustia/src/game/ai/boss/wall.rs	fn hungry	NPC.cs	26372-26400	a9b66ab18acf	405b91fef750
 crates/terrustia/src/game/ai/boss/wall.rs	fn hungry	NPC.cs	26406-26408	47754f5c765a	405b91fef750
 crates/terrustia/src/game/ai/boss/wall.rs	fn hungry	NPC.cs	26406-26430	8ab626ecf598	405b91fef750
@@ -1061,7 +1062,7 @@ crates/terrustia/src/game/ai/boss/wall.rs	mod tests :: fn it_recentres_into_the_
 crates/terrustia/src/game/ai/boss/wall.rs	mod tests :: fn its_hungry_carry_their_band_in_ai0_not_a_flattened_sign	NPC.cs	26197	9c1d3be83a7b	df8fa87c22cc
 crates/terrustia/src/game/ai/caster.rs	fn aim	NPC.cs	21269-21288	c552a95a9fa0	9e1b12d88244
 crates/terrustia/src/game/ai/caster.rs	fn lantern_spot	NPC.cs	21196-21231	f080c04cfc32	f9ef268288c4
-crates/terrustia/src/game/ai/caster.rs	fn update	NPC.cs	21155-21186	7680825965e6	b1f96016010b
+crates/terrustia/src/game/ai/caster.rs	fn update	NPC.cs	21155-21186	7680825965e6	e2ce847cbe41
 crates/terrustia/src/game/ai/caster.rs	mod tests :: fn a_desert_djinn_drops_five_lanterns_around_its_target	NPC.cs	21190-21237	3dc3684841f6	c0968341dc12
 crates/terrustia/src/game/ai/caster.rs	mod tests :: fn a_fire_imps_five_is_its_blink_delay_and_not_its_reach	NPC.cs	21160-21164	371093c66e78	14b070194357
 crates/terrustia/src/game/ai/caster.rs	mod tests :: fn a_rune_wizard_throws_six_bolts_a_cycle	NPC.cs	21095-21101	84396222de42	684c2800f605
@@ -1102,7 +1103,7 @@ crates/terrustia/src/game/ai/hardmode/big_mimic.rs	mod state :: const FIRING	NPC
 crates/terrustia/src/game/ai/hardmode/big_mimic.rs	mod tests :: fn a_crimson_mimic_gets_the_stuff_cannon_in_an_anniversary_world	NPC.cs	37956-37959	3608700551f1	4d6abb398465
 crates/terrustia/src/game/ai/hardmode/big_mimic.rs	mod tests :: fn a_curled_mimic_is_untouchable	NPC.cs	37968	ef9f63c5ba40	e62dd877debe
 crates/terrustia/src/game/ai/hardmode/drifters.rs	struct Outcome	NPC.cs	43481-43489	79b50c2cbdab	1483bfec2a7d
-crates/terrustia/src/game/ai/hardmode/fixtures.rs	(file)	Utils.cs	1899-1902	c1eee38dbc98	2a3f268a1ab6
+crates/terrustia/src/game/ai/hardmode/fixtures.rs	(file)	Utils.cs	1899-1902	c1eee38dbc98	424d5d3015e9
 crates/terrustia/src/game/ai/hardmode/fixtures.rs	fn check_floor2	CultistRitual.cs	133-159	8880a5495aaf	eeca8ce3d3d8
 crates/terrustia/src/game/ai/hardmode/fixtures.rs	fn pal	NPC.cs	43379-43478	7dd7d7ed43bb	4ab1626d3485
 crates/terrustia/src/game/ai/hardmode/fixtures.rs	fn pal	NPC.cs	43390-43394	e310e0f02576	4ab1626d3485
@@ -1132,8 +1133,8 @@ crates/terrustia/src/game/ai/hardmode/invasion.rs	fn dutchman	NPC.cs	39252	4562c
 crates/terrustia/src/game/ai/hardmode/invasion.rs	fn dutchman	NPC.cs	39275	3c75b4224397	8fcf4616eca1
 crates/terrustia/src/game/ai/hardmode/invasion.rs	mod tests :: fn its_four_guns_are_seated_and_staggered	NPC.cs	39252	4562c3137d39	e9ce634d2ab1
 crates/terrustia/src/game/ai/hardmode/invasion.rs	mod tests :: fn the_dutchman_is_its_cannon	NPC.cs	39275	3c75b4224397	69786f9f3e15
-crates/terrustia/src/game/ai/hardmode/nautilus.rs	fn dreadnautilus	NPC.cs	47987	307ebc6c556e	1ec81414ef55
-crates/terrustia/src/game/ai/hardmode/nautilus.rs	fn dreadnautilus	Projectile.cs	12781-12790	1e3d256227ba	1ec81414ef55
+crates/terrustia/src/game/ai/hardmode/nautilus.rs	fn dreadnautilus	NPC.cs	47987	307ebc6c556e	ec3b67823235
+crates/terrustia/src/game/ai/hardmode/nautilus.rs	fn dreadnautilus	Projectile.cs	12781-12790	1e3d256227ba	ec3b67823235
 crates/terrustia/src/game/ai/hardmode/nautilus.rs	mod tests :: fn a_charge_stays_hurtable_while_it_winds_up	NPC.cs	47640-48033	9d24335682b3	3ce8622af0d3
 crates/terrustia/src/game/ai/hardmode/nautilus.rs	mod tests :: fn a_charge_stays_hurtable_while_it_winds_up	NPC.cs	47987	307ebc6c556e	3ce8622af0d3
 crates/terrustia/src/game/ai/hardmode/pillar.rs	fn pillar	NPC.cs	39574	50db4578e8e6	4b2e313ee067
@@ -1142,8 +1143,8 @@ crates/terrustia/src/game/ai/hardmode/saucer.rs	fn core	NPC.cs	35933-35951	dd659
 crates/terrustia/src/game/ai/hardmode/saucer.rs	fn core	NPC.cs	36433,36442	b7f7e3203905	fee4765c954a
 crates/terrustia/src/game/ai/hardmode/saucer.rs	fn core	NPC.cs	36457-36461	665f1a3e154f	fee4765c954a
 crates/terrustia/src/game/ai/hardmode/saucer.rs	mod tests :: fn its_guns_seat_on_both_sides_by_ai1	NPC.cs	36433,36442	b7f7e3203905	889dcd7ad2a1
-crates/terrustia/src/game/ai/haunt.rs	fn attack	NPC.cs	24924-25097	3bf89d98229a	a2b9a0a1a547
-crates/terrustia/src/game/ai/haunt.rs	fn attack	NPC.cs	25086-25093	b5510711bace	a2b9a0a1a547
+crates/terrustia/src/game/ai/haunt.rs	fn attack	NPC.cs	24924-25097	3bf89d98229a	95a220056152
+crates/terrustia/src/game/ai/haunt.rs	fn attack	NPC.cs	25086-25093	b5510711bace	95a220056152
 crates/terrustia/src/game/ai/haunt.rs	fn leaving	NPC.cs	24793-24806	b62f9c363817	87674abc1f1b
 crates/terrustia/src/game/ai/haunt.rs	fn update	NPC.cs	24855-24858	2bbe5d6ca3ba	b0fff76b0117
 crates/terrustia/src/game/ai/haunt.rs	fn update	NPC.cs	24888-24892	db4110ce8daf	b0fff76b0117
@@ -1156,13 +1157,13 @@ crates/terrustia/src/game/ai/haunt.rs	mod tests :: fn the_probe_depths_are_per_t
 crates/terrustia/src/game/ai/haunt.rs	mod tests :: fn the_probe_depths_are_per_type	NPC.cs	25066	88d599a41f8f	6af35f3487a0
 crates/terrustia/src/game/ai/haunt.rs	mod tests :: fn the_reaper_and_the_poltergeist_go_home_after_their_event	NPC.cs	24795-24802	46fe8671bd71	c8a5a03a0baa
 crates/terrustia/src/game/ai/mod.rs	fn face	NPC.cs	78576-78579	bfdfeedae269	16e3ec56091d
-crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	32935	0812d29fe1d2	48e86526df1b
-crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	37508-37526	c168f5220459	48e86526df1b
-crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	39016	345aaf12a823	48e86526df1b
-crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	39275	3c75b4224397	48e86526df1b
-crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	39982-40002	c34febd47435	48e86526df1b
-crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	57553-57592	04442f904a85	48e86526df1b
-crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	57588-57591	b683662abb48	48e86526df1b
+crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	32935	0812d29fe1d2	95abfd2fbbf8
+crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	37508-37526	c168f5220459	95abfd2fbbf8
+crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	39016	345aaf12a823	95abfd2fbbf8
+crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	39275	3c75b4224397	95abfd2fbbf8
+crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	39982-40002	c34febd47435	95abfd2fbbf8
+crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	57553-57592	04442f904a85	95abfd2fbbf8
+crates/terrustia/src/game/ai/mod.rs	fn run	NPC.cs	57588-57591	b683662abb48	95abfd2fbbf8
 crates/terrustia/src/game/ai/mod.rs	fn run :: const LIHZAHRD	NPC.cs	57603-57610	f27f922f4756	b7a71dec289c
 crates/terrustia/src/game/ai/mod.rs	mod tests :: fn a_pals_goblin_archer_guards_it_until_hit_or_approached	NPC.cs	57553-57592	04442f904a85	412cef105307
 crates/terrustia/src/game/ai/mod.rs	mod tests :: fn a_wounded_lihzahrd_and_a_wounded_nutcracker_split_at_55_percent	NPC.cs	57603-57610	f27f922f4756	79e233cb25a5
@@ -1205,8 +1206,8 @@ crates/terrustia/src/game/ai/orb.rs	mod tests :: fn a_vile_spit_bursts_inside_a_
 crates/terrustia/src/game/ai/orb.rs	mod tests :: fn an_orb_is_reaped_far_sooner_than_an_ordinary_enemy	NPC.cs	21581	225680e60f17	f0df018a9444
 crates/terrustia/src/game/ai/rooted.rs	const CLINGER_RETRY_AT	NPC.cs	22908	3c69c35d041e	102968c16e69
 crates/terrustia/src/game/ai/rooted.rs	const CLINGER_RETRY_AT	NPC.cs	22948	ddf2825ae431	102968c16e69
-crates/terrustia/src/game/ai/rooted.rs	fn attack	NPC.cs	22883-22950	b188742cd067	8d52884af4f7
-crates/terrustia/src/game/ai/rooted.rs	fn attack	NPC.cs	22935-22939	0678a155fc23	8d52884af4f7
+crates/terrustia/src/game/ai/rooted.rs	fn attack	NPC.cs	22883-22950	b188742cd067	1f53a8d94085
+crates/terrustia/src/game/ai/rooted.rs	fn attack	NPC.cs	22935-22939	0678a155fc23	1f53a8d94085
 crates/terrustia/src/game/ai/rooted.rs	fn plant_move	NPC.cs	3649	1dfc5065a7c3	e085e64bc50c
 crates/terrustia/src/game/ai/rooted.rs	fn plant_move	NPC.cs	3653	1200f6b95bd2	e085e64bc50c
 crates/terrustia/src/game/ai/rooted.rs	fn plant_move	NPC.cs	3688	4246001d3a14	e085e64bc50c
@@ -1221,9 +1222,9 @@ crates/terrustia/src/game/ai/rooted.rs	mod tests :: fn the_two_armed_plants_actu
 crates/terrustia/src/game/ai/skull.rs	const MIMIC_CAST_RANGE	NPC.cs	21933-21939	4401301f0047	ab7629ad36ea
 crates/terrustia/src/game/ai/skull.rs	const MIMIC_HOLD_RANGE	NPC.cs	21736-21742	a2ccf2b094fb	818802c6cce2
 crates/terrustia/src/game/ai/skull.rs	fn mimic_attack	NPC.cs	21940-21998	189060794a9a	ccc96bea0aa1
-crates/terrustia/src/game/ai/skull.rs	fn update	NPC.cs	21682-21684	5a1f7f48b451	80d0c1a09f93
-crates/terrustia/src/game/ai/skull.rs	fn update	NPC.cs	21686	2d83ba38dce5	80d0c1a09f93
-crates/terrustia/src/game/ai/skull.rs	fn update	NPC.cs	21736-21742	a2ccf2b094fb	80d0c1a09f93
+crates/terrustia/src/game/ai/skull.rs	fn update	NPC.cs	21682-21684	5a1f7f48b451	58d50aa4e38f
+crates/terrustia/src/game/ai/skull.rs	fn update	NPC.cs	21686	2d83ba38dce5	58d50aa4e38f
+crates/terrustia/src/game/ai/skull.rs	fn update	NPC.cs	21736-21742	a2ccf2b094fb	58d50aa4e38f
 crates/terrustia/src/game/ai/skull.rs	mod tests :: fn a_holding_mimic_does_not_move	NPC.cs	21686	2d83ba38dce5	9720734c4dde
 crates/terrustia/src/game/ai/skull.rs	mod tests :: fn a_holding_mimic_does_not_move	NPC.cs	21721-21730	14806ca05eed	9720734c4dde
 crates/terrustia/src/game/ai/skull.rs	mod tests :: fn a_mimic_in_your_face_holds_its_charge_back	NPC.cs	21736-21742	a2ccf2b094fb	f020c0008a24
@@ -1271,16 +1272,16 @@ crates/terrustia/src/game/ai/swimmer.rs	mod tests :: fn daylight_turns_an_eyebal
 crates/terrustia/src/game/ai/town.rs	fn drowning	Collision.cs	1387-1398	6f1cf7c124ad	f450b2a8548a
 crates/terrustia/src/game/ai/town.rs	fn drowning	Collision.cs	1418	b37381c51352	f450b2a8548a
 crates/terrustia/src/game/ai/town.rs	fn drowning	NPC.cs	54361	b60780c82463	f450b2a8548a
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54033	3715da670796	c298f8271035
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54892-55087	c04d158f1240	c298f8271035
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55045-55049	9d1457f3d51f	c298f8271035
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55505-55510	1d6f572f910e	c298f8271035
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55521-55525	c2e9dd4af642	c298f8271035
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55632-55676	792f7b809c16	c298f8271035
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55639	d168fccfd415	c298f8271035
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56012	46bba6010785	c298f8271035
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56012-56109	6cd2a7fd610c	c298f8271035
-crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56030-56033	80e4a233b1a6	c298f8271035
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54033	3715da670796	8240868592b0
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	54892-55087	c04d158f1240	8240868592b0
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55045-55049	9d1457f3d51f	8240868592b0
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55505-55510	1d6f572f910e	8240868592b0
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55521-55525	c2e9dd4af642	8240868592b0
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55632-55676	792f7b809c16	8240868592b0
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	55639	d168fccfd415	8240868592b0
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56012	46bba6010785	8240868592b0
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56012-56109	6cd2a7fd610c	8240868592b0
+crates/terrustia/src/game/ai/town.rs	fn try_combat	NPC.cs	56030-56033	80e4a233b1a6	8240868592b0
 crates/terrustia/src/game/ai/town.rs	fn walk	NPC.cs	54393	c72281eb17de	a0f03becbeea
 crates/terrustia/src/game/ai/town.rs	fn walk	NPC.cs	54467-54473	e303394cb105	a0f03becbeea
 crates/terrustia/src/game/ai/town.rs	fn walk	NPC.cs	54612-54614	bffb252e1522	a0f03becbeea
@@ -1345,28 +1346,28 @@ crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	NPCID.cs	4855	9af2
 crates/terrustia/src/game/ai/town_combat.rs	struct TownCombat	Projectile.cs	41872-41978	f11c2cf8c212	a2cf32356ddf
 crates/terrustia/src/game/ai/track.rs	fn wheel	NPC.cs	24743	20db8144f6b0	e481021ef211
 crates/terrustia/src/game/ai/track.rs	mod tests :: fn a_blazing_wheel_sets_off_toward_whoever_is_there	NPC.cs	24743	20db8144f6b0	1e435f1385f7
-crates/terrustia/src/game/ai/tumbleweed.rs	(file)	NPC.cs	63012-63573	0f4605aedd6e	02d0f9615365
+crates/terrustia/src/game/ai/tumbleweed.rs	(file)	NPC.cs	63012-63573	0f4605aedd6e	783e45073a3e
 crates/terrustia/src/game/ai/tumbleweed.rs	fn accelerate	NPC.cs	63365-63384	2928446d4600	4bd0f1c0926c
 crates/terrustia/src/game/ai/tumbleweed.rs	fn drag	NPC.cs	63269-63356	270ca1d9625b	026a5b23a0b5
 crates/terrustia/src/game/ai/tumbleweed.rs	fn gait	NPC.cs	63258-63365	e2c81f49c492	afb52783ea4a
 crates/terrustia/src/game/ai/tumbleweed.rs	fn patience_cap	NPC.cs	63014-63016	abee9f265b5d	b8f2ee2eac37
 crates/terrustia/src/game/ai/tumbleweed.rs	fn patience_cap	NPC.cs	63096	aec449504e7b	b8f2ee2eac37
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63019-63023	8c594270e542	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63024-63052	ffa7063e94b1	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63053-63067	d73c81644b5f	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63088-63105	ff756d5131a6	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63107-63116	24ddfcd281f2	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63118-63143	3406f43b8b1f	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63118-63216	50b035c9144c	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63145-63204	c297ec2ede09	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63206-63218	1f0aae40bca8	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63219-63228	d0187f510b5a	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63230-63245	ca169e6d5c05	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63258-63385	de5b7cb07c59	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63285-63294	cba741c47ff9	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63386-63453	9a59ee6009e7	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63455-63548	1a05121f969b	b4eaccea9ef5
-crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63566-63570	15a716e7c3c1	b4eaccea9ef5
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63019-63023	8c594270e542	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63024-63052	ffa7063e94b1	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63053-63067	d73c81644b5f	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63088-63105	ff756d5131a6	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63107-63116	24ddfcd281f2	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63118-63143	3406f43b8b1f	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63118-63216	50b035c9144c	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63145-63204	c297ec2ede09	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63206-63218	1f0aae40bca8	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63219-63228	d0187f510b5a	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63230-63245	ca169e6d5c05	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63258-63385	de5b7cb07c59	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63285-63294	cba741c47ff9	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63386-63453	9a59ee6009e7	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63455-63548	1a05121f969b	616651ac2f94
+crates/terrustia/src/game/ai/tumbleweed.rs	fn update	NPC.cs	63566-63570	15a716e7c3c1	616651ac2f94
 crates/terrustia/src/game/ai/tumbleweed.rs	mod tests :: fn a_nebula_beast_stops_to_fire_and_then_waits	NPC.cs	63145-63204	c297ec2ede09	08c8d965b62e
 crates/terrustia/src/game/ai/tumbleweed.rs	mod tests :: fn a_stardust_spider_blows_itself_up	NPC.cs	63118-63143	3406f43b8b1f	fe0880d1183e
 crates/terrustia/src/game/ai/tumbleweed.rs	mod tests :: fn a_wolf_ignores_the_crowd	NPC.cs	63024-63052	ffa7063e94b1	d49b0703df0e
@@ -1564,6 +1565,7 @@ crates/terrustia/src/game/projectile.rs	const MINE_DRAG	Projectile.cs	48354-4836
 crates/terrustia/src/game/projectile.rs	const PRESENT_DRIFT	Projectile.cs	29337-29366	c0c2724d47dc	d510847d932f
 crates/terrustia/src/game/projectile.rs	const SANDNADO_STYLE	Projectile.cs	36662-36705	9a484ac89540	2f4534457f82
 crates/terrustia/src/game/projectile.rs	const SAUCER_MISSILE_STYLE	Projectile.cs	31447-31513	5f7e5832de20	330fd0297785
+crates/terrustia/src/game/projectile.rs	const SHARKNADO_STYLE	Projectile.cs	30012-30084	0ceb42de9919	c27fc91d268e
 crates/terrustia/src/game/projectile.rs	const SNOWBALL	Projectile.cs	23838-23843	9c5588bcf0d2	b05e013d22bb
 crates/terrustia/src/game/projectile.rs	const STAR_STYLE	Projectile.cs	24082-24133	d5ae53ea4e5e	c91d032ff46c
 crates/terrustia/src/game/projectile.rs	const THROWN_DELAY	Projectile.cs	23907-23930	2e8c5b0e8c10	5f21d3d75a53
@@ -1576,26 +1578,27 @@ crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	48354	96b6b5078339
 crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	48378-48399	eb10839c0918	4425ece6bbd4
 crates/terrustia/src/game/projectile.rs	fn boulder	Projectile.cs	26361	684228bf3682	33118dd7193d
 crates/terrustia/src/game/projectile.rs	fn boulder	Projectile.cs	26596-26746	316f71664a22	33118dd7193d
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	16781	651cda76400c	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	17308	6bcc82a4f969	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19056-19099	227d301575d8	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19677-19684	17854a3e7d6a	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19872-19886	424f6fd70985	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23907-23930	2e8c5b0e8c10	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23945-23947	9f860f2ea5fa	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24170-24176	45ba72dd4bea	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24618-24641	a3a3d50ea0ac	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	29337-29366	c0c2724d47dc	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30655-30677	681d2a8a6429	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	31473	20db8144f6b0	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34676	da2cc4ba8be1	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34822-34865	8b72ab9bdcbf	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	36689-36703	2f7bd1ccd9f0	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43454-43462	922f88e4c77f	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43893-43907	aea516c9abba	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	45853-45866	931a3a7d8d10	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	52268-52400	cacd56e74068	e71f6e9b9f59
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	69740-69756	144b99986931	e71f6e9b9f59
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	16781	651cda76400c	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	17308	6bcc82a4f969	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19056-19099	227d301575d8	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19677-19684	17854a3e7d6a	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19872-19886	424f6fd70985	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23907-23930	2e8c5b0e8c10	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23945-23947	9f860f2ea5fa	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24170-24176	45ba72dd4bea	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24618-24641	a3a3d50ea0ac	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	29337-29366	c0c2724d47dc	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30058-30078	8c525a8d9da6	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30655-30677	681d2a8a6429	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	31473	20db8144f6b0	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34676	da2cc4ba8be1	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34822-34865	8b72ab9bdcbf	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	36689-36703	2f7bd1ccd9f0	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43454-43462	922f88e4c77f	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43893-43907	aea516c9abba	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	45853-45866	931a3a7d8d10	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	52268-52400	cacd56e74068	0eaacfbb22ef
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	69740-69756	144b99986931	0eaacfbb22ef
 crates/terrustia/src/game/projectile.rs	impl Powder :: fn step	Projectile.cs	24366-24372	80818f04371c	ec35674f69cd
 crates/terrustia/src/game/projectile.rs	impl Projectile :: fn can_damage	Projectile.cs	12491-12494	0387966662de	039cb5d97aea
 crates/terrustia/src/game/projectile.rs	impl ProjectileStore :: fn launch	Projectile.cs	14916-14919	2c62941898b4	39a262f21b0e
@@ -1617,6 +1620,7 @@ crates/terrustia/src/game/projectile.rs	mod tests :: fn a_thrown_bone_flies_flat
 crates/terrustia/src/game/projectile.rs	mod tests :: fn an_empress_lance_hangs_and_then_fires	Projectile.cs	45853-45866	931a3a7d8d10	07f49c59fe5a
 crates/terrustia/src/game/projectile.rs	mod tests :: fn an_empress_rainbow_eases_into_its_curve	Projectile.cs	46264-46275	c3c50c4a30a1	5ca3828601c5
 crates/terrustia/src/game/projectile.rs	mod tests :: fn only_the_ball_of_fire_falls_among_the_fireballs	Projectile.cs	24618-24621	655a6b541fb8	8554a3f3a2fa
+crates/terrustia/src/game/projectile.rs	mod tests :: fn the_dukes_mouth_bubbles_bob_and_the_seeking_one_is_left_alone	Projectile.cs	30012-30084	0ceb42de9919	08d46ab5fed4
 crates/terrustia/src/game/projectile.rs	mod tests :: fn the_queen_slimes_smash_widens_where_it_landed_and_is_gone_in_nine_ticks	Projectile.cs	69740-69756	144b99986931	55822aad0db9
 crates/terrustia/src/game/projectile.rs	struct Powder	Projectile.cs	14787-14808	17307615afc0	6d1d94f29de7
 crates/terrustia/src/game/projectile.rs	struct Powder	Projectile.cs	15040	f768b5f890db	6d1d94f29de7
@@ -1913,8 +1917,8 @@ crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	3272	43583
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	50299-50302	6583807eb5db	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72072-72079	2a6f4d26e0bc	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72406	6c77495a5649	c5414c9d223d
-crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	d518977b866e
-crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	d518977b866e
+crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	63395f07b563
+crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	63395f07b563
 crates/terrustia/src/game/server/systems.rs	const STINKY	BuffID.cs	393	0f6008fbeed1	cfaa20a1d46a
 crates/terrustia/src/game/server/systems.rs	fn player_has_buff	MessageBuffer.cs	2456-2477	87cb35363490	c08c9f289848
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	7363-7366	54960e839053	00e47302005c
@@ -2052,24 +2056,24 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_mechanic_
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_mechanic_wrenches	Projectile.cs	34681	373e014f7fbe	6cc455b15216
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_moon_leech_brands	Player.cs	5261	6a2fd5fa6908	a763aaabea72
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_moon_leech_brands	Projectile.cs	32327-32393	e8d881ddfc9d	a763aaabea72
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	1411	daa5710da404	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	34446	8b635047a0d4	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	34451	480837b3dea4	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	37508-37526	c168f5220459	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	37522	43daaf496668	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	41752-41764	e94ee890774a	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	43401	7dcdedc66631	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	43481-43489	79b50c2cbdab	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	43488	71b0635d021a	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	43496-43508	8b57d76cd5d9	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	51700-51730	e38777095790	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	51772-51819	53069bdb3610	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	51913-51936	095e58902bb8	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	54033	3715da670796	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	55635	9d86ce36233b	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	65243-65262	d7d8fc1f6b76	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	82068	bce838df88c3	2c080c7aaa4d
-crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	91564-91567	42327e023f4f	2c080c7aaa4d
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	1411	daa5710da404	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	34446	8b635047a0d4	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	34451	480837b3dea4	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	37508-37526	c168f5220459	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	37522	43daaf496668	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	41752-41764	e94ee890774a	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	43401	7dcdedc66631	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	43481-43489	79b50c2cbdab	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	43488	71b0635d021a	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	43496-43508	8b57d76cd5d9	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	51700-51730	e38777095790	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	51772-51819	53069bdb3610	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	51913-51936	095e58902bb8	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	54033	3715da670796	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	55635	9d86ce36233b	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	65243-65262	d7d8fc1f6b76	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	82068	bce838df88c3	5e9b8dc80009
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_npcs	NPC.cs	91564-91567	42327e023f4f	5e9b8dc80009
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_phantasmal_deathrays	NPC.cs	42670-42681	73a6a348b8e3	ab4b56a21bf0
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_phantasmal_deathrays	NPC.cs	43343	61fc3da4d4ff	ab4b56a21bf0
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_phantasmal_deathrays	Projectile.cs	31931-32113	2189c573fe29	ab4b56a21bf0
@@ -2082,6 +2086,8 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_sandnado_
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_sandnado_marks	Projectile.cs	36850-36854	0576c66362ac	c4e4b06d040c
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_saucer_missiles	Projectile.cs	31447-31513	5f7e5832de20	872e9b5f68f8
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_saucer_missiles :: const ARMING	NPC.cs	36188	8b07badc686f	a73bcf73ed47
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_sharknado_bolts	NPC.cs	50027	9ea16d3231c3	8e2b4d6d8504
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_sharknado_bolts	Projectile.cs	30014-30057	b1d6a637dd33	8e2b4d6d8504
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_slime_rain	Main.cs	1282	8477db5e0c24	8af7d7d11ccb
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_slime_rain	Main.cs	65906	dfc952dd9dd9	8af7d7d11ccb
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_slime_rain_spawns	NPC.cs	296-301	909f0bbbc2f3	33721ab50bb6
@@ -2172,7 +2178,9 @@ crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_mov
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_single_hit_shot_is_spent_on_its_first_target	Projectile.cs	14190-14206	45ee9c95f91f	7c00cbba04e1
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_town_npcs_shot_damages_the_enemy_it_hits	Projectile.cs	12518	4ffaefcc81db	1bb48db252a3
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_wrench_that_lands_turns_for_home_at_once	Projectile.cs	14106-14113	e33598d34dba	86dd2e17979f
+crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn an_enraged_dukes_bubble_leaves_four_times_as_fast	NPC.cs	49390	3595ba5e3029	f084473dfad3
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn mechanic_with_a_wrench	NPC.cs	55068	89a06babcb3d	432dc1e20f97
+crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_dukes_seeking_bubble_chases_the_player_it_was_given	Projectile.cs	30014-30057	b1d6a637dd33	f1f9b09e68db
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_mechanics_wrench_turns_round_and_comes_home	Projectile.cs	34652-34690	e920e337d1ed	7df4e12ea597
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_princesss_weapon_lasts_a_second	Projectile.cs	43454-43462	922f88e4c77f	cb3a8d1d49cf
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_truffles_spore_hangs_where_it_was_put	Projectile.cs	34860	ca00d89fad05	85832216af83

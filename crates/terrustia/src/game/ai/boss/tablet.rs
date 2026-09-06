@@ -88,6 +88,7 @@ pub fn tablet(npc: &mut Npc, world: &World<'_, impl TileView>, attendants: usize
             position: (cx + sin * 25.0, cy + cos * 25.0),
             velocity: (sin * 6.0, cos * 6.0),
             time_left: 300,
+            ai: [0.0; 3],
         });
     }
     if npc.ai[3] > TABLET_SHATTER_TICKS {

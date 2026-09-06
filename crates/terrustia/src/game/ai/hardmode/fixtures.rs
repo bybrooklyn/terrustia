@@ -207,6 +207,7 @@ pub fn stationary_caster(
             position: from,
             velocity: (unit.0 * CASTER_SHOT_SPEED, unit.1 * CASTER_SHOT_SPEED),
             time_left: 300,
+            ai: [0.0; 3],
         });
     }
     out

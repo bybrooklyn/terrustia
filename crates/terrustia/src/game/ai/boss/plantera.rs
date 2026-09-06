@@ -240,6 +240,7 @@ pub fn plantera(
             } else {
                 300
             },
+            ai: [0.0; 3],
         });
         return out;
     }

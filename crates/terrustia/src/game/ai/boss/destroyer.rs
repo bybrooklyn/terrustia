@@ -126,6 +126,7 @@ pub fn destroyer(
         ),
         velocity: aim,
         time_left: DESTROYER_LASER_LIFE,
+        ai: [0.0; 3],
     });
     out
 }

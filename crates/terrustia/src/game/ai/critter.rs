@@ -324,6 +324,7 @@ pub fn dandelion<T: TileView>(
             position: (cx + spread.0 + (along * 6) as f32, cy + spread.1),
             velocity,
             time_left: 300,
+            ai: [0.0; 3],
         });
     }
     npc.dirty = true;

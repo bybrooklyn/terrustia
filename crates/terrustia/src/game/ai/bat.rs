@@ -125,6 +125,7 @@ fn fire<T: TileView>(
             position: from,
             velocity: aim,
             time_left: SHOT_LIFETIME,
+            ai: [0.0; 3],
         });
     }
 

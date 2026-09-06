@@ -347,6 +347,7 @@ pub fn prime_arm(
                 position: (cx + aim.0 * limb.shot_lead, cy + aim.1 * limb.shot_lead),
                 velocity: aim,
                 time_left: 600,
+                ai: [0.0; 3],
             });
         }
     }

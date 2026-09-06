@@ -145,6 +145,7 @@ fn cast(npc: &mut Npc, world: &World<'_, impl TileView>, out: &mut MageOutcome) 
                 position: (cx + f32::from(npc.direction) * 10.0, cy - 16.0),
                 velocity,
                 time_left: 600,
+                ai: [0.0; 3],
             });
         }
         spell::HEAL if DARK_MAGE_HEAL_AT.contains(&npc.ai[0]) => {
@@ -157,6 +158,7 @@ fn cast(npc: &mut Npc, world: &World<'_, impl TileView>, out: &mut MageOutcome) 
                     position: (beside, floor),
                     velocity: (0.0, 0.0),
                     time_left: 600,
+                    ai: [0.0; 3],
                 });
             }
         }
@@ -167,6 +169,7 @@ fn cast(npc: &mut Npc, world: &World<'_, impl TileView>, out: &mut MageOutcome) 
                 position: (cx + f32::from(npc.direction) * 24.0, cy - 40.0),
                 velocity: (0.0, 0.0),
                 time_left: 600,
+                ai: [0.0; 3],
             });
             out.raising = true;
         }

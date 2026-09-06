@@ -258,6 +258,7 @@ pub fn stardust_jellyfish<T: TileView>(
             position: npc.center(),
             velocity: throw,
             time_left: 300,
+            ai: [0.0; 3],
         });
         npc.dirty = true;
     }
