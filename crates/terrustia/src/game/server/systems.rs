@@ -2411,6 +2411,209 @@ impl GameServer {
         }
     }
 
+    /// The Stardust Jellyfish's spawn and the Nebula Brain's eye hover by their parent, then fire.
+    ///
+    /// `aiStyle == 102` (`Projectile.cs:33837-34060`), one arm keyed on the type inside it exactly
+    /// as vanilla keys it. Both are launched by a parent NPC with `ai[1] = whoAmI`
+    /// (`NPC.cs:39860`, `:39879`), and neither is a shot: they are **escorts** that drift beside
+    /// whatever made them for a few seconds and only then decide what to do. Without the arm both
+    /// left in a straight line at whatever velocity they were made with, which is a stray drop
+    /// rather than an escort.
+    ///
+    /// - The **Stardust Jellyfish's small one** hovers 210 ticks, accelerating a seventh of a
+    ///   pixel sideways and half that vertically toward its parent each tick and capped at six,
+    ///   then picks the closest player *itself* and leaves at sixteen.
+    /// - The **Nebula Eye** hovers 180, reads its parent's target rather than choosing one, and
+    ///   then does not leave at all: it fires a `NebulaLaser` at eight if it has a line, resets
+    ///   its own clock and starts hovering again. It also dies with its parent - vanilla holds its
+    ///   `timeLeft` at two every tick, so the frame the Brain goes, so does the eye.
+    ///
+    /// The aim is scattered the way vanilla scatters it: fifty pixels either way on each axis and
+    /// then eighty to a hundred and twenty per cent of the result, so a volley spreads rather than
+    /// stacking. Two narrowings: `position += parent.position - parent.oldPos[1]` carries the
+    /// escort along with its parent's movement over *two* frames, and this server keeps one; and
+    /// the eye's `Collision.CanHitLine` is `sight::can_hit` on one-pixel boxes, which is the
+    /// nearest thing here and slightly more generous through a one-tile gap.
+    fn tick_hovering_escorts(&mut self) {
+        use crate::game::ai::sight;
+        use terrustia_proto::projectile::ids::{JELLYFISH_SHOT, NEBULA_FLOATER};
+
+        /// `NPCID.StardustJellyfishBig` and `NPCID.NebulaBrain`, the two parents.
+        const JELLYFISH_PARENT: u16 = 407;
+        const NEBULA_PARENT: u16 = 420;
+        /// `ProjectileID.NebulaLaser`, which the eye fires rather than becoming.
+        const NEBULA_LASER: u16 = 576;
+        /// `num822` per type: how long each hovers.
+        const JELLYFISH_HOVER: f32 = 210.0;
+        const NEBULA_HOVER: f32 = 180.0;
+        /// `x6`/`y8`: the pull toward the parent, and `6f`, the speed it is capped at.
+        const PULL: (f32, f32) = (0.15, 0.075);
+        const DRIFT_CAP: f32 = 6.0;
+        /// `num825` per type: how fast each one's decision leaves.
+        const JELLYFISH_SPEED: f32 = 16.0;
+        const NEBULA_LASER_SPEED: f32 = 8.0;
+        /// `num824`: the laser's damage, which is *lower* in expert because the hostile-projectile
+        /// curve scales it up again on the way to a player.
+        const NEBULA_LASER_DAMAGE: i32 = 65;
+        const NEBULA_LASER_DAMAGE_EXPERT: i32 = 50;
+        /// `Main.rand.Next(-50, 51)` on each axis, then `Main.rand.Next(80, 121) * 0.01f`.
+        const AIM_SCATTER: i32 = 50;
+        const AIM_STRETCH: (i32, i32) = (80, 121);
+
+        let escorts: Vec<u16> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| matches!(p.projectile_type, JELLYFISH_SHOT | NEBULA_FLOATER))
+            .map(|(index, _)| index)
+            .collect();
+        if escorts.is_empty() {
+            return;
+        }
+        let expert = self.is_expert();
+        let mut spent = Vec::new();
+        let mut fired = Vec::new();
+        for index in escorts {
+            let Some(escort) = self.projectiles.get(index) else {
+                continue;
+            };
+            let eye = escort.projectile_type == NEBULA_FLOATER;
+            let (parent_type, hover) = if eye {
+                (NEBULA_PARENT, NEBULA_HOVER)
+            } else {
+                (JELLYFISH_PARENT, JELLYFISH_HOVER)
+            };
+            let parent = self
+                .npcs
+                .get(escort.ai[1] as u8)
+                .filter(|npc| npc.npc_type == parent_type)
+                .map(|npc| (npc.center(), npc.position, npc.old_position, npc.target));
+            // `flag50`, the eye alone: it is its parent's, and it goes when the parent does.
+            if eye && parent.is_none() {
+                spent.push(index);
+                continue;
+            }
+
+            let Some(escort) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            if eye {
+                // `timeLeft = 2` every tick, so the eye can only outlive the Brain by two.
+                escort.time_left = 2;
+            }
+            escort.ai[0] += 1.0;
+            let age = escort.ai[0];
+            if age < hover {
+                match parent {
+                    Some((centre, position, was, _)) => {
+                        // Carried along with the parent rather than merely pulled toward it.
+                        escort.position.0 += position.0 - was.0;
+                        escort.position.1 += position.1 - was.1;
+                        let at = escort.center();
+                        escort.velocity.0 += (centre.0 - at.0).signum() * PULL.0;
+                        escort.velocity.1 += (centre.1 - at.1).signum() * PULL.1;
+                        let speed = escort.velocity.0.hypot(escort.velocity.1);
+                        if speed > DRIFT_CAP {
+                            escort.velocity.0 *= DRIFT_CAP / speed;
+                            escort.velocity.1 *= DRIFT_CAP / speed;
+                        }
+                    }
+                    // The parent is gone: skip straight to the decision rather than hovering
+                    // beside nothing (`ai[0] = num822`, `flag51 = false`).
+                    None => escort.ai[0] = hover,
+                }
+                escort.dirty = true;
+                continue;
+            }
+            if age > hover {
+                continue;
+            }
+
+            // The decision tick. The eye reads its parent's target; the jellyfish's small one
+            // looks for the closest player itself (`flag48`).
+            let centre = escort.center();
+            let slot = if eye {
+                parent.map(|(_, _, _, target)| target as usize)
+            } else {
+                None
+            };
+            let at = slot
+                .and_then(|slot| u8::try_from(slot).ok())
+                .filter(|slot| self.player(*slot).is_some())
+                // `Player.FindClosest(position, width, height)` is the fallback vanilla reaches
+                // whenever `flag52` comes out false, which for the jellyfish is always.
+                .or_else(|| self.closest_player(centre, (0, 0)))
+                .and_then(|slot| self.player(slot))
+                .map(|p| {
+                    (
+                        p.position.0 + PLAYER_HALF_WIDTH,
+                        p.position.1 + PLAYER_HEIGHT / 2.0,
+                    )
+                });
+            let Some(at) = at else {
+                continue;
+            };
+            let scatter = |rng: &mut rand::rngs::SmallRng| {
+                use rand::Rng;
+                (
+                    rng.random_range(-AIM_SCATTER..=AIM_SCATTER) as f32,
+                    rng.random_range(AIM_STRETCH.0..AIM_STRETCH.1) as f32 * 0.01,
+                )
+            };
+            let (jitter_x, stretch_x) = scatter(&mut self.rng);
+            let (jitter_y, stretch_y) = scatter(&mut self.rng);
+            let aim = (
+                (at.0 - centre.0 + jitter_x) * stretch_x,
+                (at.1 - centre.1 + jitter_y) * stretch_y,
+            );
+            let length = aim.0.hypot(aim.1);
+            // `if (vector107.HasNaNs()) vector107 = Vector2.UnitY`: a zero-length aim points down.
+            let heading = if length > 0.0 {
+                (aim.0 / length, aim.1 / length)
+            } else {
+                (0.0, 1.0)
+            };
+
+            if !eye {
+                if let Some(escort) = self.projectiles.get_mut(index) {
+                    escort.velocity = (heading.0 * JELLYFISH_SPEED, heading.1 * JELLYFISH_SPEED);
+                    escort.dirty = true;
+                }
+                continue;
+            }
+            let clear = sight::can_hit(&WorldTiles(&self.world), centre, (1, 1), at, (1, 1));
+            if clear {
+                fired.push((
+                    centre,
+                    (
+                        heading.0 * NEBULA_LASER_SPEED,
+                        heading.1 * NEBULA_LASER_SPEED,
+                    ),
+                ));
+            }
+            // Fired or not, the eye starts its hover over rather than leaving.
+            if let Some(escort) = self.projectiles.get_mut(index) {
+                escort.ai[0] = 0.0;
+                escort.dirty = true;
+            }
+        }
+        let damage = if expert {
+            NEBULA_LASER_DAMAGE_EXPERT
+        } else {
+            NEBULA_LASER_DAMAGE
+        };
+        for (at, velocity) in fired {
+            if let Some(index) = self
+                .projectiles
+                .launch(NEBULA_LASER, at, velocity, damage, 0)
+            {
+                self.broadcast_projectile(index);
+            }
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
     /// Duke Fishron's second bubble seeks you, which is the half of style 65 it was missing.
     ///
     /// `aiStyle == 65`'s `ai[1] > 0` branch (`Projectile.cs:30014-30057`). The Duke's first
@@ -2925,6 +3128,8 @@ impl GameServer {
         self.tick_mechanic_wrenches();
         // And the Duke's second bubble, which re-aims at whoever it was given.
         self.tick_sharknado_bolts();
+        // And the two escorts that hover by the NPC that made them before deciding anything.
+        self.tick_hovering_escorts();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -16411,11 +16616,16 @@ mod town_shots_land {
     /// A player in slot 0, standing where asked. `position` is their top-left, as the wire and the
     /// server's own copy both are.
     ///
-    /// **The receiver comes back and the caller must hold it.** Dropping it closes the outbound
-    /// channel, and the first tick that tries to send anything to this player finds a dead channel
-    /// and takes them off the server - so the NPC being tested loses its target one tick in and
-    /// every routine that needs one quietly stops. That is a plausible-looking "the boss just
-    /// hovers" with nothing wrong in the boss.
+    /// **The receiver comes back, and the caller must both hold it and drain it.** Both halves
+    /// have already produced a test that failed for a reason nowhere near what it was testing:
+    ///
+    /// * Dropping it closes the channel, and the first tick that sends anything finds it dead and
+    ///   takes the player off the server - so the NPC under test loses its target one tick in and
+    ///   every routine that needs one quietly stops. That reads as "the boss just hovers".
+    /// * Holding it without reading fills it, and a full channel drops the player the same way.
+    ///   Sixty-four sends is nothing over a long run, and a test that drives a `tick_*` directly
+    ///   never advances `self.ticks` - so every sync gate of the form `ticks.is_multiple_of(n)` is
+    ///   true on every tick, and the traffic arrives many times faster than it would in a game.
     #[must_use]
     fn seat(server: &mut GameServer, at: (f32, f32)) -> mpsc::Receiver<bytes::Bytes> {
         let (out_tx, out_rx) = mpsc::channel(64);
@@ -16821,6 +17031,130 @@ mod town_shots_land {
         };
         let (calm, enraged) = (speed_with(0.0), speed_with(1.0));
         assert!((enraged - calm - 12.0).abs() < 0.01, "{calm} vs {enraged}");
+    }
+
+    /// The Stardust Jellyfish's small one hovers beside its parent and only then picks a target.
+    ///
+    /// `aiStyle 102` (`Projectile.cs:33837-34060`). It is an escort, not a drop: 210 ticks of
+    /// drifting toward whatever made it, and then a single decision. Without the arm it left in a
+    /// straight line at whatever velocity it was thrown with.
+    #[test]
+    fn a_jellyfish_spawn_hovers_by_its_parent_and_then_leaves_at_sixteen() {
+        use terrustia_proto::projectile::ids::JELLYFISH_SHOT;
+
+        /// `NPCID.StardustJellyfishBig`, `num821` for this type.
+        const JELLYFISH_PARENT: u16 = 407;
+
+        let mut server = server();
+        let mut held = seat(&mut server, (5000.0, 2000.0));
+        // Not slot zero: `ai[1]` reads as zero when it was never written, so a parent standing
+        // there makes "it found its parent" and "it found nothing" the same answer.
+        server.npcs.spawn(488, (100.0, 100.0)).expect("a filler");
+        let parent = server
+            .npcs
+            .spawn(JELLYFISH_PARENT, (2000.0, 2000.0))
+            .expect("a slot");
+        assert_ne!(parent, 0, "slot zero would make the ai[1] check vacuous");
+        let home = server.npcs.get(parent).expect("just spawned").center();
+        // Fifteen hundred pixels out, which is far enough that the pull runs up against its own
+        // cap and stays there. Three hundred was not: the spawn reached the parent, overshot, and
+        // oscillated, so neither the pull nor the cap could be told from nothing at all.
+        let spawn = server
+            .projectiles
+            .launch(JELLYFISH_SHOT, (3500.0, 2000.0), (0.0, 0.0), 60, 0)
+            .expect("a known type");
+        server.projectiles.get_mut(spawn).expect("up").ai = [0.0, f32::from(parent), 0.0];
+        let start = (server.projectiles.get(spawn).expect("up").center().0 - home.0).abs();
+
+        // Through the real `tick_projectiles`, which also does the moving - and is the test that
+        // the arm is wired in, since every other assertion here calls it directly.
+        for _ in 0..209 {
+            server.tick_projectiles();
+            // A real connection reads; see `seat`. Without this the outbound channel fills in
+            // sixty-four ticks and the player is dropped, and the spawn then has nobody to pick.
+            while held.try_recv().is_ok() {}
+        }
+        let hovering = *server.projectiles.get(spawn).expect("up");
+        let away = (hovering.center().0 - home.0).hypot(hovering.center().1 - home.1);
+        assert!(
+            away < start - 900.0,
+            "two hundred ticks of pull, capped at six, should close about a thousand pixels: \
+             {start} -> {away}"
+        );
+        let drift = hovering.velocity.0.hypot(hovering.velocity.1);
+        assert!(
+            (drift - 6.0).abs() < 0.01,
+            "and it should be sitting exactly on the cap by now: {drift}"
+        );
+
+        // The decision tick: it leaves at sixteen, roughly at the player.
+        server.tick_hovering_escorts();
+        let gone = server.projectiles.get(spawn).expect("up");
+        let speed = gone.velocity.0.hypot(gone.velocity.1);
+        assert!((speed - 16.0).abs() < 0.01, "sixteen, not six: {speed}");
+        assert!(
+            gone.velocity.0 > 0.0,
+            "and toward the player, who is to the right: {:?}",
+            gone.velocity
+        );
+    }
+
+    /// The Nebula Brain's eye never leaves: it fires a laser and starts hovering again, and it
+    /// dies with the Brain.
+    ///
+    /// `aiStyle 102`'s `type == 574` arm - `num823` is what makes it spawn something rather than
+    /// become it, and `flag50` is what welds it to its parent (`timeLeft = 2` every tick).
+    #[test]
+    fn a_nebula_eye_fires_a_laser_and_goes_when_the_brain_does() {
+        use terrustia_proto::projectile::ids::NEBULA_FLOATER;
+
+        /// `NPCID.NebulaBrain` and `ProjectileID.NebulaLaser`.
+        const NEBULA_PARENT: u16 = 420;
+        const NEBULA_LASER: u16 = 576;
+
+        let mut server = server();
+        let _held = seat(&mut server, (2300.0, 2000.0));
+        server.npcs.spawn(488, (100.0, 100.0)).expect("a filler");
+        let brain = server
+            .npcs
+            .spawn(NEBULA_PARENT, (2000.0, 2000.0))
+            .expect("a slot");
+        assert_ne!(brain, 0, "slot zero would make the ai[1] check vacuous");
+        let eye = server
+            .projectiles
+            .launch(NEBULA_FLOATER, (2050.0, 2000.0), (0.0, 0.0), 0, 0)
+            .expect("a known type");
+        server.projectiles.get_mut(eye).expect("up").ai = [0.0, f32::from(brain), 0.0];
+
+        for _ in 0..179 {
+            server.tick_hovering_escorts();
+        }
+        assert!(
+            !server
+                .projectiles
+                .iter()
+                .any(|(_, p)| p.projectile_type == NEBULA_LASER),
+            "nothing before the hundred and eightieth tick"
+        );
+        server.tick_hovering_escorts();
+        assert!(
+            server
+                .projectiles
+                .iter()
+                .any(|(_, p)| p.projectile_type == NEBULA_LASER),
+            "and a laser on it"
+        );
+        let after = *server.projectiles.get(eye).expect("still up");
+        assert_eq!(
+            after.ai[0], 0.0,
+            "the eye starts its hover over rather than leaving"
+        );
+        assert_eq!(after.time_left, 2, "and is held two ticks from expiring");
+
+        // The Brain goes, and the eye goes with it.
+        server.npcs.remove(brain);
+        server.tick_hovering_escorts();
+        assert!(server.projectiles.get(eye).is_none());
     }
 
     /// A `Shot`'s `ai` reaches the projectile it becomes, end to end through a real boss tick.

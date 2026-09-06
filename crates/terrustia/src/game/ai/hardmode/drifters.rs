@@ -258,7 +258,11 @@ pub fn stardust_jellyfish<T: TileView>(
             position: npc.center(),
             velocity: throw,
             time_left: 300,
-            ai: [0.0; 3],
+            // `NewProjectile(..., 0f, whoAmI)` (`NPC.cs:39860`). The small one is an escort, not a
+            // drop: `aiStyle 102` reads `ai[1]` to find the parent it hovers beside for three and
+            // a half seconds before it picks anyone. Launched without it, it left in a straight
+            // line at whatever it was thrown with.
+            ai: [0.0, f32::from(world.slot), 0.0],
         });
         npc.dirty = true;
     }
@@ -496,5 +500,31 @@ mod tests {
             spent |= solar_goop(&mut g).spent;
         }
         assert!(spent, "and then it dries up");
+    }
+    /// A dropped spawn is told which jellyfish made it.
+    ///
+    /// `NewProjectile(..., 0f, whoAmI)` (`NPC.cs:39860`), and `aiStyle 102` reads `ai[1]` to find
+    /// the parent it hovers beside for three and a half seconds before it picks anyone. Launched
+    /// without it, the small one left in a straight line at whatever it was thrown with.
+    #[test]
+    fn a_dropped_spawn_carries_its_parents_slot() {
+        let tiles = Void;
+        let mut j = npc(96);
+        let (cx, cy) = j.center();
+        let t = Some(player_at(cx, cy + 600.0));
+        let mut w = world(&tiles, t);
+        w.slot = 7;
+        let mut r = rng();
+        let mut dropped = None;
+        for _ in 0..600 {
+            if let Some(shot) = stardust_jellyfish(&mut j, &w, &mut r).shot {
+                dropped = Some(shot);
+                break;
+            }
+            j.position.0 += j.velocity.0;
+            j.position.1 += j.velocity.1;
+        }
+        let shot = dropped.expect("it should have dropped one");
+        assert_eq!(shot.ai[1], 7.0, "the slot the caller filled in, not zero");
     }
 }

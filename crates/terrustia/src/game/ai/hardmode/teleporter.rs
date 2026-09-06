@@ -48,7 +48,11 @@ pub fn nebula_brain(
                 position: npc.center(),
                 velocity: floater_launch(rng),
                 time_left: 1800,
-                ai: [0.0; 3],
+                // `NewProjectile(..., 0f, whoAmI)` (`NPC.cs:39879`). An eye is the Brain's, and
+                // `aiStyle 102` reads `ai[1]` for three things: what to hover beside, whose target
+                // to shoot at, and when to stop existing. Without it the eyes drifted off and
+                // outlived the Brain by half a minute.
+                ai: [0.0, f32::from(world.slot), 0.0],
             });
         }
     }
@@ -373,5 +377,27 @@ mod tests {
                 "it should not be inside rock at {tx},{ty}"
             );
         }
+    }
+    /// An eye is told which Brain made it.
+    ///
+    /// `NewProjectile(..., 0f, whoAmI)` (`NPC.cs:39879`). `aiStyle 102` reads `ai[1]` for three
+    /// separate things - what to hover beside, whose target to shoot at, and when to stop existing
+    /// - so without it the eyes drifted off and outlived the Brain by half a minute.
+    #[test]
+    fn a_floater_carries_its_brains_slot() {
+        let tiles = Sky(HashMap::new());
+        let mut rng = SmallRng::seed_from_u64(97);
+        let mut b = brain(0.0, 0.0);
+        let mut w = world(&tiles, Some((300.0, 0.0)));
+        w.slot = 5;
+        let mut floaters = Vec::new();
+        for _ in 0..(BRAIN_FLOATER_WINDOW as i32 + 2) {
+            floaters.extend(nebula_brain(&mut b, &w, &mut rng).base.shots);
+        }
+        assert!(!floaters.is_empty(), "it should have put some out");
+        assert!(
+            floaters.iter().all(|s| s.ai[1] == 5.0),
+            "every one carries the slot the caller filled in, not zero"
+        );
     }
 }

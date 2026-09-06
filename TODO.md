@@ -541,8 +541,30 @@ moving anything the placement test could see. Two of the file's own tests also h
 rather than adjusted: both asserted a flat distance band, which is what our invented placement
 produced and none of vanilla's four.
 
-**7 types remain, across six styles**: 45, 98, 102 (2), 112, 136, 149.
-**Coverage is 73 of 80**, counted by the audit tool rather than by hand. Style 112 counts as one of
+**Style 102, the two hovering escorts, closed the same day and was the last thing `Shot::ai`
+unblocked.** `Projectile.cs:33837-34060`, one arm keyed on the type inside it exactly as vanilla
+keys it. Neither of these is a shot: both are **escorts**, launched by a parent NPC with
+`ai[1] = whoAmI` (`NPC.cs:39860`, `:39879`), that drift beside whatever made them for a few seconds
+and only then decide anything. Without the arm both left in a straight line at whatever velocity
+they were made with, which is a stray drop rather than an escort.
+
+- The **Stardust Jellyfish's small one** hovers 210 ticks, pulled a seventh of a pixel sideways and
+  half that vertically toward its parent each tick and capped at six, then picks the closest player
+  itself and leaves at sixteen.
+- The **Nebula Eye** hovers 180, reads its *parent's* target rather than choosing one, and then
+  does not leave at all: it fires a `NebulaLaser` at eight if it has a line, resets its own clock
+  and hovers again. It also dies with its parent - vanilla holds its `timeLeft` at two every tick,
+  so the frame the Brain goes, so does the eye. Its laser's damage is *lower* in expert (50 against
+  65) because the hostile-projectile curve scales it back up on the way to a player.
+
+The aim is scattered as vanilla scatters it: fifty pixels either way per axis, then eighty to a
+hundred and twenty per cent of the result. Two narrowings: `position += parent.position -
+parent.oldPos[1]` carries an escort along with its parent's movement over *two* frames and this
+server keeps one, and `Collision.CanHitLine` is `sight::can_hit` on one-pixel boxes.
+
+**5 types remain, across five styles**: 45, 98, 112, 136, 149.
+**Coverage is 76 of 81** - the roster grew by one, because the Nebula Eye's laser is a type this
+server can now put in the air and could not before. Counted by the audit tool rather than by hand., counted by the audit tool rather than by hand. Style 112 counts as one of
 the eight and not as closed: it is three unrelated bodies keyed on the type inside the arm,
 exactly as vanilla keys them, and only the Truffle's spore is transcribed - crediting the style
 would credit the Dandelion seed for the spore's arm.
@@ -550,9 +572,6 @@ would credit the Dandelion seed for the spore's arm.
 - **45, the Rain Nimbus (264), is already right** and should not be counted as a movement gap: its
   branch (`:28486-28509`) sets a rotation and bounces off shimmer, and nothing else. Its only
   divergence is a 300-tick fuse where the table says 120.
-- **102, the Stardust Jellyfish and the Nebula Eye**, is the last one `Shot::ai` unblocks: both
-  hover by the parent named in `ai[1]` for 210 and 180 ticks and then fire at a player, the Eye
-  spawning a second projectile and starting over rather than leaving.
 - **136, Betsy's flame breath** (`:69858-69910`) is welded to her and dies at 78, the deathray's
   shape again. **149, the golf ball** is the only large one: `BallCollision.Step`
   (`Terraria.Physics/BallCollision.cs:24-90`) plus per-tile friction from `TileGolfPhysics`.

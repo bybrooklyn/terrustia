@@ -5,12 +5,12 @@
 //! decided to shoot has been emitting its aim and cadence for a while; this is what makes those
 //! decisions land.
 //!
-//! Twenty-two behaviours are transcribed here, and twelve more in `server::systems` (see below).
-//! This file used to say "a handful of behaviours cover everything the roster and the world's
-//! traps fire"; the count, when it was finally taken, was **43 of the 79 types something here can
-//! launch reaching no arm at all**. It is 7 of 80 now.
+//! Twenty-two behaviours are transcribed here, and thirteen more in `server::systems` (see
+//! below). This file used to say "a handful of behaviours cover everything the roster and the
+//! world's traps fire"; the count, when it was finally taken, was **43 of the 79 types something
+//! here can launch reaching no arm at all**. It is 5 of 81 now.
 //!
-//! The 7 left are not all straight lines, and saying so would be the same mistake again. Read
+//! The 5 left are not all straight lines, and saying so would be the same mistake again. Read
 //! against `Projectile.cs`: none of them *falls* - they are hovering clouds, shockwaves and
 //! convergences - so a straight line is a poorer approximation of them than it was of a thrown
 //! bone, not a free one. One of the eight, the Rain Nimbus, is in fact **already right**: style
@@ -23,8 +23,8 @@
 //! 84 (the Moon Lord's deathray), 85 (his brand), 109 (the Mechanic's wrench), 111 (the Dryad's
 //! ward), 127/128 (the Sand Elemental's mark and tornado), 133 (the Dark Mage's sigils) and
 //! 171/180 (two of the Empress's) are all there, called from `tick_projectiles` before the
-//! movement below, in vanilla's own order, and so is the seeking half of 65 (Duke Fishron's
-//! second bubble). So is `tick_friendly_projectile_hits`, which is `Damage_PVE` and runs *after*
+//! movement below, in vanilla's own order, and so are the seeking half of 65 (Duke Fishron's
+//! second bubble) and 102 (the two escorts that hover beside the NPC that made them). So is `tick_friendly_projectile_hits`, which is `Damage_PVE` and runs *after*
 //! the movement, where `Projectile.Update` puts it. So is `tick_friendly_projectile_hits`, which is
 //! `Damage_PVE` and runs after the movement, where `Projectile.Update` puts it.
 //!

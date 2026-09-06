@@ -1108,6 +1108,8 @@ crates/terrustia/src/game/ai/hardmode/big_mimic.rs	fn big_mimic	NPC.cs	38184-381
 crates/terrustia/src/game/ai/hardmode/big_mimic.rs	mod state :: const FIRING	NPC.cs	37956	0dad5efd27b5	d735c18584b7
 crates/terrustia/src/game/ai/hardmode/big_mimic.rs	mod tests :: fn a_crimson_mimic_gets_the_stuff_cannon_in_an_anniversary_world	NPC.cs	37956-37959	3608700551f1	4d6abb398465
 crates/terrustia/src/game/ai/hardmode/big_mimic.rs	mod tests :: fn a_curled_mimic_is_untouchable	NPC.cs	37968	ef9f63c5ba40	e62dd877debe
+crates/terrustia/src/game/ai/hardmode/drifters.rs	fn stardust_jellyfish	NPC.cs	39860	1a229a76271f	9a59c94ea3fc
+crates/terrustia/src/game/ai/hardmode/drifters.rs	mod tests :: fn a_dropped_spawn_carries_its_parents_slot	NPC.cs	39860	1a229a76271f	dcabf0545c11
 crates/terrustia/src/game/ai/hardmode/drifters.rs	struct Outcome	NPC.cs	43481-43489	79b50c2cbdab	1483bfec2a7d
 crates/terrustia/src/game/ai/hardmode/fixtures.rs	(file)	Utils.cs	1899-1902	c1eee38dbc98	424d5d3015e9
 crates/terrustia/src/game/ai/hardmode/fixtures.rs	fn check_floor2	CultistRitual.cs	133-159	8880a5495aaf	eeca8ce3d3d8
@@ -1149,6 +1151,8 @@ crates/terrustia/src/game/ai/hardmode/saucer.rs	fn core	NPC.cs	35933-35951	dd659
 crates/terrustia/src/game/ai/hardmode/saucer.rs	fn core	NPC.cs	36433,36442	b7f7e3203905	fee4765c954a
 crates/terrustia/src/game/ai/hardmode/saucer.rs	fn core	NPC.cs	36457-36461	665f1a3e154f	fee4765c954a
 crates/terrustia/src/game/ai/hardmode/saucer.rs	mod tests :: fn its_guns_seat_on_both_sides_by_ai1	NPC.cs	36433,36442	b7f7e3203905	889dcd7ad2a1
+crates/terrustia/src/game/ai/hardmode/teleporter.rs	fn nebula_brain	NPC.cs	39879	e7fcbbb3cbfa	23956160f249
+crates/terrustia/src/game/ai/hardmode/teleporter.rs	mod tests :: fn a_floater_carries_its_brains_slot	NPC.cs	39879	e7fcbbb3cbfa	5ab6592765d8
 crates/terrustia/src/game/ai/haunt.rs	fn attack	NPC.cs	24924-25097	3bf89d98229a	95a220056152
 crates/terrustia/src/game/ai/haunt.rs	fn attack	NPC.cs	25086-25093	b5510711bace	95a220056152
 crates/terrustia/src/game/ai/haunt.rs	fn leaving	NPC.cs	24793-24806	b62f9c363817	87674abc1f1b
@@ -1927,8 +1931,8 @@ crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	3272	43583
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	50299-50302	6583807eb5db	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72072-72079	2a6f4d26e0bc	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72406	6c77495a5649	c5414c9d223d
-crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	63395f07b563
-crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	63395f07b563
+crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	c4a92084f6af
+crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	c4a92084f6af
 crates/terrustia/src/game/server/systems.rs	const STINKY	BuffID.cs	393	0f6008fbeed1	cfaa20a1d46a
 crates/terrustia/src/game/server/systems.rs	fn player_has_buff	MessageBuffer.cs	2456-2477	87cb35363490	c08c9f289848
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	7363-7366	54960e839053	00e47302005c
@@ -2057,6 +2061,9 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_friendly_
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_friendly_projectile_hits	Projectile.cs	14190-14206	45ee9c95f91f	94564caa3d2b
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_friendly_projectile_hits :: const IMMUNE_FOR	Projectile.cs	14107	efb294b11adc	26d538ebbd3b
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_friendly_projectile_hits :: const IMMUNE_FOR	Projectile.cs	14183	46113cac5b67	26d538ebbd3b
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_hovering_escorts	NPC.cs	39860	1a229a76271f	7592ed6fccf7
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_hovering_escorts	NPC.cs	39879	e7fcbbb3cbfa	7592ed6fccf7
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_hovering_escorts	Projectile.cs	33837-34060	50b6a9ef6632	7592ed6fccf7
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_items	Player.cs	35212	71fab5d3114c	6469cd08e9c9
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_liquids	Liquid.cs	993-1012	d5d07d9497ce	5fa1001c2f8d
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_liquids	WorldGen.cs	72072-72079	2a6f4d26e0bc	5fa1001c2f8d
@@ -2180,6 +2187,7 @@ crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_mov
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod tile_squares_only_reach_who_can_see_them :: fn a_square_straddling_a_boundary_reaches_both_sides	RemoteClient.cs	192-215	d62b28e11723	6d6e6aa297e9
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_hit_target_is_immune_to_this_server_for_ten_ticks	NPC.cs	91564-91567	42327e023f4f	b927795bacbe
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_hit_target_is_immune_to_this_server_for_ten_ticks	Projectile.cs	14183	46113cac5b67	b927795bacbe
+crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_jellyfish_spawn_hovers_by_its_parent_and_then_leaves_at_sixteen	Projectile.cs	33837-34060	50b6a9ef6632	914eb81a3b75
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_melee_swing_goes_through_armour_and_then_waits	NPC.cs	55635	9d86ce36233b	6788cbcb9df8
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_melee_swing_goes_through_armour_and_then_waits	NPC.cs	82012	2e5cf44537f5	6788cbcb9df8
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_melee_swing_goes_through_armour_and_then_waits	NPC.cs	82068	bce838df88c3	6788cbcb9df8
