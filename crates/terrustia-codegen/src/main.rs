@@ -15,6 +15,7 @@ mod banners;
 mod buffs;
 mod csharp;
 mod drops;
+mod golf;
 mod hurt_tiles;
 mod net_variants;
 mod projectiles;
@@ -60,6 +61,11 @@ const TABLES: &[Table] = &[
         name: "net_variants",
         out: "crates/terrustia-proto/src/net_variants.rs",
         generate: net_variants::generate,
+    },
+    Table {
+        name: "golf",
+        out: "crates/terrustia-proto/src/golf_physics.rs",
+        generate: golf::generate,
     },
     Table {
         name: "banners",

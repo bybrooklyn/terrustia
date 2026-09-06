@@ -621,7 +621,46 @@ All nine sites now use one `support::scratch_dir`, unique by an atomic counter. 
   seconds late, so for their entire flight there was nothing to converge on. Fixing that ordering
   is what let the arm be written; the arm itself is six lines.
 
-**1 type remains**: 149, the golf ball. **Coverage is 80 of 81.**
+**Style 149, the golf ball, closed the lane. Coverage is 81 of 81: nothing falls through to the
+straight-line default any more.**
+
+It is the one projectile in the roster whose arm is not a routine at all. `AI_149_GolfBall`
+(`Projectile.cs:20448-20491`) hands the whole thing to `GolfHelper.StepGolfBall`, which is a small
+rigid-body simulation - substeps, circle-against-edge collision, per-material dampening and a
+resting state (`Terraria.Physics/BallCollision.cs:24-90`). It is in the roster at all because the
+Golfer is one of the twenty-eight town NPCs that fight back, and what he throws is a golf ball; it
+used to fly in a straight line for eight seconds and never land.
+
+Four things about it are worth writing down:
+
+- **The material is half the simulation**, and it is a generated table: `golf_physics.rs`, from the
+  game's own `Materials.json` and `Tiles.json` rather than from a C# set, mapping 692 tile names to
+  fourteen materials via `TileID.cs`'s own constant list. `side` decides how far a ball rolls (1.0
+  on ice against 0.2 on sand) and `direct` how high it bounces (0.95 against 0.3), and vanilla
+  splits every contact between the two by projecting the reflection onto the surface normal.
+- **The substeps are what stop a fast ball stepping over a wall**: one pass per two pixels of
+  travel, and gravity divided by the *square* of the pass count so that a full step always adds
+  exactly one gravity whatever the speed. That square is invisible at any single speed, which is
+  why it has a test of its own.
+- **Resting is a state, not a speed.** It needs a contact this step, a sideways speed inside a
+  hundredth of a pixel and a downward speed under one gravity, so a ball rolling slowly is still
+  moving. A settled ball has its damage zeroed: it is a lump of dirt on the ground, not an attack.
+- **One clause is carried and deliberately untested.** The backward-contact filter cannot be
+  distinguished from its absence here: the clearance sliver already excludes a just-resolved
+  contact. Flat ground, a concave corner, a one-tile notch and a run of slopes were each rolled,
+  dropped and lobbed with it neutered, and every one gave byte-identical results. It stays because
+  it is the game's line, and it has no test because a test that cannot fail is worse than none.
+
+Not modelled, all of it the *shot* rather than the ball and all of it on the client that took it:
+the club impact, the accessory that resists dampening, the cup at tile 476 (scoring a hole needs a
+golf state this server does not keep) and the conveyor belts at 421/422. The water and honey
+dampenings are modelled.
+
+Thirteen neutralisations, all caught. Three needed a sharper test first, and each was the same
+shape - an assertion that compared two things rather than pinning either. Ice rolling further than
+sand stays true when the split between `direct` and `side` is removed entirely, so the bounce
+*height* needed its own test; and a gale carrying harder than a breeze stays true when the wind
+constant is a thousand times too big.
 **Coverage is 77 of 81** - the roster grew by one, because the Nebula Eye's laser is a type this
 server can now put in the air and could not before. Counted by the audit tool rather than by hand., counted by the audit tool rather than by hand. Style 112 counts as one of
 the eight and not as closed: it is three unrelated bodies keyed on the type inside the arm,

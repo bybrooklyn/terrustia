@@ -1456,6 +1456,11 @@ crates/terrustia/src/game/event.rs	impl Invasion :: fn size_for	Main.cs	65435-65
 crates/terrustia/src/game/event.rs	impl Invasion :: fn size_for	Main.cs	65471-65486	d756446afb53	6867ab8bfc26
 crates/terrustia/src/game/event.rs	mod tests :: fn the_size_grows_with_the_party	Main.cs	65435-65443	35e30c280563	4a0c79495b18
 crates/terrustia/src/game/event.rs	mod tests :: fn the_size_grows_with_the_party	Main.cs	65471-65486	d756446afb53	4a0c79495b18
+crates/terrustia/src/game/golf.rs	(file)	BallCollision.cs	24-90	e814f0dea5d1	302dadb13f1f
+crates/terrustia/src/game/golf.rs	(file)	GolfHelper.cs	32-160	01e8ae2cb962	302dadb13f1f
+crates/terrustia/src/game/golf.rs	const WATER_DRAG	GolfHelper.cs	141-148	73c4c7299289	7a52c1200dd0
+crates/terrustia/src/game/golf.rs	mod tests :: fn a_ball_bounces_high_off_ice_and_dead_off_sand	GolfHelper.cs	36-39	f85ee16a182d	426aed6bc968
+crates/terrustia/src/game/golf.rs	mod tests :: fn a_ball_is_slowed_by_water_and_slowed_more_by_honey	GolfHelper.cs	141-148	73c4c7299289	9069e1eae77f
 crates/terrustia/src/game/housing.rs	fn blocks	Main.cs	8032	a7a49c5b607c	99a6b81754c4
 crates/terrustia/src/game/housing.rs	fn blocks	WorldGen.cs	6104-6109	e610988ccb0e	99a6b81754c4
 crates/terrustia/src/game/housing.rs	fn blocks	WorldGen.cs	6113-6127	aea3cb0ee3d6	99a6b81754c4
@@ -1579,6 +1584,7 @@ crates/terrustia/src/game/projectile.rs	const BOULDER_STYLE	Projectile.cs	12491-
 crates/terrustia/src/game/projectile.rs	const BOULDER_STYLE	Projectile.cs	19056-19099	227d301575d8	bbbd758c2dcc
 crates/terrustia/src/game/projectile.rs	const BOULDER_STYLE	Projectile.cs	26596-26746	316f71664a22	bbbd758c2dcc
 crates/terrustia/src/game/projectile.rs	const FIREBALL_DELAY	Projectile.cs	24618-24641	a3a3d50ea0ac	3db63ed180c5
+crates/terrustia/src/game/projectile.rs	const GOLF_BALL_STYLE	Projectile.cs	20448-20491	4247cef2acef	a5067cc94a31
 crates/terrustia/src/game/projectile.rs	const LANCE_HOLD	Projectile.cs	45853-45876	d815ecd65da8	a276782a3f1c
 crates/terrustia/src/game/projectile.rs	const MINE_DRAG	Projectile.cs	48354-48366	2e12d91f4f72	7ffcf1ca0811
 crates/terrustia/src/game/projectile.rs	const PRESENT_DRIFT	Projectile.cs	29337-29366	c0c2724d47dc	d510847d932f
@@ -1599,28 +1605,29 @@ crates/terrustia/src/game/projectile.rs	fn bomb	Projectile.cs	48378-48399	eb1083
 crates/terrustia/src/game/projectile.rs	fn boulder	Projectile.cs	26361	684228bf3682	33118dd7193d
 crates/terrustia/src/game/projectile.rs	fn boulder	Projectile.cs	26596-26746	316f71664a22	33118dd7193d
 crates/terrustia/src/game/projectile.rs	fn remap	Utils.cs	345	626d237f58ed	780cc7c09db4
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	16781	651cda76400c	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	17308	6bcc82a4f969	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19056-19099	227d301575d8	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19677-19684	17854a3e7d6a	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19872-19886	424f6fd70985	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23907-23930	2e8c5b0e8c10	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23945-23947	9f860f2ea5fa	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24170-24176	45ba72dd4bea	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24618-24641	a3a3d50ea0ac	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	29337-29366	c0c2724d47dc	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30058-30078	8c525a8d9da6	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30655-30677	681d2a8a6429	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	31473	20db8144f6b0	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34676	da2cc4ba8be1	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34822-34865	8b72ab9bdcbf	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	36689-36703	2f7bd1ccd9f0	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43274-43377	2fb9648426e1	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43454-43462	922f88e4c77f	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43893-43907	aea516c9abba	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	45853-45866	931a3a7d8d10	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	52268-52400	cacd56e74068	9b7663c2c4a3
-crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	69740-69756	144b99986931	9b7663c2c4a3
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	16781	651cda76400c	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	17308	6bcc82a4f969	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19056-19099	227d301575d8	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19677-19684	17854a3e7d6a	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	19872-19886	424f6fd70985	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	20448-20491	4247cef2acef	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23907-23930	2e8c5b0e8c10	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	23945-23947	9f860f2ea5fa	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24170-24176	45ba72dd4bea	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	24618-24641	a3a3d50ea0ac	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	29337-29366	c0c2724d47dc	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30058-30078	8c525a8d9da6	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	30655-30677	681d2a8a6429	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	31473	20db8144f6b0	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34676	da2cc4ba8be1	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	34822-34865	8b72ab9bdcbf	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	36689-36703	2f7bd1ccd9f0	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43274-43377	2fb9648426e1	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43454-43462	922f88e4c77f	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	43893-43907	aea516c9abba	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	45853-45866	931a3a7d8d10	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	52268-52400	cacd56e74068	333d7cf01054
+crates/terrustia/src/game/projectile.rs	fn step	Projectile.cs	69740-69756	144b99986931	333d7cf01054
 crates/terrustia/src/game/projectile.rs	impl Powder :: fn step	Projectile.cs	24366-24372	80818f04371c	ec35674f69cd
 crates/terrustia/src/game/projectile.rs	impl Projectile :: fn can_damage	Projectile.cs	12491-12494	0387966662de	039cb5d97aea
 crates/terrustia/src/game/projectile.rs	impl ProjectileStore :: fn launch	Projectile.cs	14916-14919	2c62941898b4	39a262f21b0e
@@ -1629,6 +1636,7 @@ crates/terrustia/src/game/projectile.rs	mod tests :: fn a_boulder_cannot_hurt_an
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_boulder_falls_and_then_rolls_away_from_the_wall_beside_it	Projectile.cs	26596-26746	316f71664a22	7846d609d40c
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_deerclops_ice_spike_stands_for_twenty_ticks	Projectile.cs	52268-52400	cacd56e74068	f769e042171b
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_falling_star_passes_through_terrain_until_it_is_clear_of_it	Projectile.cs	24170-24176	45ba72dd4bea	e08c68f613b8
+crates/terrustia/src/game/projectile.rs	mod tests :: fn a_golf_ball_lands_rolls_and_stops_being_dangerous	Projectile.cs	20448-20491	4247cef2acef	543c18507fa9
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_grenade_bounces_off_a_wall_and_settles_on_the_floor	Projectile.cs	19872-19886	424f6fd70985	b568eea70619
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_grenade_bounces_off_a_wall_and_settles_on_the_floor	Projectile.cs	48378-48399	eb10839c0918	b568eea70619
 crates/terrustia/src/game/projectile.rs	mod tests :: fn a_present_holds_its_rise_and_then_floats_down	Projectile.cs	29337-29366	c0c2724d47dc	b1fb1f0481a9

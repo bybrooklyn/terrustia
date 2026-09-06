@@ -285,6 +285,7 @@ regen:
     cargo run -q -p terrustia-codegen -- drops       {{DECOMPILED}} crates/terrustia-proto/src/npc_drops.rs
     cargo run -q -p terrustia-codegen -- projectiles {{DECOMPILED}} crates/terrustia-proto/src/projectile_data.rs
     cargo run -q -p terrustia-codegen -- banners     {{DECOMPILED}} crates/terrustia-proto/src/banners.rs
+    cargo run -q -p terrustia-codegen -- golf        {{DECOMPILED}} crates/terrustia-proto/src/golf_physics.rs
     cargo run -q -p terrustia-codegen -- buffs       {{DECOMPILED}} crates/terrustia-proto/src/buffs.rs
     cargo run -q -p terrustia-codegen -- angler      {{DECOMPILED}} crates/terrustia-proto/src/angler.rs
     cargo run -q -p terrustia-codegen -- shimmer     {{DECOMPILED}} crates/terrustia-proto/src/shimmer.rs

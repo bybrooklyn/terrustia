@@ -5,6 +5,7 @@ pub mod buffs;
 pub mod cavern_monsters;
 pub mod clock;
 pub mod event;
+pub mod golf;
 pub mod housing;
 pub mod journey;
 pub mod lantern_night;

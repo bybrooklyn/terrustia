@@ -21,6 +21,7 @@ that reads it.
 | `npc_drops.rs` | ~6,800 | `ItemDropDatabase` | `terrustia-codegen drops` |
 | `projectile_data.rs` | ~10,000 | `Projectile.SetDefaults` | `terrustia-codegen projectiles` |
 | `banners.rs` | ~520 | `BannerSystem` / `ItemID.Sets.KillsToBanner` | `terrustia-codegen banners` |
+| `golf_physics.rs` | ~700 | `MaterialData/Materials.json` + `Tiles.json` | `terrustia-codegen golf` |
 | `placed_items.rs` | 3,322 | `Item.SetDefaults`, `GetItemDrop_*`, six inline arms | none (`just check-placed-items`) |
 | `town_names.rs` | 517 | localisation + `NPC.getNewNPCNameInner` | `terrustia-codegen town_names` |
 | `buffs.rs` | ~450 | `Main.debuff`, `BuffID.Sets`, `NPCID.Sets.DebuffImmunitySets` | `terrustia-codegen buffs` |

@@ -5,15 +5,16 @@
 //! decided to shoot has been emitting its aim and cadence for a while; this is what makes those
 //! decisions land.
 //!
-//! Twenty-two behaviours are transcribed here, and sixteen more in `server::systems` (see below).
 //! This file used to say "a handful of behaviours cover everything the roster and the world's
-//! traps fire"; the count, when it was finally taken, was **43 of the 79 types something here can
-//! launch reaching no arm at all**. It is **one of 81** now, and that one is the golf ball, whose
-//! style is a physics engine of its own (`Terraria.Physics/BallCollision.cs`).
+//! traps fire". The count, when it was finally taken, was **43 of the 79 types something here can
+//! launch reaching no arm at all**. It is **none of 81** now: every projectile this server can put
+//! in the air has a transcription of its own vanilla routine.
 //!
-//! One of those closed by finding there was nothing to close: style 45, the Rain Nimbus, sets a
-//! rotation and nothing else, so its movement was always right and only its fuse was wrong.
-//! `TODO.md`'s C6 has the history, by style, with what each one turned out to be.
+//! Two of those closed without an arm being written. Style 45, the Rain Nimbus, sets a rotation
+//! and nothing else, so its movement was always right and only its fuse was wrong; style 98, the
+//! Cultist tablet's shards, was blocked on the ritual raising its boss three seconds late rather
+//! than on anything a projectile does. `TODO.md`'s C6 has the history, by style, with what each
+//! one turned out to be.
 //!
 //! **A style whose arm needs to see anything but tiles lives in `server::systems` instead**, and
 //! is no less transcribed for it: a projectile cannot search the player list, walk the NPC table
@@ -25,7 +26,8 @@
 //! second bubble), 98 (the Cultist tablet's shards, which fall into the boss the ritual raised),
 //! 102 (the two escorts that hover beside the NPC that made them), 112's dandelion seed (which
 //! rides the wind at a player, or does not, depending which way it blows) and 136 (Betsy's
-//! breath, which rides her jaw). So is `tick_friendly_projectile_hits`, which is `Damage_PVE` and runs *after*
+//! breath, which rides her jaw). Style 149, the golf ball, is a third place again: its arm is a
+//! rigid-body simulation and lives in `game::golf`. So is `tick_friendly_projectile_hits`, which is `Damage_PVE` and runs *after*
 //! the movement, where `Projectile.Update` puts it. So is `tick_friendly_projectile_hits`, which is
 //! `Damage_PVE` and runs after the movement, where `Projectile.Update` puts it.
 //!
@@ -177,6 +179,9 @@ fn wrap_angle(angle: f32) -> f32 {
     wrapped - std::f32::consts::PI
 }
 
+/// The golf ball (`Projectile.cs:20448-20491`), whose arm is a physics simulation rather than a
+/// routine and lives in `game::golf`.
+const GOLF_BALL_STYLE: i32 = 149;
 /// How long a Deerclops ice spike stands: `num10 = 20` for `type == 961`.
 const SPIKE_LIFE: f32 = 20.0;
 
@@ -789,6 +794,44 @@ pub fn step(
                 }
                 projectile.ai[0] += 1.0;
                 projectile.dirty = true;
+            }
+            GOLF_BALL_STYLE => {
+                // The golf ball, and it is the one projectile here whose arm is not a routine at
+                // all: `AI_149_GolfBall` (`Projectile.cs:20448-20491`) hands the whole thing to
+                // `GolfHelper.StepGolfBall`, a small rigid-body simulation with substeps, circle
+                // -against-edge collision and per-material dampening. It lives in `game::golf`.
+                //
+                // `!npcProj && timeLeft < 10` raises a *player's* ball back to ten ticks so it can
+                // never expire mid-roll; a town NPC's is `npcProj` and does not get that, so the
+                // Golfer's ball keeps the 480 his own launch gives it.
+                //
+                // A ball that has settled has its damage zeroed and stays put: it is a lump of
+                // dirt on the ground at that point, not an attack, and the movement below is
+                // skipped so nothing re-launches it.
+                let size = (projectile.width(), projectile.height());
+                let state = crate::game::golf::step_ball(
+                    &mut projectile.position,
+                    &mut projectile.velocity,
+                    &mut projectile.rotation,
+                    size,
+                    tiles,
+                );
+                projectile.dirty = true;
+                match state {
+                    crate::game::golf::BallState::OutOfBounds => return Outcome::Spent,
+                    crate::game::golf::BallState::Resting => {
+                        projectile.damage = 0;
+                    }
+                    crate::game::golf::BallState::Moving => {}
+                }
+                // The simulation has already moved it, so the shared movement below is skipped -
+                // and with it the collision, which a ball resolves for itself against edges rather
+                // than against a box.
+                projectile.time_left -= 1;
+                if projectile.time_left <= 0 {
+                    return Outcome::Spent;
+                }
+                continue;
             }
             135 => {
                 // The Queen Slime's ground smash (`Projectile.cs:69740-69756`,
@@ -2547,6 +2590,50 @@ mod tests {
         step(&mut seeker, &tiles, &mut Vec::new());
         assert_eq!(seeker.velocity, (3.0, 4.0));
         assert_eq!(seeker.ai[0], 1.0, "and does not run the bob's own counter");
+    }
+
+    /// The Golfer's ball is a physics object, not a shot: it lands, rolls and stops being an
+    /// attack.
+    ///
+    /// `AI_149_GolfBall` (`Projectile.cs:20448-20491`) hands the whole thing to
+    /// `GolfHelper.StepGolfBall`, so the arm here is one call and a resting check. Without it the
+    /// ball flew in a straight line for eight seconds and never landed.
+    #[test]
+    fn a_golf_ball_lands_rolls_and_stops_being_dangerous() {
+        /// `ProjectileID.DirtGolfBall`, and `TileID.Stone`.
+        const GOLF_BALL: u16 = 721;
+
+        let mut tiles = Air::default();
+        for x in 0..400 {
+            for y in 100..104 {
+                tiles.0.insert((x, y), Tile::block(1));
+            }
+        }
+        let mut ball = launched(GOLF_BALL, (8.0, -2.0));
+        ball.position = (60.0 * TILE, 100.0 * TILE - 40.0);
+        let start = ball.position;
+        assert!(ball.damage > 0, "it starts as an attack");
+
+        let mut ticks = 0;
+        while step(&mut ball, &tiles, &mut Vec::new()) == Outcome::Flying && ball.damage > 0 {
+            ticks += 1;
+            assert!(ticks < 1_000, "it should have settled by now");
+        }
+        assert_eq!(
+            ball.damage, 0,
+            "a settled ball is a lump of dirt on the ground, not an attack"
+        );
+        assert!(
+            ball.position.0 > start.0 + 16.0,
+            "and it should have rolled somewhere first: {} to {}",
+            start.0,
+            ball.position.0
+        );
+        assert!(
+            (ball.position.1 + ball.height() - 100.0 * TILE).abs() < 3.0,
+            "resting on the floor rather than in it: {}",
+            ball.position.1 + ball.height()
+        );
     }
 
     /// A Deerclops ice spike stands for twenty ticks and then goes.
