@@ -624,6 +624,7 @@ crates/terrustia-proto/src/placed_items.rs	fn placed_item	WorldGen.cs	46572	7954
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65569-65639	d3f3ee060b89	3dc8d66fdd69
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65640-65719	0f1bf334c965	3dc8d66fdd69
 crates/terrustia-proto/src/projectile.rs	mod ids :: const CULTIST_ICE	NPC.cs	65720-65779	395ea9816079	3dc8d66fdd69
+crates/terrustia-proto/src/projectile.rs	mod ids :: const DANDELION_SEED	Projectile.cs	34743-34820	8bfb152b1259	b8caf820bf0b
 crates/terrustia-proto/src/projectile.rs	mod ids :: const DRYADS_WARD	NPC.cs	55463-55469	c7493ec94ce7	795fd2d42ecd
 crates/terrustia-proto/src/projectile.rs	mod ids :: const DRYADS_WARD	Projectile.cs	41872-41978	f11c2cf8c212	795fd2d42ecd
 crates/terrustia-proto/src/projectile.rs	mod ids :: const EMPRESS_RAINBOW	NPC.cs	46528	6bf8f2a90a78	040e7ff7f2d0
@@ -1029,7 +1030,11 @@ crates/terrustia/src/game/ai/boss/skeletron.rs	mod tests :: fn expert_hands_dock
 crates/terrustia/src/game/ai/boss/skeletron.rs	mod tests :: fn expert_hands_dock_at_twice_the_rate	NPC.cs	22547-22592	70e0f600c30d	1d9dffbfd97f
 crates/terrustia/src/game/ai/boss/skeletron.rs	mod tests :: fn expert_hands_wind_up_half_again_as_fast	NPC.cs	22479-22489	1c6cb20bb10c	eb96a44c6f1b
 crates/terrustia/src/game/ai/boss/skeletron.rs	mod tests :: fn spinning_is_when_its_guard_drops	NPC.cs	22019	2f1f36f03409	4185bd709f17
-crates/terrustia/src/game/ai/boss/tablet.rs	fn tablet	NPC.cs	37183-37185	d217df246cf6	7e5e5dd9818c
+crates/terrustia/src/game/ai/boss/tablet.rs	fn tablet	NPC.cs	37179-37205	3f58362b5351	7772d4b32181
+crates/terrustia/src/game/ai/boss/tablet.rs	fn tablet	NPC.cs	37183-37185	d217df246cf6	7772d4b32181
+crates/terrustia/src/game/ai/boss/tablet.rs	fn tablet	NPC.cs	37225	775a3b9e6b19	7772d4b32181
+crates/terrustia/src/game/ai/boss/tablet.rs	mod tests :: fn the_last_death_breaks_the_tablet	NPC.cs	37179-37205	3f58362b5351	ef17d5689a96
+crates/terrustia/src/game/ai/boss/tablet.rs	struct TabletOutcome	NPC.cs	37179-37205	3f58362b5351	3bcd3f2d9b5d
 crates/terrustia/src/game/ai/boss/tree.rs	fn ground_beneath	NPC.cs	33276,33286	a712c0a49b60	23bffa55ff85
 crates/terrustia/src/game/ai/boss/tree.rs	fn hover	NPC.cs	33274-33323	4cf96d5043be	baa9108d6c7e
 crates/terrustia/src/game/ai/boss/tree.rs	fn throw	NPC.cs	33088-33090	5fcb021edd52	145b0f076d2d
@@ -1086,9 +1091,11 @@ crates/terrustia/src/game/ai/creeper.rs	mod tests :: fn a_hit_knocks_a_charging_
 crates/terrustia/src/game/ai/creeper.rs	mod tests :: fn an_expert_charge_keeps_bending_toward_you	NPC.cs	32950-32965	4964d6105937	4cd238b0ea27
 crates/terrustia/src/game/ai/critter.rs	fn butterfly	NPC.cs	45387-45445	ade6a1e6ac4a	5989959321cd
 crates/terrustia/src/game/ai/critter.rs	fn butterfly	NPC.cs	45549-45553	6e61d73bec65	5989959321cd
+crates/terrustia/src/game/ai/critter.rs	fn dandelion	NPC.cs	47566	72dc971344c8	b9467419d4b4
 crates/terrustia/src/game/ai/critter.rs	fn firefly	NPC.cs	34446	8b635047a0d4	4e92716be1f4
 crates/terrustia/src/game/ai/critter.rs	fn firefly	NPC.cs	34451	480837b3dea4	4e92716be1f4
 crates/terrustia/src/game/ai/critter.rs	mod firefly_tests :: fn a_shimmerfly_bolts_from_company	NPC.cs	34444-34453	7b426ea31f8a	eeedf3b299f5
+crates/terrustia/src/game/ai/critter.rs	mod tests :: fn a_dandelion_puff_tells_its_seeds_who_to_chase	NPC.cs	47566	72dc971344c8	7dc7e145b4e4
 crates/terrustia/src/game/ai/critter.rs	mod tests :: fn a_lacewing_goes_when_the_player_leaves_the_hallow	NPC.cs	45400-45409	ccd242c372aa	3200428e067f
 crates/terrustia/src/game/ai/critter.rs	mod tests :: fn a_lacewing_keeps_a_fade_counter_where_a_butterfly_keeps_its_variety	NPC.cs	45387-45414	046f8637dab5	0ad34bfde0cc
 crates/terrustia/src/game/ai/critter.rs	mod tests :: fn a_lacewing_left_alone_in_the_hallow_fades_but_stays	NPC.cs	45389-45409	1f19cc8ba982	1ba29307b3f6
@@ -1137,6 +1144,8 @@ crates/terrustia/src/game/ai/hardmode/fixtures.rs	mod tests :: fn a_foxsparks_ha
 crates/terrustia/src/game/ai/hardmode/fixtures.rs	mod tests :: fn a_pal_raises_two_guards_back_linked_to_itself	NPC.cs	43396-43405	b9471c4b8e67	6ad865555fba
 crates/terrustia/src/game/ai/hardmode/fixtures.rs	mod tests :: fn a_pal_with_nowhere_to_stand_deletes_itself_at_once	NPC.cs	43389-43394	1f16f0b7c997	afced273d74f
 crates/terrustia/src/game/ai/hardmode/fixtures.rs	mod tests :: fn check_floor2_wants_room_above_the_floor_it_finds	CultistRitual.cs	145-150	7608b58f1e8f	88fea0d6ebeb
+crates/terrustia/src/game/ai/hardmode/hoverers.rs	fn nimbus	NPC.cs	31882	ba3faaba29f7	65f35d576100
+crates/terrustia/src/game/ai/hardmode/hoverers.rs	fn nimbus	Projectile.cs	28486-28509	eab79a54fe2f	65f35d576100
 crates/terrustia/src/game/ai/hardmode/invasion.rs	fn dutchman	NPC.cs	39252	4562c3137d39	8fcf4616eca1
 crates/terrustia/src/game/ai/hardmode/invasion.rs	fn dutchman	NPC.cs	39275	3c75b4224397	8fcf4616eca1
 crates/terrustia/src/game/ai/hardmode/invasion.rs	mod tests :: fn its_four_guns_are_seated_and_staggered	NPC.cs	39252	4562c3137d39	e9ce634d2ab1
@@ -1931,8 +1940,8 @@ crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	3272	43583
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	50299-50302	6583807eb5db	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72072-72079	2a6f4d26e0bc	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72406	6c77495a5649	c5414c9d223d
-crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	2b75a469ba06
-crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	2b75a469ba06
+crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	037b82e588af
+crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	037b82e588af
 crates/terrustia/src/game/server/systems.rs	const STINKY	BuffID.cs	393	0f6008fbeed1	cfaa20a1d46a
 crates/terrustia/src/game/server/systems.rs	fn player_has_buff	MessageBuffer.cs	2456-2477	87cb35363490	c08c9f289848
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	7363-7366	54960e839053	00e47302005c
@@ -2039,6 +2048,7 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_contact_d
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_contact_damage	Player.cs	31659-31661	02b5d71922dd	60eafe9e6830
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_contact_damage	Projectile.cs	14894	53d1ecd7924a	60eafe9e6830
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_contact_damage	Projectile.cs	14916-14919	2c62941898b4	60eafe9e6830
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dandelion_seeds	Projectile.cs	34743-34820	8bfb152b1259	ab5ceb459a9b
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage_sigils	NPC.cs	78239-78250	fe59b001dcfe	0b27f798f588
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage_sigils	Projectile.cs	37106-37169	30e0c14a17a1	0b27f798f588
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_dark_mage_sigils :: const HEAL_COLOUR	CombatText.cs	20	62671f7b672b	ee87118e9183
@@ -2113,6 +2123,8 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_slime_rai
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_spawning	NPC.cs	2409	de50bc340fb6	d1483ca3a5ad
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_spawning	NPC.cs	81063-81106	3553565ad8e8	d1483ca3a5ad
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_spawning	SceneMetrics.cs	734-751	6d4df8ac7d1c	d1483ca3a5ad
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_tablet_shards	NPC.cs	37225	775a3b9e6b19	bd6429052bbd
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_tablet_shards	Projectile.cs	33746-33767	7344ff325d6f	bd6429052bbd
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_town_casualties	NPC.cs	53550-53561	dd6d4dc54c49	baa880d58cfb
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_town_casualties	NPC.cs	53699-53706	2095e2e888d3	baa880d58cfb
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_town_casualties	Player.cs	31618	8d5cc04c1571	baa880d58cfb
@@ -2186,6 +2198,7 @@ crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_mov
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod slime_rain_spawns	NPC.cs	5905-5967	8cf80cf862c6	aa1e36b0846c
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod tile_squares_only_reach_who_can_see_them	NetMessage.cs	1721-1731	e2c7580fdf13	4e929ec2145a
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod tile_squares_only_reach_who_can_see_them :: fn a_square_straddling_a_boundary_reaches_both_sides	RemoteClient.cs	192-215	d62b28e11723	6d6e6aa297e9
+crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_dandelion_seed_only_chases_you_downwind	Projectile.cs	34743-34820	8bfb152b1259	061d04525a3e
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_hit_target_is_immune_to_this_server_for_ten_ticks	NPC.cs	91564-91567	42327e023f4f	b927795bacbe
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_hit_target_is_immune_to_this_server_for_ten_ticks	Projectile.cs	14183	46113cac5b67	b927795bacbe
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_jellyfish_spawn_hovers_by_its_parent_and_then_leaves_at_sixteen	Projectile.cs	33837-34060	50b6a9ef6632	914eb81a3b75
@@ -2203,6 +2216,7 @@ crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_mov
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_dukes_seeking_bubble_chases_the_player_it_was_given	Projectile.cs	30014-30057	b1d6a637dd33	f1f9b09e68db
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_mechanics_wrench_turns_round_and_comes_home	Projectile.cs	34652-34690	e920e337d1ed	7df4e12ea597
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_princesss_weapon_lasts_a_second	Projectile.cs	43454-43462	922f88e4c77f	cb3a8d1d49cf
+crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_tablets_shards_fall_into_the_cultist	Projectile.cs	33746-33767	7344ff325d6f	1c0100a74740
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_truffles_spore_hangs_where_it_was_put	Projectile.cs	34860	ca00d89fad05	85832216af83
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_zoologists_claw_stops_where_it_was_swung	Projectile.cs	43893-43907	aea516c9abba	948782fe0633
 crates/terrustia/src/game/server/systems.rs	mod slime_rain :: fn weather_rain_blocks_the_daily_roll	Main.cs	1282	8477db5e0c24	0f38246987da

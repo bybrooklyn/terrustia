@@ -50,7 +50,7 @@ const COAST_TICKS: (u32, u32) = (450, 600);
 const SURFACE_MARGIN: f32 = 20.0;
 
 /// A dandelion's seeds: the projectile, its damage, and the cadence of a puff.
-const SEED_PROJECTILE: u16 = 836;
+const SEED_PROJECTILE: u16 = terrustia_proto::projectile::ids::DANDELION_SEED;
 const SEED_DAMAGE: i32 = 7;
 const PUFF_AT: f32 = 40.0;
 const PUFF_OVER: f32 = 80.0;
@@ -265,6 +265,9 @@ pub fn dandelion<T: TileView>(
     let mut downwind = false;
     let mut offset = 0.0;
     let mut reach = 0.0;
+    // Whose slot the seeds are handed: `NewProjectile(..., 0f, target)` (`NPC.cs:47566`), and
+    // `aiStyle 112` reads it every tick to decide whether to ride the wind at them or just sink.
+    let toward = world.target.map_or(0.0, |t| f32::from(t.slot));
     if let Some(t) = world.target {
         let (cx, cy) = npc.center();
         offset = t.center.0 - cx;
@@ -323,8 +326,11 @@ pub fn dandelion<T: TileView>(
             damage: SEED_DAMAGE,
             position: (cx + spread.0 + (along * 6) as f32, cy + spread.1),
             velocity,
-            time_left: 300,
-            ai: [0.0; 3],
+            // Zero, meaning the type's own hour: a seed that never reaches anybody sinks and dies
+            // on the ground, which `aiStyle 112` and tile collision settle between them rather
+            // than a fuse.
+            time_left: 0,
+            ai: [0.0, toward, 0.0],
         });
     }
     npc.dirty = true;
@@ -918,6 +924,41 @@ mod tests {
         assert!(
             seeds.iter().all(|s| s.velocity.0 > 0.0),
             "and blown downwind"
+        );
+    }
+
+    #[test]
+    fn a_dandelion_puff_tells_its_seeds_who_to_chase() {
+        let tiles = Air::default();
+        let mut d = at(628, 50, 50);
+        let (cx, cy) = d.center();
+        let mut w = world(
+            &tiles,
+            Some(Target {
+                // Not slot zero: a seed that was told nothing reads as zero, so a target standing
+                // there makes "told" and "not told" the same answer.
+                slot: 3,
+                center: (cx + 300.0, cy),
+                velocity: (0.0, 0.0),
+                alive: true,
+            }),
+        );
+        w.conditions.windy = true;
+        w.conditions.wind = 0.5;
+        let mut r = rng();
+        let mut seeds = Vec::new();
+        for _ in 0..200 {
+            seeds = dandelion(&mut d, &w, &mut r);
+            if !seeds.is_empty() {
+                break;
+            }
+        }
+        assert!(!seeds.is_empty(), "it should have puffed");
+        // `NewProjectile(..., 0f, target)` (`NPC.cs:47566`): `aiStyle 112` reads this every tick to
+        // decide whether to ride the wind at somebody or just sink, so a seed without it sinks.
+        assert!(
+            seeds.iter().all(|s| s.ai[1] == 3.0),
+            "every seed carries the slot it was aimed at, not zero"
         );
     }
 

@@ -406,6 +406,12 @@ pub mod ids {
     /// `ProjectileID.PrincessWeapon`, whose `aiStyle 186` (`Projectile.cs:43454-43462`) is sixty
     /// ticks of drawing and then `Kill`. Its table says 180.
     pub const PRINCESS_WEAPON: u16 = 950;
+
+    /// `ProjectileID.DandelionSeed`, the third of `aiStyle 112`'s three unrelated bodies and the
+    /// only one that steers (`Projectile.cs:34743-34820`). It reads the player in `ai[1]` and
+    /// whether it chases them at all depends on which way the wind is blowing, which is why
+    /// standing upwind of a dandelion works.
+    pub const DANDELION_SEED: u16 = 836;
 }
 
 #[cfg(test)]

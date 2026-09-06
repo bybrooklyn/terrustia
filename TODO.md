@@ -600,7 +600,28 @@ deleted once the directory turned out to be the cause.
 All nine sites now use one `support::scratch_dir`, unique by an atomic counter. Measured after:
 **0 failures in 12** under the same concurrent load.
 
-**4 types remain, across four styles**: 45, 98, 112, 149.
+**Three more closed the same day, leaving one.**
+
+- **Style 45, the Rain Nimbus, needed no arm and never did.** Its branch
+  (`Projectile.cs:28486-28509`) sets a rotation and bounces off shimmer, and nothing else - so the
+  drop's *movement* was already right and the whole divergence was its fuse: 300 where the table
+  says 120 and vanilla passes no override, which is a raindrop still falling long after the cloud
+  has moved on. Recorded because the temptation was to write an arm for it.
+- **Style 112's third body, the dandelion seed.** It reads the player in `ai[1]` and **whether it
+  chases them at all depends on which way the wind is blowing**: against the wind it stops pushing
+  sideways entirely and just sinks, which is why standing upwind of a dandelion works. Its push
+  scales with the wind's own strength, and both axes ease toward a terminal rather than clamping,
+  which is what gives the drift its float. Before this the seeds flew off on the puff's own
+  velocity and the wind - the entire point of the creature - did nothing.
+- **Style 98, the Cultist tablet's shards, and the blocker really was the ritual's ordering.**
+  Vanilla raises the Lunatic Cultist in the same statement that starts the tablet breaking
+  (`NPC.cs:37179-37205`), so he stands there for the whole three seconds it takes to come apart and
+  the shards - which lerp a tenth of the way toward the point in `ai[0..1]` at fifteen a tick and
+  end on arriving - fall *into* him. This server raised him when the shatter **finished**, three
+  seconds late, so for their entire flight there was nothing to converge on. Fixing that ordering
+  is what let the arm be written; the arm itself is six lines.
+
+**1 type remains**: 149, the golf ball. **Coverage is 80 of 81.**
 **Coverage is 77 of 81** - the roster grew by one, because the Nebula Eye's laser is a type this
 server can now put in the air and could not before. Counted by the audit tool rather than by hand., counted by the audit tool rather than by hand. Style 112 counts as one of
 the eight and not as closed: it is three unrelated bodies keyed on the type inside the arm,

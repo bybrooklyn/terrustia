@@ -2411,6 +2411,191 @@ impl GameServer {
         }
     }
 
+    /// The Cultist tablet's shards fly *into* the Cultist it just raised.
+    ///
+    /// `aiStyle == 98` (`Projectile.cs:33746-33767`). Six lines: lerp a tenth of the way toward
+    /// the point in `ai[0..1]` at fifteen pixels a tick, and end on arriving. The point is the
+    /// Lunatic Cultist's centre, read out of the tablet's own `ai[2]` at the moment each shard is
+    /// made (`NPC.cs:37225`) - so what looks like a spray of debris is really the ritual pulling
+    /// itself into him.
+    ///
+    /// **The blocker here was never the arm.** Vanilla raises the Cultist in the same statement
+    /// that starts the tablet breaking, so he is standing there for the whole three seconds the
+    /// shards are in the air; this server raised him when the shatter *finished*, which is three
+    /// seconds late and left them nothing to converge on. That ordering is fixed in
+    /// `boss/tablet.rs`, and this arm is what it was blocking.
+    ///
+    /// The point is recovered rather than plumbed, as the Dryad's ward recovers its caster: the
+    /// routine that makes a shard has no NPC table, and there is at most one Lunatic Cultist in a
+    /// world, so the first tick is unambiguous. Writing it into `ai[0..1]` rather than keeping it
+    /// aside is the point - those slots are synced, and a client running this same arm against two
+    /// zeroes would converge the spray on the world's top-left corner.
+    fn tick_tablet_shards(&mut self) {
+        use terrustia_proto::projectile::ids::TABLET_SHARD;
+
+        /// `value13 *= 15f`, and `Vector2.Lerp(velocity, value13, 0.1f)`.
+        const CONVERGE_SPEED: f32 = 15.0;
+        const TURN: f32 = 0.1;
+
+        let shards: Vec<u16> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == TABLET_SHARD)
+            .map(|(index, _)| index)
+            .collect();
+        if shards.is_empty() {
+            return;
+        }
+        // At most one, and the same one for every shard in the spray.
+        let cultist = self
+            .npcs
+            .iter()
+            .find(|(_, npc)| npc.npc_type == terrustia_proto::npc_params::CULTIST)
+            .map(|(_, npc)| npc.center());
+        let mut spent = Vec::new();
+        for index in shards {
+            let Some(shard) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            if shard.ai[0] == 0.0 && shard.ai[1] == 0.0 {
+                let Some(at) = cultist else {
+                    // Nothing to fall into: vanilla cannot reach this, because the Cultist is made
+                    // before the first shard is. Left to its own lifetime rather than killed, so a
+                    // world where he somehow died first does not lose the debris mid-air.
+                    continue;
+                };
+                shard.ai[0] = at.0;
+                shard.ai[1] = at.1;
+                shard.dirty = true;
+            }
+            let centre = shard.center();
+            let (dx, dy) = (shard.ai[0] - centre.0, shard.ai[1] - centre.1);
+            let away = dx.hypot(dy);
+            // `if (value13.Length() < velocity.Length()) Kill()`: it ends within one tick's travel
+            // rather than on contact.
+            if away < shard.velocity.0.hypot(shard.velocity.1) {
+                spent.push(index);
+                continue;
+            }
+            if away > 0.0 {
+                let goal = (dx / away * CONVERGE_SPEED, dy / away * CONVERGE_SPEED);
+                shard.velocity = (
+                    shard.velocity.0 + (goal.0 - shard.velocity.0) * TURN,
+                    shard.velocity.1 + (goal.1 - shard.velocity.1) * TURN,
+                );
+                shard.dirty = true;
+            }
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
+    /// A dandelion seed rides the wind at whoever it was aimed at, and sinks when it cannot.
+    ///
+    /// `aiStyle == 112`'s `type == 836` arm (`Projectile.cs:34743-34820`). The third of style
+    /// 112's three unrelated bodies, and the only one that steers: the seed reads the player named
+    /// in `ai[1]`, and whether it chases them at all depends on **which way the wind is blowing**.
+    /// If the wind is going the other way it stops pushing sideways entirely and just sinks, which
+    /// is why standing upwind of a dandelion works.
+    ///
+    /// Its horizontal push scales with the wind's own strength (`0.6 + |wind|`), so a gale carries
+    /// seeds noticeably harder, and both axes ease toward a terminal rather than clamping: the
+    /// speed is nudged back by a tenth once it passes it, which is what gives the drift its float.
+    /// Beyond eight hundred pixels it gives up on the player and settles to a plain sink.
+    ///
+    /// Without this the seeds flew off on the puff's own velocity for three hundred ticks: the
+    /// dandelion threw them, and the wind - the entire point of the creature - did nothing.
+    fn tick_dandelion_seeds(&mut self) {
+        use terrustia_proto::projectile::ids::DANDELION_SEED;
+
+        /// `Distance(player.Center) < 800f`: past this it stops caring who it was aimed at.
+        const NOTICES: f32 = 800.0;
+        /// `num862`/`num863`, the sideways and upward terminals, halved when the wind disagrees.
+        const WITH_WIND: (f32, f32) = (2.5, 2.0);
+        const AGAINST_WIND: (f32, f32) = (1.5, 1.0);
+        /// `0.05f * direction * (0.6f + Math.Abs(WindForVisuals))`.
+        const PUSH: f32 = 0.05;
+        const PUSH_BASE: f32 = 0.6;
+        /// The nudges back toward a terminal, and the plain sink used out of range.
+        const EASE: f32 = 0.1;
+        const SINK: f32 = 0.05;
+        const FALL: f32 = 0.2;
+
+        let seeds: Vec<u16> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == DANDELION_SEED)
+            .map(|(index, _)| index)
+            .collect();
+        if seeds.is_empty() {
+            return;
+        }
+        let wind = self.world.wind;
+        for index in seeds {
+            let Some(seed) = self.projectiles.get(index) else {
+                continue;
+            };
+            let centre = seed.center();
+            // `Main.player[(int)ai[1]]`, and its *top* rather than its centre for the vertical
+            // decision - a seed aims at your head, so it drifts down onto you rather than up.
+            let at = u8::try_from(seed.ai[1] as i32)
+                .ok()
+                .and_then(|slot| self.player(slot))
+                .filter(|p| p.life > 0)
+                .map(|p| {
+                    (
+                        p.position.0 + PLAYER_HALF_WIDTH,
+                        p.position.1 + PLAYER_HEIGHT / 2.0,
+                        p.position.1,
+                    )
+                });
+            let Some(seed) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            // `spriteDirection` is the *wind's* way; `direction` is the way to the player. The two
+            // disagreeing is the whole gate.
+            let blowing = if wind > 0.0 { 1.0 } else { -1.0 };
+            let toward = at.map_or(blowing, |(x, _, _)| if x > centre.0 { 1.0 } else { -1.0 });
+            let crosswind = blowing != toward;
+            let (across, up) = if crosswind { AGAINST_WIND } else { WITH_WIND };
+
+            let noticed = at.is_some_and(|(x, y, _)| (x - centre.0).hypot(y - centre.1) < NOTICES);
+            if let (true, Some((_, _, top))) = (noticed, at) {
+                if !crosswind {
+                    seed.velocity.0 += PUSH * toward * (PUSH_BASE + wind.abs());
+                    if seed.velocity.0 > across {
+                        seed.velocity.0 -= EASE;
+                    }
+                    if seed.velocity.0 < -across {
+                        seed.velocity.0 += EASE;
+                    }
+                }
+                if top >= centre.1 || crosswind {
+                    seed.velocity.1 += SINK;
+                    if seed.velocity.1 > across {
+                        seed.velocity.1 -= EASE;
+                    }
+                } else {
+                    seed.velocity.1 -= EASE;
+                    if seed.velocity.1 < -up {
+                        seed.velocity.1 += FALL;
+                    }
+                }
+            } else {
+                seed.velocity.1 += FALL;
+                if seed.velocity.1 < -up {
+                    seed.velocity.1 += FALL;
+                }
+                if seed.velocity.1 > up {
+                    seed.velocity.1 -= FALL;
+                }
+            }
+            seed.rotation = seed.velocity.0 * 0.125;
+            seed.dirty = true;
+        }
+    }
+
     /// Betsy's flame breath is welded to her jaw, not thrown from it.
     ///
     /// `aiStyle == 136`, `AI_136_BetsyBreath` (`Projectile.cs:69858-69910`). The whole method is
@@ -3203,6 +3388,10 @@ impl GameServer {
         self.tick_hovering_escorts();
         // And Betsy's breath, which rides her jaw rather than leaving it.
         self.tick_betsy_breath();
+        // And a dandelion's seeds, which ride the wind at whoever they were aimed at.
+        self.tick_dandelion_seeds();
+        // And the tablet's shards, which fall into the Cultist the ritual just raised.
+        self.tick_tablet_shards();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -17104,6 +17293,120 @@ mod town_shots_land {
         };
         let (calm, enraged) = (speed_with(0.0), speed_with(1.0));
         assert!((enraged - calm - 12.0).abs() < 0.01, "{calm} vs {enraged}");
+    }
+
+    /// The tablet's shards fall into the Cultist rather than flying off into the dungeon.
+    ///
+    /// `aiStyle 98` (`Projectile.cs:33746-33767`), and the thing that blocked it was never the
+    /// arm: the shards converge on the Lunatic Cultist, and this server used to raise him three
+    /// seconds late - when the tablet *finished* breaking rather than when it started - so for
+    /// their whole flight there was nothing there.
+    #[test]
+    fn the_tablets_shards_fall_into_the_cultist() {
+        use terrustia_proto::npc_params::CULTIST;
+        use terrustia_proto::projectile::ids::TABLET_SHARD;
+
+        let mut server = server();
+        let cultist = server
+            .npcs
+            .spawn(CULTIST, (2000.0, 2000.0))
+            .expect("a slot");
+        let at = server.npcs.get(cultist).expect("just spawned").center();
+        // Thrown outward, the way the tablet throws them: away from him, not at him.
+        let shard = server
+            .projectiles
+            .launch(TABLET_SHARD, (2000.0, 1700.0), (0.0, -6.0), 0, 0)
+            .expect("a known type");
+
+        server.tick_tablet_shards();
+        let seeded = *server.projectiles.get(shard).expect("up");
+        assert_eq!(
+            (seeded.ai[0], seeded.ai[1]),
+            at,
+            "his centre goes into the slots vanilla puts it in, so a client can draw it too"
+        );
+        assert!(
+            seeded.velocity.1 > -6.0,
+            "and it has already started turning round: {:?}",
+            seeded.velocity
+        );
+
+        // "It is gone" is not enough on its own: the type's own fuse is 120, so a shard that
+        // converged on nothing and simply expired looks identical. What is asserted is that it
+        // ended *early* and ended *there* - both of which a shard flying off into the dungeon
+        // fails.
+        let mut lived = 0;
+        let mut last = seeded.center();
+        for _ in 0..200 {
+            let Some(p) = server.projectiles.get(shard) else {
+                break;
+            };
+            last = p.center();
+            lived += 1;
+            server.tick_projectiles();
+        }
+        assert!(
+            server.projectiles.get(shard).is_none(),
+            "it should have arrived and ended"
+        );
+        assert!(
+            lived < 100,
+            "and arrived well inside its own 120-tick fuse rather than expiring: {lived}"
+        );
+        let stopped = (last.0 - at.0).hypot(last.1 - at.1);
+        assert!(
+            stopped < 40.0,
+            "and it should have ended on him, not somewhere else: {stopped} pixels out"
+        );
+    }
+
+    /// A dandelion seed rides the wind at you, and gives up when the wind is against it.
+    ///
+    /// `aiStyle 112`'s `type == 836` arm (`Projectile.cs:34743-34820`). The wind is not decoration
+    /// here: the seed's sideways push exists only while the wind is blowing the same way as the
+    /// player, which is why standing upwind of a dandelion works. Before this the seeds flew off
+    /// on the puff's own velocity and the wind did nothing at all.
+    #[test]
+    fn a_dandelion_seed_only_chases_you_downwind() {
+        use terrustia_proto::projectile::ids::DANDELION_SEED;
+
+        let drift_with = |wind: f32| {
+            let mut server = server();
+            let _held = seat(&mut server, (2400.0, 2000.0));
+            server.world.wind = wind;
+            let seed = server
+                .projectiles
+                .launch(DANDELION_SEED, (2000.0, 2000.0), (0.0, 0.0), 7, 0)
+                .expect("a known type");
+            server.projectiles.get_mut(seed).expect("up").ai = [0.0, 0.0, 0.0];
+            // Through the real `tick_projectiles`, which is also the test that the arm is wired
+            // in: unhooked, the seed keeps whatever it was launched with and the two winds read
+            // the same.
+            for _ in 0..30 {
+                server.tick_projectiles();
+            }
+            server.projectiles.get(seed).expect("up").velocity.0
+        };
+
+        // The player is to the right. A wind going right carries the seed at them; a wind going
+        // left leaves it with no sideways push at all.
+        let downwind = drift_with(1.0);
+        let upwind = drift_with(-1.0);
+        assert_eq!(upwind, 0.0, "not at all against the wind: {upwind}");
+        // Pinned to a band rather than to "more than nothing": the push is
+        // `0.05 * (0.6 + |wind|)` a tick and the terminal it eases back to is 2.5, so a breeze
+        // parks it just under that. Asserting only that it moved cannot tell the real constant
+        // from one a thousand times too big, which is exactly what a wrong `0.6` looks like.
+        assert!(
+            (2.0..2.6).contains(&downwind),
+            "a breeze should carry it up to about its 2.5 terminal: {downwind}"
+        );
+
+        // A stronger wind gets there sooner, so after the same thirty ticks it is nearer the top.
+        assert!(
+            drift_with(3.0) > downwind,
+            "a gale should carry it harder than a breeze"
+        );
     }
 
     /// Betsy's breath rides her jaw for its whole 78 ticks rather than trailing out behind her.

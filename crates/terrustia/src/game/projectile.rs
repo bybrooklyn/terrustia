@@ -5,17 +5,15 @@
 //! decided to shoot has been emitting its aim and cadence for a while; this is what makes those
 //! decisions land.
 //!
-//! Twenty-two behaviours are transcribed here, and fourteen more in `server::systems` (see
-//! below). This file used to say "a handful of behaviours cover everything the roster and the
-//! world's traps fire"; the count, when it was finally taken, was **43 of the 79 types something
-//! here can launch reaching no arm at all**. It is 4 of 81 now.
+//! Twenty-two behaviours are transcribed here, and sixteen more in `server::systems` (see below).
+//! This file used to say "a handful of behaviours cover everything the roster and the world's
+//! traps fire"; the count, when it was finally taken, was **43 of the 79 types something here can
+//! launch reaching no arm at all**. It is **one of 81** now, and that one is the golf ball, whose
+//! style is a physics engine of its own (`Terraria.Physics/BallCollision.cs`).
 //!
-//! The 4 left are not all straight lines, and saying so would be the same mistake again. Read
-//! against `Projectile.cs`: none of them *falls* - they are hovering clouds, shockwaves and
-//! convergences - so a straight line is a poorer approximation of them than it was of a thrown
-//! bone, not a free one. One of the eight, the Rain Nimbus, is in fact **already right**: style
-//! 45's branch for it sets a rotation and nothing else. `TODO.md`'s C6 has the list, by style,
-//! with what each one does.
+//! One of those closed by finding there was nothing to close: style 45, the Rain Nimbus, sets a
+//! rotation and nothing else, so its movement was always right and only its fuse was wrong.
+//! `TODO.md`'s C6 has the history, by style, with what each one turned out to be.
 //!
 //! **A style whose arm needs to see anything but tiles lives in `server::systems` instead**, and
 //! is no less transcribed for it: a projectile cannot search the player list, walk the NPC table
@@ -24,8 +22,10 @@
 //! ward), 127/128 (the Sand Elemental's mark and tornado), 133 (the Dark Mage's sigils) and
 //! 171/180 (two of the Empress's) are all there, called from `tick_projectiles` before the
 //! movement below, in vanilla's own order, and so are the seeking half of 65 (Duke Fishron's
-//! second bubble), 102 (the two escorts that hover beside the NPC that made them) and 136
-//! (Betsy's breath, which rides her jaw). So is `tick_friendly_projectile_hits`, which is `Damage_PVE` and runs *after*
+//! second bubble), 98 (the Cultist tablet's shards, which fall into the boss the ritual raised),
+//! 102 (the two escorts that hover beside the NPC that made them), 112's dandelion seed (which
+//! rides the wind at a player, or does not, depending which way it blows) and 136 (Betsy's
+//! breath, which rides her jaw). So is `tick_friendly_projectile_hits`, which is `Damage_PVE` and runs *after*
 //! the movement, where `Projectile.Update` puts it. So is `tick_friendly_projectile_hits`, which is
 //! `Damage_PVE` and runs after the movement, where `Projectile.Update` puts it.
 //!

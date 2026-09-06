@@ -140,7 +140,12 @@ pub fn nimbus<T: TileView>(npc: &mut Npc, world: &World<'_, T>) -> Option<Shot> 
             npc.position.1 + npc.height() + 4.0,
         ),
         velocity: (0.0, 5.0),
-        time_left: 300,
+        // Zero, meaning the type's own 120. Vanilla passes no lifetime at `NPC.cs:31882`, and its
+        // `aiStyle 45` branch for a raindrop (`Projectile.cs:28486-28509`) sets a rotation and
+        // nothing else - so **the drop's movement was already right** and its fuse was the whole
+        // divergence: two and a half times too long, which is a raindrop still falling long after
+        // the cloud has moved on.
+        time_left: 0,
         ai: [0.0; 3],
     })
 }
@@ -548,6 +553,14 @@ mod tests {
         let shot = rained.expect("it should rain on someone underneath it");
         assert_eq!(shot.projectile, NIMBUS_SHOT);
         assert!(shot.velocity.1 > 0.0, "downward");
+        // Zero, meaning the type's own 120. Style 45's branch for a raindrop sets a rotation and
+        // nothing else, so the drop's *movement* was always right and its fuse was the whole
+        // divergence: the 300 that used to sit here is two and a half times too long, which is a
+        // raindrop still falling long after the cloud has moved on.
+        assert_eq!(
+            shot.time_left, 0,
+            "vanilla passes no lifetime at `NPC.cs:31882`"
+        );
 
         // Step aside and it stops.
         let mut dry = npc(253);

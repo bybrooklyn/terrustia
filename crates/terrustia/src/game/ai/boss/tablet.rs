@@ -24,7 +24,12 @@ pub struct TabletOutcome {
     pub shots: Vec<Shot>,
     pub spawn: Vec<Spawn>,
     pub spent: bool,
-    /// Set on the tick the tablet finishes breaking, which is what raises the Cultist.
+    /// Set on the tick the tablet *starts* breaking, which is when the Cultist is raised.
+    ///
+    /// Vanilla creates him in the same statement that flips the tablet into its shatter
+    /// (`NPC.cs:37179-37205`), so he stands there for the whole three seconds it takes to come
+    /// apart and the shards converge on him. This used to fire at the *end* of the shatter, which
+    /// is three seconds late and left `aiStyle 98` with nothing to aim at.
     pub ritual_complete: bool,
 }
 
@@ -72,6 +77,13 @@ pub fn tablet(npc: &mut Npc, world: &World<'_, impl TileView>, attendants: usize
         npc.ai[0] = -1.0;
         npc.ai[1] = 0.0;
         npc.ai[3] = 0.0;
+        // **The Cultist is raised here, not at the end.** Vanilla creates him in the same
+        // statement that flips `ai[0]` to -1 and records his handle in `ai[2]`
+        // (`NPC.cs:37179-37205`), so he is standing there for the whole three seconds the tablet
+        // takes to break - and the shards that come off it converge on *him*. This used to report
+        // the ritual complete only once the shatter finished, which left the shards with nothing
+        // to fly at for their entire flight and is why `aiStyle 98` could not be written.
+        out.ritual_complete = true;
     }
 
     // Shattering. Shards come off it for the last three seconds, and then it is gone.
@@ -87,13 +99,20 @@ pub fn tablet(npc: &mut Npc, world: &World<'_, impl TileView>, attendants: usize
             damage: 0,
             position: (cx + sin * 25.0, cy + cos * 25.0),
             velocity: (sin * 6.0, cos * 6.0),
-            time_left: 300,
+            // Zero, meaning the type's own 120. `aiStyle 98` ends a shard when it arrives, which
+            // is well inside that; the 300 here was invented and outlived the convergence.
+            time_left: 0,
+            // Vanilla passes the Cultist's *centre* here, read out of the tablet's own `ai[2]`
+            // (`NPC.cs:37225`). This routine has no NPC table to read it from, so the shard
+            // recovers the point on its first tick and writes it into these slots itself - the
+            // same trade the Dryad's ward makes, and for the same reason: they are synced, and a
+            // client running this arm against two zeroes would converge the spray on the world's
+            // top-left corner.
             ai: [0.0; 3],
         });
     }
     if npc.ai[3] > TABLET_SHATTER_TICKS {
         out.spent = true;
-        out.ritual_complete = true;
     }
     let _ = world;
     out
@@ -216,18 +235,36 @@ mod tests {
         let mut t = Npc::new(CULTIST_TABLET, (0.0, 0.0), 1).unwrap();
         tablet(&mut t, &w, 0);
 
+        // The order is the point, and it used to be the other way round. Vanilla raises the
+        // Cultist in the same statement that starts the shatter (`NPC.cs:37179-37205`), so he is
+        // there for the whole three seconds of it and the shards fly *into* him. Reporting the
+        // ritual complete at the end instead is three seconds late, and it is why `aiStyle 98`
+        // could not be written: for a shard's entire flight there was nothing to converge on.
         let mut shards = 0;
-        let mut done = false;
-        for _ in 0..(TABLET_SHATTER_TICKS as i32 + 10) {
+        let mut raised_on = None;
+        let mut gone_on = None;
+        for tick in 0..(TABLET_SHATTER_TICKS as i32 + 10) {
             let out = tablet(&mut t, &w, 0);
-            shards += out.shots.len();
             if out.ritual_complete {
-                done = true;
+                raised_on = Some(tick);
+            }
+            shards += out.shots.len();
+            if out.spent {
+                gone_on = Some(tick);
                 break;
             }
         }
-        assert!(done, "it should have finished");
-        assert!(shards > 0, "and thrown shards on the way");
+        let raised = raised_on.expect("the Cultist should have been raised");
+        let gone = gone_on.expect("and the tablet should have finished breaking");
+        assert_eq!(
+            raised, 0,
+            "raised on the first tick of the shatter, not the last"
+        );
+        assert!(
+            gone > raised,
+            "and the tablet outlives him by the shatter: {raised} then {gone}"
+        );
+        assert!(shards > 0, "with shards thrown in between");
     }
 
     /// The tablet itself cannot be attacked.
