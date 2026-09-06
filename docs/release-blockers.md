@@ -137,8 +137,8 @@ this, and is the obvious next step.
 
 **Re-read 2026-09-06: "17" is also a limit of `conform`'s own arms, not only of the session.**
 Four ids sit in its `decode_only!` list because a *client* never writes them, yet the proto types
-all have encoders the server uses every tick - `SyncNpc` (`npc.rs:79`), `SyncProjectile`
-(`projectile.rs:68`), `SyncItem` (`items.rs:122`) and `TileManipulation` (`packets.rs:1412`).
+all have encoders the server uses every tick - `SyncNpc` (`terrustia-proto/src/npc.rs:79`), `SyncProjectile`
+(`terrustia-proto/src/projectile.rs:68`), `SyncItem` (`terrustia-proto/src/items.rs:122`) and `TileManipulation` (`terrustia-proto/src/packets.rs:1412`).
 Promoting those four arms re-checks bytes already captured, before any longer session is driven.
 And this whole table is now older than the encoder it measured: `terrustia-proto` has changed
 underneath it since (`projectile.rs` +52 lines, `golf_physics.rs` +3,511), so the run wants

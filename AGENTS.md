@@ -49,8 +49,8 @@ Recipes live in the `justfile`; each is a thin wrapper over `cargo`, so plain `c
 - `just soak [SECONDS]` runs a real server with three real clients (the CI soak).
 - `just fuzz [TARGET] [SECONDS]` fuzzes a decoder target (needs nightly + `cargo-fuzz`).
 - `just regen` regenerates every data table from a decompiled tree (dev-only; see below).
-- `just check-data` is the qualification-time data pass, run locally and never in CI, because eight
-  of its nine parts need a decompiled tree that can never ship to a hosted runner (`check-dead-writes`
+- `just check-data` is the qualification-time data pass, run locally and never in CI, because nine
+  of its ten parts need a decompiled tree that can never ship to a hosted runner (`check-dead-writes`
   is the exception). It is `just fuzz`'s neighbour, not `just check`'s: run it before a release
   candidate.
   - `check-drops` and `check-recipes` compare the committed tables against the game's own source,
@@ -59,6 +59,12 @@ Recipes live in the `justfile`; each is a thin wrapper over `cargo`, so plain `c
   - `check-citations` is a report, not a gate, and sits outside the `check-data` chain: it asks
     whether the vanilla lines a citation names actually contain the numbers written beside it,
     which is the question `check-parity` explicitly does not ask.
+  - `check-doc-citations` does for the markdown what `check-parity` does for `crates/*/src`: it
+    content-keys every Rust and vanilla line reference inside the prose (both the `path/file.rs`
+    and the `NPC.cs` forms, each with a line or a range), so a document whose code has moved
+    underneath it fails and names the line to re-read. It exists because
+    `docs/release-blockers.md` went stale twice, and the second time nothing but a person reading
+    it caught that. It never judges the sentence, only the pointer.
   - `check-parity` re-checks every vanilla citation in `crates/*/src` against the tree. Rule 2 below
     makes every transcription cite its source, so those thousands of `NPC.cs:12345` references are
     data (`just check-parity` prints the current count; hard-coding one here only ages);

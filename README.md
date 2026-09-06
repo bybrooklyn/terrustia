@@ -316,7 +316,7 @@ Traps World, is done). Both are v0.0.2 scope.
 |---|---|---|
 | ✅ | PvP, teams, deaths, respawn, chat | |
 | ✅ | Accounts, groups, permissions, bans by name, address or uuid | Argon2, off the game task |
-| 🟡 | Chat commands | 22 of them, as `/help` lists (`console.rs:662-685`). No warps, regions, or item bans yet; that is the deferred TShock-shaped work |
+| 🟡 | Chat commands | 22 of them, as `/help` lists (`game/server/console.rs:662-685`). No warps, regions, or item bans yet; that is the deferred TShock-shaped work |
 | ✅ | Whitelist | Empty means off, so it cannot lock the operator out on the day it is enabled |
 | ✅ | Web admin panel | A full subsystem embedded in the binary, off by default: player list with kick and ban, whitelist, world switching (a real graceful restart), a live console and chat stream, a metrics dashboard, backups and rollback, groups and accounts admin, world creation, and a stylized live world view with player avatars coloured from their own real skin, hair and gear over the wire, no game assets shipped or read. Always localhost-only |
 

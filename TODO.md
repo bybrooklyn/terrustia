@@ -36,7 +36,7 @@ system is a gap like any other, so it went into scope and was built from
 **It has since landed, and this entry described the world before that.**
 `crates/terrustia-proto/src/happiness.rs` is 734 lines transcribing `ShopHelper.ProcessMood`
 (`ShopHelper.cs:99-178`) with its own test module, wired through `server/mod.rs` (`shopping_zones`
-at `:1579`, `price_multiplier` at `:1633`) and reported by `/happy` (`console.rs:833`), with
+at `:1579`, `price_multiplier` at `:1633`) and reported by `/happy` (`game/server/console.rs:833`), with
 `examples/happiness_cost.rs` measuring what it costs. The multiplier is taken once per chat, on
 `SetTalkNPC` (`dispatch.rs:1750`), the same moment vanilla takes it. Three of those four line
 references were pointing at unrelated code by 2026-09-06 and have been re-derived. Anything still outstanding under this gate needs naming from a fresh
