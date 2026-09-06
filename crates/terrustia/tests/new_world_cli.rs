@@ -9,6 +9,11 @@
 //! this both proves the CLI wiring and stays entirely inside a directory this test owns and
 //! deletes when it is done.
 
+// The one CLI test `support`'s own module doc does not list as fixed: it kept four constant
+// ports (17779-17784) long after the other four moved to ephemeral ones. Two tests failing
+// together in a normal 2.4 seconds under load is what that looks like - not a timeout, a bind.
+mod support;
+
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -52,17 +57,18 @@ fn find_named(dir: &Path, name: &str) -> Vec<PathBuf> {
 /// is exactly the deadline, and it was `new_ignores_a_stale_world_file_left_in_the_config` that
 /// went red, on a world that simply had not been written yet.
 ///
-/// A bigger number only moves the line. The load-sensitive part is generation, and the server says
-/// when that is over: `accepting connections` is logged once the world exists and the listener is
-/// bound. So this waits on that line rather than on a clock, and only then polls for the file,
-/// which by that point is a short and deterministic wait.
+/// A bigger number only moves the line. The server already announces the thing being waited for —
+/// `world saved` — so this reads its stdout for that and looks for the file only once it has been
+/// told the file is there. There is no clock in the success path at all: a saturated machine makes
+/// the test slower, not red, and a server that genuinely never saves fails with its own transcript
+/// instead of an empty directory.
 ///
-/// **The first attempt at this waited for `world saved` and was wrong**, in a way worth recording
-/// because it looked like a server bug: no such line ever appears. A fast autosave logs at `debug`
-/// on purpose (`game/server/mod.rs:2062-2069` — "a routine autosave that worked is not news"), and
-/// these tests run at the default level, so the only `info` save is the one on shutdown. The world
-/// is on disk from generation, long before any autosave, which is why the original poll saw it at
-/// all.
+/// **That line is invisible at the default level, which cost a wrong turn worth recording** — for a
+/// while it looked like autosave was broken. A *fast* autosave logs at `debug` on purpose
+/// (`game/server/mod.rs:2062-2069`, "a routine autosave that worked is not news"), so ten seconds
+/// of a real server with `autosave_secs = 1` prints nothing and the only `info` save is on
+/// shutdown. Autosave is fine; the signal was filtered. `run_new` now turns that one target up,
+/// which changes what the test can see and nothing about what the server does.
 ///
 /// Draining stdout is a second fix in the same move: nothing read it before, so a chatty server
 /// could fill the pipe buffer and block on its own logging.
@@ -86,34 +92,31 @@ fn wait_for_generated_world(
 
     let deadline = std::time::Instant::now() + timeout;
     let mut transcript = Vec::new();
-    let mut up = false;
     while std::time::Instant::now() < deadline {
-        if !up {
-            match from_server.recv_timeout(Duration::from_millis(200)) {
-                Ok(line) => {
-                    up = line.contains("accepting connections");
-                    transcript.push(line);
+        match from_server.recv_timeout(Duration::from_millis(250)) {
+            Ok(line) => {
+                let saved = line.contains("world saved");
+                transcript.push(line);
+                if saved {
+                    // Logged after the rename, so the file is there and whole.
+                    let found = find_named(dir, name);
+                    if found
+                        .iter()
+                        .any(|p| std::fs::metadata(p).is_ok_and(|m| m.len() > 0))
+                    {
+                        return found;
+                    }
                 }
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             }
-            continue;
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
         }
-        let found = find_named(dir, name);
-        if found
-            .iter()
-            .any(|p| std::fs::metadata(p).is_ok_and(|m| m.len() > 0))
-        {
-            return found;
-        }
-        std::thread::sleep(Duration::from_millis(100));
     }
     let _ = child.kill();
     let _ = child.wait();
     panic!(
-        "{name} never landed within {}s (server {}up). It said:\n{}",
+        "{name} never landed within {}s. The server said:\n{}",
         timeout.as_secs(),
-        if up { "" } else { "never came " },
         transcript.join("\n")
     );
 }
@@ -135,7 +138,12 @@ fn run_new(home: &Path, name: &str, listen: &str) -> std::process::Child {
         .env("HOME", home)
         .env("XDG_DATA_HOME", home.join("xdg"))
         .env("USERPROFILE", home)
-        .env_remove("TERRUSTIA_LOG")
+        // `world saved` is the signal `wait_for_generated_world` waits on, and a *fast* autosave
+        // logs it at debug on purpose (`game/server/mod.rs:2062-2069`, "a routine autosave that
+        // worked is not news"). Turning that one target up is how the test observes the thing it is
+        // asserting instead of racing a clock against it; nothing else about the server changes,
+        // and the default-level behaviour is what every other CLI test still exercises.
+        .env("TERRUSTIA_LOG", "terrustia::game::server=debug,info")
         // No test may depend on the network. Both of these are `tokio::spawn`ed at boot, so left
         // on, every server spawned here makes a real GitHub request and multicasts for a UPnP
         // gateway. This is hygiene, not a fix for anything: the CLI-test flake recorded in TODO.md
@@ -148,12 +156,29 @@ fn run_new(home: &Path, name: &str, listen: &str) -> std::process::Child {
         .expect("spawn terrustia")
 }
 
+/// These four tests each spawn one or two real servers, and running them at once is what was left
+/// of the flake after the ports went ephemeral. `support::free_addr()` binds `127.0.0.1:0`, reads
+/// the port and *drops the listener* before handing the number over, so two tests racing can be
+/// given the same just-released port and one of their servers dies on the bind - which looks like
+/// "the world never landed" a second and a half later, not like a port problem at all.
+///
+/// Serialising them inside this binary costs nothing real: they are subprocess-bound, not CPU-bound,
+/// and every other test binary still runs alongside. It also stops these four from being four
+/// concurrent world generations on a machine that already has the rest of the suite on it.
+static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Hold the lock for the body of a test, surviving a panic in an earlier one.
+fn serially() -> std::sync::MutexGuard<'static, ()> {
+    ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[test]
 fn new_generates_a_world_into_the_platforms_terraria_world_directory() {
+    let _serial = serially();
     let home = scratch_home();
     std::fs::create_dir_all(&home).expect("scratch home");
 
-    let mut child = run_new(&home, "Fork Test World", "127.0.0.1:17779");
+    let mut child = run_new(&home, "Fork Test World", support::free_addr().as_str());
     let found = wait_for_generated_world(
         &mut child,
         &home,
@@ -188,18 +213,24 @@ fn new_generates_a_world_into_the_platforms_terraria_world_directory() {
 /// file's.
 #[test]
 fn new_ignores_a_stale_world_file_left_in_the_config() {
+    let _serial = serially();
     let home = scratch_home();
     std::fs::create_dir_all(&home).expect("scratch home");
 
     // First, generate the "stale" world `terrustia.toml` will point at. A generous timeout: this
     // is the only test in this file that generates two worlds in sequence, each waiting on top of
     // whatever the other tests' own concurrently-running server subprocesses are costing it.
-    let mut stale = run_new(&home, "Stale World", "127.0.0.1:17782");
+    let mut stale = run_new(&home, "Stale World", support::free_addr().as_str());
+    // This test is the only one here that runs *two* full servers back to back, so its backstop is
+    // twice everyone else's. With the wait keyed to the server's own `world saved` line there is no
+    // clock in the success path at all - this number is only how long a genuinely stuck server is
+    // given before the transcript is printed - and sizing it to the work is not the same as the
+    // fixed 120-second poll it replaced, which the *success* path depended on.
     let stale_found = wait_for_generated_world(
         &mut stale,
         &home,
         "Stale_World.wld",
-        Duration::from_secs(120),
+        Duration::from_secs(240),
     );
     let _ = stale.kill();
     let _ = stale.wait();
@@ -222,12 +253,20 @@ fn new_ignores_a_stale_world_file_left_in_the_config() {
     )
     .expect("write config");
     let mut fresh = Command::new(env!("CARGO_BIN_EXE_terrustia"))
-        .args(["--new", "Fresh World", "--listen", "127.0.0.1:17783"])
+        .args([
+            "--new",
+            "Fresh World",
+            "--listen",
+            support::free_addr().as_str(),
+        ])
         .current_dir(&home)
         .env("HOME", &home)
         .env("XDG_DATA_HOME", home.join("xdg"))
         .env("USERPROFILE", &home)
-        .env_remove("TERRUSTIA_LOG")
+        // This one is waited on by `wait_for_generated_world`, so it needs the `world saved`
+        // line that a fast autosave logs at debug. The other two spawns in this file are read
+        // for a specific refusal message and stay at the default level on purpose.
+        .env("TERRUSTIA_LOG", "terrustia::game::server=debug,info")
         .env("TERRUSTIA_UPDATE_CHECK_ENABLED", "false")
         .env("TERRUSTIA_UPNP_ENABLED", "false")
         .stdout(Stdio::piped())
@@ -238,7 +277,7 @@ fn new_ignores_a_stale_world_file_left_in_the_config() {
         &mut fresh,
         &home,
         "Fresh_World.wld",
-        Duration::from_secs(120),
+        Duration::from_secs(240),
     );
     let _ = fresh.kill();
     let _ = fresh.wait();
@@ -269,6 +308,7 @@ fn new_ignores_a_stale_world_file_left_in_the_config() {
 /// generation at an unvalidated size.
 #[test]
 fn new_still_validates_dimensions_even_with_a_world_file_set() {
+    let _serial = serially();
     let home = scratch_home();
     std::fs::create_dir_all(&home).expect("scratch home");
     std::fs::write(
@@ -278,7 +318,12 @@ fn new_still_validates_dimensions_even_with_a_world_file_set() {
     .expect("write config");
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_terrustia"))
-        .args(["--new", "Too Small World", "--listen", "127.0.0.1:17784"])
+        .args([
+            "--new",
+            "Too Small World",
+            "--listen",
+            support::free_addr().as_str(),
+        ])
         .current_dir(&home)
         .env("HOME", &home)
         .env("XDG_DATA_HOME", home.join("xdg"))
@@ -290,29 +335,13 @@ fn new_still_validates_dimensions_even_with_a_world_file_set() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn terrustia");
-    // A bounded poll, not a blocking `child.wait()` — every other subprocess test in this file
-    // already uses one (`wait_for_file`'s own deadline loop), and this one didn't, which is
-    // exactly what let a single contention-slow run on a shared machine hang the entire suite
-    // indefinitely instead of failing loudly with a clear message.
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
-    let status = loop {
-        if let Some(status) = child.try_wait().expect("poll terrustia") {
-            break status;
-        }
-        if std::time::Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!(
-                "terrustia did not exit within 30s — an out-of-range world_width/world_height \
-                 should be refused immediately at startup, not left running"
-            );
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    };
-    assert!(
-        !status.success(),
-        "an out-of-range world_width/world_height must be refused, not silently generated"
-    );
+    // Read the refusal off stdout first, then wait for the exit that follows it. This used to be a
+    // thirty-second poll on `try_wait`, and that deadline was the last wall clock in this file: on a
+    // saturated machine a subprocess can take longer than thirty seconds just to start, print and
+    // exit, and the test then blamed the server for "not exiting" when it had not finished booting.
+    // Reading to end-of-file blocks only until the child closes its stdout, which it does by dying,
+    // so a slow machine makes this slow instead of red — the same trade `wait_for_generated_world`
+    // makes above, and the reason there is no `Duration` left in this function.
     let mut stdout = String::new();
     child
         .stdout
@@ -320,6 +349,12 @@ fn new_still_validates_dimensions_even_with_a_world_file_set() {
         .expect("captured stdout")
         .read_to_string(&mut stdout)
         .expect("read stdout");
+    let status = child.wait().expect("wait for terrustia");
+    assert!(
+        !status.success(),
+        "an out-of-range world_width/world_height must be refused, not silently generated. \
+         It said: {stdout}"
+    );
     assert!(
         stdout.contains("must be at least 400x300"),
         "expected a clear size-refusal message on stdout, got: {stdout}"
@@ -330,10 +365,11 @@ fn new_still_validates_dimensions_even_with_a_world_file_set() {
 
 #[test]
 fn new_refuses_a_name_that_already_exists() {
+    let _serial = serially();
     let home = scratch_home();
     std::fs::create_dir_all(&home).expect("scratch home");
 
-    let mut first = run_new(&home, "Collision World", "127.0.0.1:17780");
+    let mut first = run_new(&home, "Collision World", support::free_addr().as_str());
     let found = wait_for_generated_world(
         &mut first,
         &home,
@@ -351,7 +387,12 @@ fn new_refuses_a_name_that_already_exists() {
     // A second `--new` under the same name must refuse rather than silently overwrite the first
     // server's world out from under it — the whole reason `--new` checks first.
     let mut second = Command::new(env!("CARGO_BIN_EXE_terrustia"))
-        .args(["--new", "Collision World", "--listen", "127.0.0.1:17781"])
+        .args([
+            "--new",
+            "Collision World",
+            "--listen",
+            support::free_addr().as_str(),
+        ])
         .current_dir(&home)
         .env("HOME", &home)
         .env("XDG_DATA_HOME", home.join("xdg"))

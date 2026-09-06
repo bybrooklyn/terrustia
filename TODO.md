@@ -801,14 +801,40 @@ over effort; the first three are roughly a day each.
    for a real subprocess to generate a world inside a fixed window, and the poll then returned an
    empty result for the assertion after it to trip over.
 
-   **What changed**: the wait is now on the server's own `accepting connections` line before it
-   polls for the file, and a failure panics with the child's whole transcript instead of leaving an
-   empty directory behind. Its stdout is drained for the first time too, which removes a pipe-buffer
-   stall nobody had noticed. **This makes the flake diagnosable, not gone**: the same run under load
-   now reports `Stale_World.wld never landed within 120s (server up)` and, separately, the
-   size-refusal test can still hit its own 30-second exit deadline. Both are wall-clock deadlines
-   against real subprocesses, and the fix is the same one `every_newly_covered_town_npc_actually_fights`
-   needs: count deadlines in observed server output rather than seconds.
+   **Three defects fixed, and the improvement is measured rather than assumed.** Against a
+   concurrent `--test gameplay`, twelve runs at a time: **1 failure in 6 before, 1 in 12 after.**
+
+   1. **The success path had a clock in it.** It now waits on the server's own `world saved` line
+      and looks for the file only once it has been told the file is there, so a saturated machine
+      makes the test slower rather than red. The remaining timeout is a backstop for a genuinely
+      stuck server, and a failure prints the child's whole transcript instead of leaving an empty
+      directory behind.
+   2. **That line is filtered at the default level**, which is why the first attempt at this looked
+      like a broken autosave. The two spawns that are waited on now set
+      `TERRUSTIA_LOG=terrustia::game::server=debug,info`; the two that are read for a specific
+      refusal message stay at the default on purpose.
+   3. **The ports were constants.** This is the one CLI test `support`'s own module doc does not
+      list as fixed - it kept 17779-17784 long after the other four moved to ephemeral ones, and two
+      tests failing together in a *normal* 2.4 seconds is what that looks like. It now uses
+      `support::free_addr()`, and gets `support`'s other guarantees with it.
+
+   4. **`free_addr` is not safe to race**, which is what was left after the first three and cost the
+      most to find. It binds `127.0.0.1:0`, reads the port and *drops the listener* before handing
+      the number over, so two of these tests starting together can be given the same just-released
+      port; one server then dies on the bind and the test reports "the world never landed" a second
+      and a half later, which looks nothing like a port problem. The four now take a
+      `ONE_AT_A_TIME` mutex. They are subprocess-bound rather than CPU-bound, every other test binary
+      still runs alongside, and it stops these four from being four concurrent world generations on
+      a machine that already has the rest of the suite on it.
+   5. **The last wall clock went too.** The size-refusal test polled `try_wait` for 30 seconds and
+      blamed the server for "not exiting" when it had not finished *starting*; it now reads the
+      refusal off stdout and waits for the exit that follows, so there is no `Duration` left in that
+      function at all.
+
+   **12 of 12 under the same saturation that failed 1 in 6**, so this one is closed rather than
+   bounded. The same "observe the server, do not race it" treatment is what
+   `every_newly_covered_town_npc_actually_fights` still wants: its twenty-second per-NPC deadline is
+   the last of this shape in the suite.
 
    **One dead end is worth keeping** because it looked like a blocker and is not. The first version
    of the wait watched for `world saved`, and no such line ever appears: a fast autosave logs at
