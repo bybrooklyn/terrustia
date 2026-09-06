@@ -434,9 +434,11 @@ once, worst first by what a player saw, rather than folded into the bullets belo
   every rule that reads them means the *player's* zone.
   `GLOBAL_DEFERRED` is empty and the check gates, so nothing can join them silently.
 
-- **Lane B (error handling and data safety) is the only lane in `TODO.md` with no "(done)" marker.**
-  Still true as of 2026-09-06, though it needed Lane G to be marked done - which it had earned and
-  had not been given - for the sentence to become true again.
+- ~~**Lane B (error handling and data safety) is the only lane in `TODO.md` with no "(done)"
+  marker.**~~ **Closed 2026-09-06**, along with Lane G, which had earned its marker earlier and had
+  not been given one. Every lane A-H is now marked, and the striking thing is that nothing had to
+  be written to close either: all of Lane B's bullets were already built and none had been checked
+  off, so the lane sat open on a stale count while the code underneath it was finished.
 
   **The count this entry used to carry was wrong by about fifty times, and how it was wrong is the
   point.** It read: "485 `.unwrap()` calls remain in production files (`net/listener.rs`,
@@ -452,13 +454,34 @@ once, worst first by what a player saw, rather than folded into the bullets belo
   carrying its own written reason ("the loop only exits with a slot or a return", "checked just
   above", `terrustia-proto/src/reader.rs:19`'s infallible `try_into` after a checked `take`).
 
-  So the sweep looks essentially done and **nobody can demonstrate it**, which is what this lane's
-  gate has always actually been about. Nothing distinguishes an internal-invariant unwrap from one
-  the outside world can reach, and a hand count cannot settle it: three careful people counting by
-  hand today produced 505, 1 and 9. The work is a checker - a sibling of
-  `crates/terrustia-codegen/src/bin/deadwrite.rs`, same `syn` parse, same `ALLOWED`-list-with-a-
-  written-reason discipline - after which this bullet is whatever it reports and this entry cites
-  that instead of a number somebody typed.
+  **And the instrument already exists, which this entry did not know either.**
+  `crates/terrustia/tests/panic_budget.rs` pins the count, lists every site when it fails, and has
+  been brace-aware since 2026-08-31 - it was fixed that day precisely because it used to truncate
+  each file at its first `#[cfg(test)]` and so never scanned ~20,000 production lines. Being a test
+  rather than a recipe, it already runs in CI and in `just check`. Its number is **12**.
+
+  That number was checked against an independent implementation on 2026-09-06 (a `syn` parse rather
+  than a brace scan, written before anyone noticed `panic_budget.rs` was there) and the two agree
+  exactly: the parser finds **11**, and the twelfth is `terrustia-proto/src/reader.rs`'s
+  `bytes.try_into().unwrap()`, which sits inside a `macro_rules!` body where a syntax tree cannot
+  reach it and a text scan can. Each tool sees what the other cannot, and they land on the same
+  total.
+
+  **All twelve were then triaged by hand**, which is tractable at twelve and was the thing actually
+  missing. Every one is an invariant local to its own function, with the reason already written at
+  the site: three `unreachable!` arms in `liquid.rs` each guarded by an explicit `this_kind != X`
+  two lines above; `traps.rs`'s arm over a `kind_type` rolled from a fixed range; `ai/mod.rs`'s
+  style arm, defended by `every_ported_style_actually_runs_its_routine`, which walks all 697 types
+  and asserts the unwired set is empty; `buffs.rs`'s `expect` after a `while at.is_none()` loop
+  that can only exit with a slot or a `return`; `moon.rs`'s and `layout.rs`'s after their own
+  guards; `record.rs`'s two fixed-width slices inside a `while at + 10 <= bytes.len()` loop; and
+  `tile_cleanup.rs`'s thread join, whose worker only reads `World::tile` and pushes to a `Vec`.
+  None is reachable from untrusted input as a *failure*; each aborts only if this server's own
+  code contradicts itself.
+
+  So the honest state of this bullet is: **the sweep is done, and now it is demonstrated.** What
+  was never built is automated reachability analysis - "is this site on a path a client can drive"
+  - and at twelve sites that is a question a person can answer and did.
 - ~~**The flaky-test root cause is still undiagnosed**~~ for `tests/shutdown_signal.rs`.
   **Found and fixed 2026-09-05**, and it was not a race in the server at all. Two defects in the
   test compounded: the kill sits after the assertions and `std::process::Child` does not kill on

@@ -59,11 +59,11 @@ subsystem, and fixes folded into that subsystem's single visit (split the file, 
 apply the audit fixes, tidy) so heavy files were churned once. Single-owner hot files
 (`game/server.rs`, `world/worldgen/mod.rs`) took one change at a time.
 
-Seven of the eight lanes (A-H) below landed; Lane B is the exception and only its first bullet is
-open. The from-scratch re-audit (Lane C's C2) then ran as its own wave and is recorded under Lane C.
-The lane detail is kept below as the built record. The open Phase 1 items are Lane B's demonstrable
-panic-site claim and C3 (adopting the fork's spawn module), which is blocked on the fork, not on us.
-What remains before the tag is Phase 2 qualification.
+All eight lanes (A-H) below landed, Lane B last, on 2026-09-06 - and every one of its bullets had
+been built for some time; what was missing was anybody checking. The from-scratch re-audit (Lane
+C's C2) then ran as its own wave and is recorded under Lane C. The lane detail is kept below as the
+built record. The only open Phase 1 item is C3 (adopting the fork's spawn module), which is blocked
+on the fork, not on us. What remains before the tag is Phase 2 qualification.
 
 ### Lane A: split `game/server.rs` by responsibility (done)
 
@@ -74,25 +74,36 @@ update calls), and a thin `mod.rs` keeping the `GameServer` state and actor entr
 change; production panics on caller- or environment-triggerable paths cleared in the moved code;
 the single-writer actor preserved; suite, clippy and fmt green per extraction.
 
-### Lane B: error handling and data safety
+### Lane B: error handling and data safety (done)
 
-**Only the first bullet is open, and what is missing is the evidence rather than the work.** The
+**Closed 2026-09-06, and every bullet was already built when it was.** Nothing here needed writing;
+what it needed was somebody checking, because all four had landed and none had been marked. The
+last one held the lane open on a count that was wrong by fifty times, in a file that had the
+instrument to measure it correctly sitting in its own test suite. The
 other three landed and went unmarked, which is how this lane came to be described as wholly open in
 two documents at once.
 
-- **The panic-site sweep. Open, but not in the shape this file has been claiming.**
-  Clear every non-test `.unwrap()`/`.expect()`/panicking index/truncating cast from paths the
-  outside world can trigger; replace each with propagation and an operator-facing message. The
-  `net::listener::bind` mapping for `os error 28` is the pattern: keep the error kind, add advice.
+- ~~Clear every non-test `.unwrap()`/`.expect()`/panicking index/truncating cast from paths the
+  outside world can trigger; replace each with propagation and an operator-facing message.~~
+  **Done, and demonstrated 2026-09-06.** The `net::listener::bind` mapping for `os error 28` stays
+  the pattern for anything new: keep the error kind, add advice.
 
   `docs/release-blockers.md` recorded "485 `.unwrap()` calls remain in production files" and named
   five. All five have **zero**: every occurrence in them is inside `#[cfg(test)]`. 485 was a naive
-  whole-file grep, and three different counting methods tried on 2026-09-06 gave 505, 1 and 9,
-  because each mis-handles `#[cfg(test)]`, a comment, or a method that happens to be named
-  `expect`. That spread is the actual finding: **nobody can say whether this bullet is done**, and
-  a hand count is not going to settle it. The work is a checker - a sibling of
-  `crates/terrustia-codegen/src/bin/deadwrite.rs`, same `syn` parse, same `ALLOWED`-with-a-reason
-  discipline - after which this bullet is whatever it reports.
+  whole-file grep, and three counting methods tried on 2026-09-06 gave 505, 1 and 9, because each
+  mishandles `#[cfg(test)]`, a comment, or a method this workspace happens to have named `expect`.
+
+  The real number is **12**, and `crates/terrustia/tests/panic_budget.rs` has been pinning it all
+  along - a fact neither backlog entry knew, which is why a second checker was written on
+  2026-09-06 before anyone found the first. It was thrown away rather than kept: `panic_budget` is
+  already in the test suite and therefore already in CI, it lists every site when it fails, and it
+  catches the one site a `syn` parse structurally cannot (`reader.rs`'s unwrap inside a
+  `macro_rules!` body). The two implementations agreeing on 12 from opposite directions is worth
+  more than either alone, and is recorded in `docs/release-blockers.md`.
+
+  All twelve are triaged there. Each is an invariant local to its own function with the reason
+  written at the site; none can be driven to fire by a client. What does **not** exist is automated
+  reachability analysis, and at twelve sites that is a question a person can answer.
 - ~~Capped backoff in the accept loop on persistent `accept()` failure, so descriptor exhaustion does
   not become a hot loop.~~ **Done**: `accept_backoff` (`net/listener.rs:157`), wired at `:263`.
 - ~~ENOSPC, read-only filesystems and vanished directories handled on every write path: world save

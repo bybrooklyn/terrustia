@@ -27,7 +27,7 @@ TODO.md	repo	crates/terrustia/src/game/server/mod.rs	2062-2069	36d81e788fc8
 TODO.md	repo	crates/terrustia/src/game/server/mod.rs	91	54d90ef01540
 TODO.md	repo	crates/terrustia/src/game/server/systems.rs	2693	530b3fd943c2
 TODO.md	repo	crates/terrustia/src/game/server/systems.rs	3597	4c4586b31d12
-TODO.md	repo	crates/terrustia/src/game/server/systems.rs	5225	5643eac2cdd1
+TODO.md	repo	crates/terrustia/src/game/server/systems.rs	5225	41cd68f3886e
 TODO.md	repo	crates/terrustia/src/game/server/tick.rs	420	29e0988f5bf2
 TODO.md	repo	crates/terrustia/src/net/listener.rs	157	31991ff0ad1e
 TODO.md	repo	crates/terrustia/src/world/worldgen/traps.rs	621	1cf0d9301099
@@ -97,7 +97,7 @@ docs/packet-coverage.md	vanilla	NetMessage.cs	768	fb64d202e5a2
 docs/packet-coverage.md	vanilla	NetMessage.cs	990	014e7cb18229
 docs/packet-coverage.md	vanilla	PortalHelper.cs	105-214	d8f87ecf13dd
 docs/release-blockers.md	repo	crates/terrustia-proto/src/items.rs	122	251fabcc5404
-docs/release-blockers.md	repo	crates/terrustia-proto/src/npc.rs	79	251fabcc5404
+docs/release-blockers.md	repo	crates/terrustia-proto/src/npc.rs	79	22e9a368604a
 docs/release-blockers.md	repo	crates/terrustia-proto/src/packets.rs	1412	251fabcc5404
 docs/release-blockers.md	repo	crates/terrustia-proto/src/projectile.rs	68	251fabcc5404
 docs/release-blockers.md	repo	crates/terrustia-proto/src/reader.rs	19	2ea791138f3c
@@ -109,9 +109,9 @@ docs/release-blockers.md	repo	crates/terrustia/src/game/journey.rs	55-58	77a0326
 docs/release-blockers.md	repo	crates/terrustia/src/game/journey.rs	60-66	66c9e1953bfa
 docs/release-blockers.md	repo	crates/terrustia/src/game/lunar.rs	29	7245889f89e8
 docs/release-blockers.md	repo	crates/terrustia/src/game/server/dispatch.rs	4017-4023	00943613abb4
-docs/release-blockers.md	repo	crates/terrustia/src/game/server/systems.rs	10465	71d18e4a0d20
-docs/release-blockers.md	repo	crates/terrustia/src/game/server/systems.rs	7780	db34c91e57ff
-docs/release-blockers.md	repo	crates/terrustia/src/game/server/systems.rs	9246-9252	16b2bec866de
+docs/release-blockers.md	repo	crates/terrustia/src/game/server/systems.rs	10465	5ca72975ed81
+docs/release-blockers.md	repo	crates/terrustia/src/game/server/systems.rs	7780	b5ac273be2e7
+docs/release-blockers.md	repo	crates/terrustia/src/game/server/systems.rs	9246-9252	3487674b7e6b
 docs/release-blockers.md	repo	crates/terrustia/src/update.rs	485-498	7489b002a3b1
 docs/release-blockers.md	vanilla	CommonDrop.cs	36	7eba7236bea4
 docs/release-blockers.md	vanilla	DD2Event.cs	185	82f69fc781cf
