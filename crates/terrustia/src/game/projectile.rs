@@ -5,12 +5,12 @@
 //! decided to shoot has been emitting its aim and cadence for a while; this is what makes those
 //! decisions land.
 //!
-//! Twenty-two behaviours are transcribed here, and thirteen more in `server::systems` (see
+//! Twenty-two behaviours are transcribed here, and fourteen more in `server::systems` (see
 //! below). This file used to say "a handful of behaviours cover everything the roster and the
 //! world's traps fire"; the count, when it was finally taken, was **43 of the 79 types something
-//! here can launch reaching no arm at all**. It is 5 of 81 now.
+//! here can launch reaching no arm at all**. It is 4 of 81 now.
 //!
-//! The 5 left are not all straight lines, and saying so would be the same mistake again. Read
+//! The 4 left are not all straight lines, and saying so would be the same mistake again. Read
 //! against `Projectile.cs`: none of them *falls* - they are hovering clouds, shockwaves and
 //! convergences - so a straight line is a poorer approximation of them than it was of a thrown
 //! bone, not a free one. One of the eight, the Rain Nimbus, is in fact **already right**: style
@@ -24,7 +24,8 @@
 //! ward), 127/128 (the Sand Elemental's mark and tornado), 133 (the Dark Mage's sigils) and
 //! 171/180 (two of the Empress's) are all there, called from `tick_projectiles` before the
 //! movement below, in vanilla's own order, and so are the seeking half of 65 (Duke Fishron's
-//! second bubble) and 102 (the two escorts that hover beside the NPC that made them). So is `tick_friendly_projectile_hits`, which is `Damage_PVE` and runs *after*
+//! second bubble), 102 (the two escorts that hover beside the NPC that made them) and 136
+//! (Betsy's breath, which rides her jaw). So is `tick_friendly_projectile_hits`, which is `Damage_PVE` and runs *after*
 //! the movement, where `Projectile.Update` puts it. So is `tick_friendly_projectile_hits`, which is
 //! `Damage_PVE` and runs after the movement, where `Projectile.Update` puts it.
 //!

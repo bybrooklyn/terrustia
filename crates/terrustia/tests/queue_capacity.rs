@@ -31,10 +31,12 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::mpsc,
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 use terrustia_client::Client;
+
+mod support;
 
 /// The real protocol maximum (`config::MAX_PLAYERS`) — the exact ceiling the benchmarking pass
 /// measured against, not a scaled-down stand-in.
@@ -72,14 +74,7 @@ const SETTLE_SECONDS: u64 = 20;
 const DROP_TOLERANCE: usize = 8;
 
 fn scratch_dir() -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("the clock")
-        .as_nanos();
-    std::env::temp_dir().join(format!(
-        "terrustia-queue-capacity-{}-{nanos}",
-        std::process::id()
-    ))
+    support::scratch_dir("terrustia-queue-capacity")
 }
 
 /// Spawn a real `terrustia` server subprocess sized for a synchronized 255-player join.

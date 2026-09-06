@@ -2411,6 +2411,77 @@ impl GameServer {
         }
     }
 
+    /// Betsy's flame breath is welded to her jaw, not thrown from it.
+    ///
+    /// `aiStyle == 136`, `AI_136_BetsyBreath` (`Projectile.cs:69858-69910`). The whole method is
+    /// three statements and a lot of lighting: put the projectile at a fixed offset from the NPC
+    /// named in `ai[1]`, rotated by *her* rotation and mirrored by her facing, and end at 78
+    /// ticks. It never moves under its own power, so ours - launched at her own dash velocity and
+    /// left to fly - trailed out behind her at twenty pixels a tick while she ran the other way.
+    /// The breath is the reason the run is dangerous, and it was behind her for all of it.
+    ///
+    /// The offset is `(110 - 8, 30)` from her centre before her rotation is applied, which is the
+    /// jaw. One narrowing, and it is vanilla's own oddity rather than a simplification: the only
+    /// guard on `ai[1]` is a bounds check, so a Betsy who dies mid-breath leaves it reading her
+    /// stale centre for the rest of its 78 ticks. This server clears a dead NPC's slot, so the
+    /// breath is left where it last was instead, which is the same thing observed from outside.
+    fn tick_betsy_breath(&mut self) {
+        use terrustia_proto::projectile::ids::BETSY_FLAME_BREATH;
+
+        /// `NPCID.DD2Betsy`, which is who a breath may be welded to.
+        const BETSY: u16 = 551;
+        /// `new Vector2(110f + num, 30f)` with `num = -8f`: the jaw, before her rotation.
+        const JAW: (f32, f32) = (102.0, 30.0);
+        /// `if (ai[0] >= 78f) Kill()`.
+        const BREATH_TICKS: f32 = 78.0;
+
+        let breaths: Vec<u16> = self
+            .projectiles
+            .iter()
+            .filter(|(_, p)| p.projectile_type == BETSY_FLAME_BREATH)
+            .map(|(index, _)| index)
+            .collect();
+        if breaths.is_empty() {
+            return;
+        }
+        let mut spent = Vec::new();
+        for index in breaths {
+            let Some(breath) = self.projectiles.get(index) else {
+                continue;
+            };
+            let jaw = self
+                .npcs
+                .get(breath.ai[1] as u8)
+                .filter(|npc| npc.npc_type == BETSY)
+                .map(|npc| {
+                    let at = npc.center();
+                    let (sin, cos) = npc.rotation.sin_cos();
+                    let reach = (JAW.0 * f32::from(npc.sprite_direction), JAW.1);
+                    (
+                        at.0 + reach.0 * cos - reach.1 * sin,
+                        at.1 + reach.0 * sin + reach.1 * cos,
+                    )
+                });
+            let Some(breath) = self.projectiles.get_mut(index) else {
+                continue;
+            };
+            if let Some(jaw) = jaw {
+                breath.position = (jaw.0 - breath.width() / 2.0, jaw.1 - breath.height() / 2.0);
+                // It is carried, never thrown: any velocity it was launched with would move it
+                // off her jaw the moment `step` ran.
+                breath.velocity = (0.0, 0.0);
+            }
+            breath.ai[0] += 1.0;
+            breath.dirty = true;
+            if breath.ai[0] >= BREATH_TICKS {
+                spent.push(index);
+            }
+        }
+        for index in spent {
+            self.kill_projectile(index);
+        }
+    }
+
     /// The Stardust Jellyfish's spawn and the Nebula Brain's eye hover by their parent, then fire.
     ///
     /// `aiStyle == 102` (`Projectile.cs:33837-34060`), one arm keyed on the type inside it exactly
@@ -3130,6 +3201,8 @@ impl GameServer {
         self.tick_sharknado_bolts();
         // And the two escorts that hover by the NPC that made them before deciding anything.
         self.tick_hovering_escorts();
+        // And Betsy's breath, which rides her jaw rather than leaving it.
+        self.tick_betsy_breath();
         let mut spent = Vec::new();
         let mut emitted = Vec::new();
         {
@@ -17031,6 +17104,69 @@ mod town_shots_land {
         };
         let (calm, enraged) = (speed_with(0.0), speed_with(1.0));
         assert!((enraged - calm - 12.0).abs() < 0.01, "{calm} vs {enraged}");
+    }
+
+    /// Betsy's breath rides her jaw for its whole 78 ticks rather than trailing out behind her.
+    ///
+    /// `AI_136_BetsyBreath` (`Projectile.cs:69858-69910`) is three statements and a lot of
+    /// lighting: put it at a fixed offset from her, rotated by her rotation and mirrored by her
+    /// facing, and end at 78. Ours was launched at her own dash velocity and left to fly, so the
+    /// thing that makes the run dangerous was behind her for all of it.
+    #[test]
+    fn betsys_breath_rides_her_jaw_and_ends_at_seventy_eight() {
+        use terrustia_proto::projectile::ids::BETSY_FLAME_BREATH;
+
+        /// `NPCID.DD2Betsy`.
+        const BETSY: u16 = 551;
+
+        // Both facings, because the jaw is mirrored by `spriteDirection` and a test that only
+        // ever runs the `+1` side cannot tell the mirror from nothing.
+        for facing in [1i8, -1] {
+            let mut server = server();
+            let mut held = seat(&mut server, (9000.0, 2000.0));
+            server.npcs.spawn(488, (100.0, 100.0)).expect("a filler");
+            let betsy = server.npcs.spawn(BETSY, (2000.0, 2000.0)).expect("a slot");
+            assert_ne!(betsy, 0, "slot zero would make the ai[1] check vacuous");
+            {
+                let b = server.npcs.get_mut(betsy).expect("just spawned");
+                b.sprite_direction = facing;
+                b.velocity = (20.0, 0.0);
+            }
+            // Launched with her dash speed, the way the routine used to, so "the arm stops it
+            // flying" is a real observation rather than a starting condition.
+            let breath = server
+                .projectiles
+                .launch(BETSY_FLAME_BREATH, (2000.0, 2000.0), (20.0, 0.0), 50, 0)
+                .expect("a known type");
+            server.projectiles.get_mut(breath).expect("up").ai = [0.0, f32::from(betsy), 0.0];
+
+            let jaw_of = |server: &GameServer| {
+                let at = server.npcs.get(betsy).expect("there").center();
+                (at.0 + 102.0 * f32::from(facing), at.1 + 30.0)
+            };
+            // Through the real `tick_projectiles`, which is what makes this the test that the arm
+            // is wired in *and* that the breath's own velocity is cleared: without either, `step`
+            // moves it twenty pixels a tick off her jaw.
+            for tick in 1..78 {
+                // She keeps running, and *then* the tick runs - the breath has to keep up with
+                // where she is now, not where she was when it was made.
+                server.npcs.get_mut(betsy).expect("there").position.0 += 20.0;
+                server.tick_projectiles();
+                while held.try_recv().is_ok() {}
+                let want = jaw_of(&server);
+                let got = server.projectiles.get(breath).expect("up").center();
+                assert!(
+                    (got.0 - want.0).abs() < 0.01 && (got.1 - want.1).abs() < 0.01,
+                    "facing {facing}, tick {tick}: the breath should be on her jaw, \
+                     {got:?} against {want:?}"
+                );
+            }
+            server.tick_projectiles();
+            assert!(
+                server.projectiles.get(breath).is_none(),
+                "and it ends at seventy-eight"
+            );
+        }
     }
 
     /// The Stardust Jellyfish's small one hovers beside its parent and only then picks a target.

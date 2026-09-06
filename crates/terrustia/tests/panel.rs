@@ -20,6 +20,8 @@ use terrustia::{
 };
 use tokio::sync::{mpsc, oneshot};
 
+mod support;
+
 /// The panel's live console/chat feed (`crate::term::console_feed`) is fed by `TermLayer::on_event`
 /// — but `TermLayer` is only ever installed as part of `tracing_subscriber::registry()...init()`
 /// in `main()`, which nothing in this integration-test binary ever calls. Without this, every
@@ -666,14 +668,11 @@ async fn the_finishing_features_work_over_real_sockets() {
 
     // A unique save target so no stale admin file from a previous run starts this server claimed,
     // and so the account mutations below write a throwaway admin file rather than a permanent one.
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let save_file = std::env::temp_dir().join(format!(
-        "terrustia-panel-test-{}-{unique}.wld",
-        std::process::id()
-    ));
+    //
+    // Unique by a counter rather than by the clock: `as_nanos()` is not nanosecond-resolution, and
+    // two tests reading it together get the same value about one time in five (see
+    // `support::scratch_dir`).
+    let save_file = support::scratch_dir("terrustia-panel-test").with_extension("wld");
 
     let config = Config {
         world_width: 800,
@@ -1514,14 +1513,11 @@ async fn banning_through_the_panel_appears_in_the_audit_log() {
 
     // A unique save target: the audit log lives beside the world file, and a fresh path means a
     // fresh (empty) log to read back rather than one left over from an earlier run.
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let save_file = std::env::temp_dir().join(format!(
-        "terrustia-audit-test-{}-{unique}.wld",
-        std::process::id()
-    ));
+    //
+    // Unique by a counter rather than by the clock: `as_nanos()` is not nanosecond-resolution, and
+    // two tests reading it together get the same value about one time in five (see
+    // `support::scratch_dir`).
+    let save_file = support::scratch_dir("terrustia-audit-test").with_extension("wld");
 
     let config = Config {
         world_width: 800,

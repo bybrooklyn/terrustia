@@ -108,7 +108,7 @@ pub fn betsy(
                 back_to_hover(npc);
             }
         }
-        attack::BREATH => breath(npc, player, &mut out),
+        attack::BREATH => breath(npc, player, world.slot, &mut out),
         attack::RUN => run(npc, player, &mut out),
         attack::SPIN => spin(npc, player),
         _ => scream(npc, player, wyverns, rng, &mut out),
@@ -163,7 +163,7 @@ fn back_to_hover(npc: &mut Npc) {
 }
 
 /// The flame breath: line up six hundred pixels out, then breathe and run through.
-fn breath(npc: &mut Npc, player: (f32, f32), out: &mut BetsyOutcome) {
+fn breath(npc: &mut Npc, player: (f32, f32), slot: u8, out: &mut BetsyOutcome) {
     npc.ai[1] += 1.0;
     let (cx, cy) = npc.center();
     npc.ai[2] = if cx < player.0 { 1.0 } else { -1.0 };
@@ -198,9 +198,17 @@ fn breath(npc: &mut Npc, player: (f32, f32), out: &mut BetsyOutcome) {
             projectile: BETSY_FLAME_BREATH,
             damage: BETSY_ATTACK_DAMAGE,
             position: (cx, cy),
-            velocity: npc.velocity,
-            time_left: BETSY_BREATH_RUN as u16,
-            ai: [0.0; 3],
+            // No velocity of its own: `aiStyle 136` puts the breath on her jaw every tick and it
+            // never travels, so anything here would only move it off her for the one tick before
+            // the arm put it back. Ours used to carry her whole dash speed, which trailed the
+            // breath out behind her while she ran the other way.
+            velocity: (0.0, 0.0),
+            // Zero, meaning the type's own: the arm ends it at 78, which is shorter than the run
+            // and is vanilla's number rather than this routine's.
+            time_left: 0,
+            // `NewProjectile(..., whoAmI, ...)`: the breath is hers, and `ai[1]` is how it finds
+            // the jaw it rides.
+            ai: [0.0, f32::from(slot), 0.0],
         });
     }
 
@@ -675,5 +683,34 @@ mod tests {
             betsy(&mut n, &w, 0, &mut rng);
         }
         assert_eq!((n.ai, n.position), before);
+    }
+    /// The breath is handed her slot, and nothing else.
+    ///
+    /// `aiStyle 136` puts it on her jaw every tick and it never travels, so a velocity here would
+    /// only move it off her for the one tick before the arm put it back - and ours carried her
+    /// whole dash speed, which trailed the breath out behind her while she ran the other way.
+    /// `ai[1]` is how it finds the jaw at all.
+    #[test]
+    fn the_breath_is_handed_her_slot_and_no_speed_of_its_own() {
+        let tiles = Sky(HashMap::new());
+        let mut b = her();
+        b.ai[0] = attack::BREATH;
+        b.ai[1] = BETSY_BREATH_LINE_UP - 1.0;
+        let mut w = world(&tiles, (5600.0, 3000.0));
+        w.slot = 4;
+        let mut rng = SmallRng::seed_from_u64(1);
+        let mut breaths = Vec::new();
+        for _ in 0..4 {
+            breaths.extend(
+                betsy(&mut b, &w, 0, &mut rng)
+                    .shots
+                    .into_iter()
+                    .filter(|s| s.projectile == BETSY_FLAME_BREATH),
+            );
+        }
+        let shot = breaths.first().expect("she should have opened up");
+        assert_eq!(shot.ai[1], 4.0, "the slot the caller filled in, not zero");
+        assert_eq!(shot.velocity, (0.0, 0.0), "carried, never thrown");
+        assert_eq!(shot.time_left, 0, "the arm's 78 rather than the run's 80");
     }
 }

@@ -62,17 +62,10 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 fn scratch_home() -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("the clock")
-        .as_nanos();
-    std::env::temp_dir().join(format!(
-        "terrustia-shutdown-signal-{}-{nanos}",
-        std::process::id()
-    ))
+    support::scratch_dir("terrustia-shutdown-signal")
 }
 
 /// A spawned server that is killed when it goes out of scope.
@@ -125,6 +118,18 @@ impl Server {
         }
     }
 
+    /// Whether the server has printed this at any point, rather than whether it prints it next.
+    ///
+    /// `wait_for` reads a channel and discards whatever it scans past, so two waits in the wrong
+    /// order silently lose the earlier line. Reading the kept transcript instead is order-free,
+    /// which is what lets the bind wait and the panel assertion stop having to agree about which
+    /// of the two the server prints first.
+    fn saw(&self, needle: &str) -> bool {
+        self.seen
+            .lock()
+            .is_ok_and(|s| s.iter().any(|l| l.contains(needle)))
+    }
+
     fn transcript(&self, why: String) -> String {
         let out = self.seen.lock().map(|s| s.join("\n")).unwrap_or_default();
         let err = self.stderr.lock().map(|s| s.join("\n")).unwrap_or_default();
@@ -158,6 +163,25 @@ fn drain(
 /// configuration that triggers the second, separate SIGTERM bug `panel_enabled_sigterm_still_stops_
 /// the_server_and_saves_within_a_bounded_window` below pins: the ordinary (panel-off) case above
 /// never spawns the panel's own inner task at all, so it could not have caught that bug either way.
+/// Spawn one and wait until it is actually serving.
+///
+/// The wait is for "accepting connections", which is the *last* readiness line in both
+/// configurations - with the panel on, `main` binds and starts it before the accept loop - so it
+/// cannot eat the panel's line, which is the ordering trap this file used to work around by
+/// asking for the two in the server's order rather than the natural one. What the panel test
+/// needs is then read off the transcript, where the order stops mattering.
+fn spawn_until_bound(home: &std::path::Path, panel: bool) -> Server {
+    /// Long enough for a real subprocess to generate a small world on a busy machine.
+    const BIND_WINDOW: Duration = Duration::from_secs(30);
+
+    let panel_listen = panel.then(support::free_addr);
+    let server = spawn_server(home, &support::free_addr(), panel_listen.as_deref());
+    if let Err(why) = server.wait_for("accepting connections", BIND_WINDOW) {
+        panic!("the server should have reached its main loop by now: {why}");
+    }
+    server
+}
+
 fn spawn_server(home: &std::path::Path, listen: &str, panel_listen: Option<&str>) -> Server {
     let save_file = home.join("ShutdownSignalTest.wld");
     let panel_config = match panel_listen {
@@ -221,11 +245,12 @@ fn sigterm_stops_the_server_and_saves_within_a_bounded_window() {
     let home = scratch_home();
     std::fs::create_dir_all(&home).expect("scratch home");
 
-    let mut server = spawn_server(&home, &support::free_addr(), None);
-
-    if let Err(why) = server.wait_for("accepting connections", Duration::from_secs(30)) {
-        panic!("the server should have reached its main loop by now: {why}");
-    }
+    // `spawn_until_bound` has already waited for "accepting connections" and panics with the
+    // server's whole transcript if it never comes. Waiting for it again here is not a harmless
+    // duplicate: `wait_for` reads a channel, so the second wait finds the line already consumed
+    // and sits out its whole timeout - which is this file's own documented ordering trap, walked
+    // into from the other direction.
+    let mut server = spawn_until_bound(&home, false);
 
     #[cfg(unix)]
     {
@@ -311,21 +336,20 @@ fn panel_enabled_sigterm_still_stops_the_server_and_saves_within_a_bounded_windo
     let home = scratch_home();
     std::fs::create_dir_all(&home).expect("scratch home");
 
-    let mut server = spawn_server(&home, &support::free_addr(), Some(&support::free_addr()));
+    let mut server = spawn_until_bound(&home, true);
 
-    // Waited for in the order the server actually prints them, not the order that reads
-    // naturally: `main` binds and starts the panel (`panel::run`, opt-in, `?`-propagated on
-    // failure) *before* the accept loop's own "accepting connections" line — `Server::wait_for`
-    // discards whatever it scans past while searching, so asking for "accepting connections"
-    // first would silently eat the earlier "web panel listening" line before the second wait ever
-    // got a chance to see it. This file's own module doc points at `plan.md`'s "Tile action log"
-    // Done row for another test in this codebase that hit exactly this ordering trap.
-    if let Err(why) = server.wait_for("web panel listening", Duration::from_secs(30)) {
-        panic!("the panel should have finished binding by now: {why}");
-    }
-    if let Err(why) = server.wait_for("accepting connections", Duration::from_secs(30)) {
-        panic!("the server should have reached its main loop by now: {why}");
-    }
+    // Read off the transcript rather than waited for. `main` binds and starts the panel
+    // (`panel::run`, opt-in, `?`-propagated on failure) *before* the accept loop's own "accepting
+    // connections" line, and `Server::wait_for` discards whatever it scans past - so two waits in
+    // the wrong order silently ate the earlier line, which this file used to work around by asking
+    // for them in the server's order rather than the natural one. `spawn_until_bound` has already
+    // waited for the later of the two, so the earlier is in the transcript by definition and the
+    // order stops being something a reader has to know.
+    assert!(
+        server.saw("web panel listening"),
+        "the panel should have bound before the accept loop: {}",
+        server.transcript("panel never bound".to_string())
+    );
 
     #[cfg(unix)]
     {

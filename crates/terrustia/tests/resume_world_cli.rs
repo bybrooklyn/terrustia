@@ -31,17 +31,10 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 fn scratch_dir(label: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("the clock")
-        .as_nanos();
-    std::env::temp_dir().join(format!(
-        "terrustia-resume-{label}-{}-{nanos}",
-        std::process::id()
-    ))
+    support::scratch_dir(&format!("terrustia-resume-{label}"))
 }
 
 /// The same poll-don't-sleep discipline as `shutdown_signal.rs` and `new_world_cli.rs`: a real

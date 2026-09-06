@@ -24,17 +24,12 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
+
+mod support;
 
 fn scratch_dir(label: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("the clock")
-        .as_nanos();
-    std::env::temp_dir().join(format!(
-        "terrustia-bare-{label}-{}-{nanos}",
-        std::process::id()
-    ))
+    support::scratch_dir(&format!("terrustia-bare-{label}"))
 }
 
 fn wait_for_line(rx: &mpsc::Receiver<String>, needle: &str, timeout: Duration) -> Option<String> {

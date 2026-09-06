@@ -17,17 +17,10 @@ mod support;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 fn scratch_home() -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("the clock")
-        .as_nanos();
-    std::env::temp_dir().join(format!(
-        "terrustia-new-world-cli-{}-{nanos}",
-        std::process::id()
-    ))
+    support::scratch_dir("terrustia-new-world-cli")
 }
 
 /// Every file under `dir` named exactly `name`, found by walking recursively — sidesteps needing

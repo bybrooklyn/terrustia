@@ -16,7 +16,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 /// Reads `stdout` on a background thread, forwarding each line to the returned channel. Needed
 /// because a graceful `SIGTERM` only does anything once `main.rs`'s own `stop_signal()` has
@@ -56,14 +56,7 @@ fn wait_for_line(rx: &mpsc::Receiver<String>, needle: &str, timeout: Duration) -
 }
 
 fn scratch_home(label: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("the clock")
-        .as_nanos();
-    std::env::temp_dir().join(format!(
-        "terrustia-setup-cli-{label}-{}-{nanos}",
-        std::process::id()
-    ))
+    support::scratch_dir(&format!("terrustia-setup-cli-{label}"))
 }
 
 fn find_named(dir: &Path, name: &str) -> Vec<PathBuf> {

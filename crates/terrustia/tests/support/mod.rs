@@ -39,6 +39,36 @@ pub fn free_port() -> u16 {
     listener.local_addr().expect("the bound address").port()
 }
 
+/// A scratch directory nothing else in this process will be handed.
+///
+/// **The pid-plus-nanoseconds name every one of these tests grew independently is not unique**,
+/// and that was a real flake rather than a theoretical one. `SystemTime::now().as_nanos()` is not
+/// nanosecond-resolution: two threads reading it at the same moment get the *identical* value
+/// **362 times in 2,000** on this machine, measured. Two tests in one binary start together, so
+/// roughly one run in five handed both of them the same directory - and then they shared a
+/// `terrustia.toml` and a world file, whichever wrote last decided both servers' configuration,
+/// and the loser died on a port the winner had already taken.
+///
+/// That is what `shutdown_signal.rs` was failing on, 1 run in 4 under a concurrent `--test
+/// gameplay`, reported as `127.0.0.1:51588 is already in use`. The port was a symptom: both
+/// servers had read the same `listen` line out of the same file. It is also, in hindsight, what
+/// `new_world_cli.rs`'s `ONE_AT_A_TIME` mutex was really fixing - serialising those four tests
+/// stopped them calling this concurrently, so they stopped colliding.
+///
+/// The counter is what makes it safe; the clock and the pid are kept so a leftover directory can
+/// still be traced to a run.
+pub fn scratch_dir(prefix: &str) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .expect("the clock")
+        .as_nanos();
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("{prefix}-{}-{nanos}-{n}", std::process::id()))
+}
+
 /// A local address on an OS-assigned free port.
 pub fn free_addr() -> String {
     format!("127.0.0.1:{}", free_port())

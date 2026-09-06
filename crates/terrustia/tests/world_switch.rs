@@ -17,17 +17,10 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 fn scratch_home() -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("the clock")
-        .as_nanos();
-    std::env::temp_dir().join(format!(
-        "terrustia-world-switch-{}-{nanos}",
-        std::process::id()
-    ))
+    support::scratch_dir("terrustia-world-switch")
 }
 
 fn find_named(dir: &Path, name: &str) -> Vec<PathBuf> {

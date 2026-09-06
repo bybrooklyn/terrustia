@@ -1931,8 +1931,8 @@ crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	3272	43583
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	50299-50302	6583807eb5db	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72072-72079	2a6f4d26e0bc	c5414c9d223d
 crates/terrustia/src/game/server/mod.rs	struct GameServer	WorldGen.cs	72406	6c77495a5649	c5414c9d223d
-crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	c4a92084f6af
-crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	c4a92084f6af
+crates/terrustia/src/game/server/systems.rs	(file)	Main.cs	65601	8f010278c79f	2b75a469ba06
+crates/terrustia/src/game/server/systems.rs	(file)	RemoteClient.cs	152-190	4e99a0e9d426	2b75a469ba06
 crates/terrustia/src/game/server/systems.rs	const STINKY	BuffID.cs	393	0f6008fbeed1	cfaa20a1d46a
 crates/terrustia/src/game/server/systems.rs	fn player_has_buff	MessageBuffer.cs	2456-2477	87cb35363490	c08c9f289848
 crates/terrustia/src/game/server/systems.rs	fn shares_a_life_pool	NPC.cs	7363-7366	54960e839053	00e47302005c
@@ -2032,6 +2032,7 @@ crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn split_on_death
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn split_on_death	NPC.cs	84381-84403	f26f84f30759	8473c2014524
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn standing_pillars	SceneMetrics.cs	734-751	6d4df8ac7d1c	104715da329f
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn take_item_slot	Item.cs	49725-49730	dd0dbf605a4d	7053de0a9c31
+crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_betsy_breath	Projectile.cs	69858-69910	d01ece51982f	0aa55dd2e301
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_contact_damage	Player.cs	31564	59f83c567a26	60eafe9e6830
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_contact_damage	Player.cs	31618	8d5cc04c1571	60eafe9e6830
 crates/terrustia/src/game/server/systems.rs	impl GameServer :: fn tick_contact_damage	Player.cs	31623	4c8ea0c69ee0	60eafe9e6830
@@ -2197,6 +2198,7 @@ crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_mov
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_town_npcs_shot_damages_the_enemy_it_hits	Projectile.cs	12518	4ffaefcc81db	1bb48db252a3
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn a_wrench_that_lands_turns_for_home_at_once	Projectile.cs	14106-14113	e33598d34dba	86dd2e17979f
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn an_enraged_dukes_bubble_leaves_four_times_as_fast	NPC.cs	49390	3595ba5e3029	f084473dfad3
+crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn betsys_breath_rides_her_jaw_and_ends_at_seventy_eight	Projectile.cs	69858-69910	d01ece51982f	34b73fd218f8
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn mechanic_with_a_wrench	NPC.cs	55068	89a06babcb3d	432dc1e20f97
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_dukes_seeking_bubble_chases_the_player_it_was_given	Projectile.cs	30014-30057	b1d6a637dd33	f1f9b09e68db
 crates/terrustia/src/game/server/systems.rs	mod section_streaming_as_players_move :: fn walking_into_a_new_section_streams_the_block_around_it :: mod town_shots_land :: fn the_mechanics_wrench_turns_round_and_comes_home	Projectile.cs	34652-34690	e920e337d1ed	7df4e12ea597

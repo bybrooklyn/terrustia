@@ -562,8 +562,46 @@ hundred and twenty per cent of the result. Two narrowings: `position += parent.p
 parent.oldPos[1]` carries an escort along with its parent's movement over *two* frames and this
 server keeps one, and `Collision.CanHitLine` is `sight::can_hit` on one-pixel boxes.
 
-**5 types remain, across five styles**: 45, 98, 112, 136, 149.
-**Coverage is 76 of 81** - the roster grew by one, because the Nebula Eye's laser is a type this
+**Style 136, Betsy's flame breath, closed the same day.** `AI_136_BetsyBreath`
+(`Projectile.cs:69858-69910`) is three statements and a lot of lighting: put the projectile at a
+fixed offset from the NPC named in `ai[1]`, rotated by *her* rotation and mirrored by her facing,
+and end at 78 ticks. It never moves under its own power. Ours was launched at her own dash
+velocity and left to fly, so the thing that makes the breath run dangerous trailed out behind her
+at twenty pixels a tick while she ran the other way - it was behind her for the whole attack.
+
+The offset is `(110 - 8, 30)` before her rotation, which is the jaw. One oddity carried rather
+than smoothed: vanilla's only guard on `ai[1]` is a bounds check, so a Betsy who dies mid-breath
+leaves it reading her stale centre for the rest of its 78 ticks; this server clears a dead NPC's
+slot, so the breath is left where it last was instead, which is the same thing observed from
+outside.
+
+**A test-harness root cause found while closing 136, and it is a whole class.** Seven test files
+had each independently grown a `scratch_dir`/`scratch_home` built from the process id and
+`SystemTime::now().as_nanos()`. **That name is not unique.** `as_nanos()` is not
+nanosecond-resolution: two threads reading it at the same moment get the *identical* value **362
+times in 2,000** on this machine, measured directly. Two tests in one binary start together, so
+roughly one run in five handed both of them the same directory - and then they shared a
+`terrustia.toml` and a world file, whichever wrote last decided both servers' configuration, and
+the loser died on a port the winner had already taken.
+
+That was `shutdown_signal.rs` failing **1 run in 4** against a concurrent `--test gameplay`,
+reported as `127.0.0.1:51588 is already in use`. The port was a symptom: both servers had read the
+same `listen` line out of the same file. It is very likely also what `new_world_cli.rs`'s
+`ONE_AT_A_TIME` mutex was really fixing - serialising those four tests stopped them calling their
+`scratch_dir` concurrently, so they stopped colliding.
+
+Two wrong turns worth recording, because both were plausible and both were measured away rather
+than argued away. The first guess was `support::free_addr`, which hands over a port number and
+drops the listener before the caller binds - the same shape as a bug already fixed in this suite.
+Eight threads doing exactly that collided **0 times in 2,400**, so it is not this. The second was
+adding a retry on "already in use", which treats the symptom; it was written, measured, and then
+deleted once the directory turned out to be the cause.
+
+All nine sites now use one `support::scratch_dir`, unique by an atomic counter. Measured after:
+**0 failures in 12** under the same concurrent load.
+
+**4 types remain, across four styles**: 45, 98, 112, 149.
+**Coverage is 77 of 81** - the roster grew by one, because the Nebula Eye's laser is a type this
 server can now put in the air and could not before. Counted by the audit tool rather than by hand., counted by the audit tool rather than by hand. Style 112 counts as one of
 the eight and not as closed: it is three unrelated bodies keyed on the type inside the arm,
 exactly as vanilla keys them, and only the Truffle's spore is transcribed - crediting the style
@@ -572,8 +610,7 @@ would credit the Dandelion seed for the spore's arm.
 - **45, the Rain Nimbus (264), is already right** and should not be counted as a movement gap: its
   branch (`:28486-28509`) sets a rotation and bounces off shimmer, and nothing else. Its only
   divergence is a 300-tick fuse where the table says 120.
-- **136, Betsy's flame breath** (`:69858-69910`) is welded to her and dies at 78, the deathray's
-  shape again. **149, the golf ball** is the only large one: `BallCollision.Step`
+- **149, the golf ball**, is the only large one left: `BallCollision.Step`
   (`Terraria.Physics/BallCollision.cs:24-90`) plus per-tile friction from `TileGolfPhysics`.
 
 **A neighbouring audit this lane opened and did not close: the invented shot lifetimes.** Forty
