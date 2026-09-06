@@ -2356,11 +2356,27 @@ async fn every_newly_covered_town_npc_actually_fights() {
         // damage in vanilla (see town_combat's own module doc), so there is no damage to wait
         // for — asserting a health drop here would wait forever on a real vanilla behaviour.
         let mut hurt = npc_type == 20;
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
-        while (!landed || !fired || !hurt) && tokio::time::Instant::now() < deadline {
+        // **Budgeted in events observed, not in seconds.** This was a twenty-second wall clock and
+        // it was the last flake of that shape in the suite: it fails on a *different* NPC each time
+        // (453, 453, 588 across four observations, and 588's ball is an AI style nothing has ever
+        // touched), two runs in three pass, and the failing run finishes in 78 seconds against 390
+        // for a passing one - it bails early rather than losing a shot. A busy machine does not make
+        // a town NPC miss, it makes every tick take longer in wall-clock terms, so counting seconds
+        // measures the machine and not the server.
+        //
+        // Every event received is evidence the server got somewhere, so the budget is a count of
+        // them. The liveness check is still real and still bounded: `alice`'s own per-event timeout
+        // (set above) fires if the server goes quiet, and `next_event` erroring breaks the loop.
+        // The size covers the worst cadence in the roster by a wide margin - the Dryad's
+        // `AttackTime` is 600 ticks and her gate another 60, and NPC syncs arrive every sixth tick,
+        // so a few hundred events is already several attack cycles.
+        const EVENT_BUDGET: usize = 4_000;
+        let mut seen = 0usize;
+        while (!landed || !fired || !hurt) && seen < EVENT_BUDGET {
             let Ok(event) = alice.next_event().await else {
                 break;
             };
+            seen += 1;
             match event {
                 Event::NpcSynced(n) if n.index == npc.index && n.velocity.1 == 0.0 => {
                     landed = true;

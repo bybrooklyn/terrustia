@@ -832,9 +832,19 @@ over effort; the first three are roughly a day each.
       function at all.
 
    **12 of 12 under the same saturation that failed 1 in 6**, so this one is closed rather than
-   bounded. The same "observe the server, do not race it" treatment is what
-   `every_newly_covered_town_npc_actually_fights` still wants: its twenty-second per-NPC deadline is
-   the last of this shape in the suite.
+   bounded. Steps 3 and 4 each looked like the fix on their own and were not, which is why every
+   step was re-measured: 1 in 6, then 1 in 6, then 1 in 4, then 1 in 12, then 0 in 12.
+
+   **`every_newly_covered_town_npc_actually_fights` is closed too, with the same recipe.** Its
+   twenty-second per-NPC wall clock is now a budget of *events observed*, because a busy machine
+   does not make a town NPC miss - it makes every tick take longer, so counting seconds measured the
+   machine rather than the server. The diagnosis is in the test: it failed on a different NPC each
+   time (453, 453, 588, and 588's ball is an AI style nothing has ever touched), two runs in three
+   passed, and the failing run finished in 78 seconds against 390 for a passing one, which is
+   bailing early rather than losing a shot. `alice`'s own per-event timeout is still the liveness
+   check, so a genuinely dead server still fails fast. **5 of 5 under load.**
+
+   That was the last wall-clock deadline of this shape in the suite.
 
    **One dead end is worth keeping** because it looked like a blocker and is not. The first version
    of the wait watched for `world saved`, and no such line ever appears: a fast autosave logs at
