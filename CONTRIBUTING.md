@@ -49,17 +49,27 @@ embedded.
 `terrustia-proto` ships tables extracted from the game (which tiles hurt, what each NPC drops, and so
 on). They are generated from a local decompiled tree that never ships, by `terrustia-codegen`
 (`just regen`). The tree is `ilspycmd` output of `TerrariaServer.exe`; see `docs/generated-tables.md`.
-The Python `check_*` scripts (`just check-drops`, `just check-recipes`) validate the tables in CI and
-are the one place Python remains.
+The Python `check_*` scripts (`just check-drops`, `just check-recipes` and the rest of
+`just check-data`) validate the tables **locally, before a release candidate**. They cannot run in
+CI: they need the decompiled tree, which must never reach a hosted runner. `tools/packet_audit.py`
+is the one Python check CI does run, because it reads only this repository.
 
 ### Checking against the real game
 
 Because this is a reimplementation, the strongest checks compare it to the real game rather than to
-itself. The `terrustia-client` examples do that: `probe` dumps and compares the packet sequence,
-`verify` joins and confirms things move, shoot, hurt and drop loot, `stress` and `soak` hold the
-world full under load, `bot` walks a client east to compare against vanilla, and `fuzz` throws
-malformed packets at a running server. `just conform` and `just roundtrip` check a save against a
-real `TerrariaServer`. For a protocol or gameplay change, run the relevant one against real Terraria.
+itself. The examples do that, and they are split across both crates, so each needs its own `-p`:
+`probe` (in `terrustia`) dumps and compares the packet sequence, `verify` (in `terrustia-client`)
+joins and confirms things move, shoot, hurt and drop loot, `stress` (`terrustia`) and `soak`
+(`terrustia-client`) hold the world full under load, `bot` walks a client east to compare against
+vanilla, and `fuzz` (`terrustia`) throws malformed packets at a running server. There is no
+`just conform` or `just roundtrip` recipe; they are examples too:
+
+```sh
+cargo run --release -p terrustia-client --example conform -- 127.0.0.1:7930 real.trcap
+cargo run --release -p terrustia --example roundtrip_wld -- input.wld /tmp/out.wld
+```
+
+For a protocol or gameplay change, run the relevant one against real Terraria.
 
 ### Conventions
 
