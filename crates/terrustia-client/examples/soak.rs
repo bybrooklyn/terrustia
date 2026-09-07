@@ -3,7 +3,16 @@
 //!
 //! ```text
 //! cargo run --release --example soak -- 127.0.0.1:7777 180
+//! cargo run --release --example soak -- 127.0.0.1:7777 1800 0 soak 255
 //! ```
+//!
+//! The fifth argument is how many players to be. They are ordinary connections held as tasks on one
+//! runtime rather than one process each, which is the difference between a 255-player run costing
+//! about 3.5 GB of client and costing a fraction of that. That number is not a guess: a single soak
+//! process was measured at 13.7 MiB resident (24 of them, 328 MiB), nearly all of it per-process
+//! overhead rather than per-connection state, and 255 of those needed more memory for the test rig
+//! than the server under test was allowed to use. Two 255-player runs were killed by the operating
+//! system's memory watchdog before the hold finished, which measures the harness and not the server.
 
 use std::{env, process::ExitCode, time::Duration};
 
@@ -27,20 +36,82 @@ async fn main() -> ExitCode {
     // must each be given their own — otherwise only the first joins and the rest exit failing,
     // silently reducing a "three real players" soak to one. Defaults to "soak" for a lone run.
     let name = env::args().nth(4).unwrap_or_else(|| "soak".to_string());
+    let count: usize = env::args()
+        .nth(5)
+        .and_then(|s| s.parse().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(1);
     let Ok(addr) = addr.parse() else {
         eprintln!("bad address");
         return ExitCode::FAILURE;
     };
-    let mut client = match Client::join(addr, &name).await {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("could not join as {name:?}: {e}");
-            return ExitCode::FAILURE;
+
+    // One client keeps the name and depth it was given, so every existing caller (soak_ci.sh, a
+    // hand-run single soak) behaves exactly as before. Only the multi-client form derives them.
+    if count == 1 {
+        return match hold(addr, seconds, depth, name.clone()).await {
+            Ok(held) => {
+                println!("done after {held:?}");
+                ExitCode::SUCCESS
+            }
+            Err(why) => {
+                eprintln!("{why}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
+    println!("joining {count} clients for {seconds}s");
+    let mut tasks = Vec::with_capacity(count);
+    for i in 1..=count {
+        // Spread the clients down the column the way the shell harness used to, so they stream
+        // different sections instead of all sitting in one.
+        let depth = ((i % 60) * 8 + 200) as f32;
+        let name = format!("{name}{i}");
+        tasks.push(tokio::spawn(async move {
+            hold(addr, seconds, depth, name).await
+        }));
+    }
+
+    let mut ok = 0usize;
+    let mut failed = 0usize;
+    for (i, task) in tasks.into_iter().enumerate() {
+        match task.await {
+            Ok(Ok(_)) => ok += 1,
+            Ok(Err(why)) => {
+                failed += 1;
+                eprintln!("client {}: {why}", i + 1);
+            }
+            Err(e) => {
+                failed += 1;
+                eprintln!("client {}: task panicked: {e}", i + 1);
+            }
         }
-    };
+    }
+
+    println!("held {ok} / {count} for {seconds}s ({failed} lost)");
+    if failed > 0 {
+        return ExitCode::FAILURE;
+    }
+    ExitCode::SUCCESS
+}
+
+/// One player: join, wander, and stay on until the hold is up. `Err` carries why the connection
+/// ended early, which is the thing worth reporting.
+async fn hold(
+    addr: std::net::SocketAddr,
+    seconds: u64,
+    depth: f32,
+    name: String,
+) -> Result<Duration, String> {
+    let mut client = Client::join(addr, &name)
+        .await
+        .map_err(|e| format!("could not join as {name:?}: {e}"))?;
     client.set_timeout(Duration::from_millis(50));
     let (sx, sy) = client.position();
-    println!("joined at ({sx}, {sy}); soaking for {seconds}s");
+    // Per client, not per process: `soak_ci.sh` greps each client's log for "joined at" and counts a
+    // missing line as a failure, precisely so a run that quietly became a one-player run cannot pass.
+    println!("{name} joined at ({sx}, {sy}); soaking for {seconds}s");
 
     let started = Instant::now();
     let mut step = 0i32;
@@ -99,13 +170,11 @@ async fn main() -> ExitCode {
         sleep(Duration::from_millis(30)).await;
     }
 
-    if let Some(why) = dropped {
-        eprintln!(
+    match dropped {
+        Some(why) => Err(format!(
             "dropped after {:?} of the {seconds}s hold: {why}",
             started.elapsed()
-        );
-        return ExitCode::FAILURE;
+        )),
+        None => Ok(started.elapsed()),
     }
-    println!("done after {:?}", started.elapsed());
-    ExitCode::SUCCESS
 }

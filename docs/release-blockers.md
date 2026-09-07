@@ -42,7 +42,7 @@ citation no longer does.
 | Zero unknown protocol IDs | MET | `docs/packet-ids.tsv` has no `unknown` row and no row that is `none`/`none` |
 | Fuzzing green | MET | `fuzz/artifacts/` is empty; both targets run per-push in CI |
 | p99 tick under the 16.67 ms budget at 255 players | MET | `TODO.md`'s soak table, four runs, with a neutralised control run proving the `BiomeCache` cap is what holds it |
-| **Peak RSS under 1 GiB at 255 players** | **PARTIALLY RE-MEASURED 2026-09-06; the full 30-minute hold is still not done** | Two runs at the full 255 since the queue budget landed, reaching 14:43 and 12:19 of the required 30:00 before the machine's memory watchdog killed the *harness*. Peaks 562 and 296 MiB against the 1 GiB ceiling, both falling after about six minutes, both taking a clean shutdown save under full load. Encouraging and not sufficient: the clause says thirty minutes. See "The memory ceiling" below for why it could not finish here |
+| **Peak RSS under 1 GiB at 255 players** | **MET 2026-09-06** | A full 30-minute hold at 255 players, all 255 held to the end and none shed. Peak 158 MiB against the 1 GiB ceiling, oscillating between 64 and 158 and ending below its start rather than climbing. It took fixing the harness to measure: two earlier runs died at 14:43 and 12:19 because the old one-process-per-player rig needed ~3.5 GB before the server allocated anything. A ceiling result, not a leak-freedom result. See "The memory ceiling" below |
 | Differential against a real `TerrariaServer` | RUN 2026-09-05, passed on what it covers | 66,542 bytes of Re-Logic's own output re-framed with nothing left over; every id with an encoder re-encoded byte-identically, including all 15 `TileSection` frames. Coverage is partial by construction; see "The differential" below |
 | Test suite on every release platform | MET, 2026-09-05 | The three host-native matrix entries now run the suite for real. Closing it cost four bug fixes; see "What running the tests on Windows found" below |
 | Human fresh-world Moon Lord playthrough | NOT RUN | Waivable by `TODO.md`'s own wording, but only "if the automated and differential evidence is otherwise complete", and the two rows above say it is not |
@@ -129,6 +129,32 @@ nothing here suggests the server has a memory problem, and two runs at full play
 opposite. Closing it needs either about 4 GB of headroom on the box, or a soak client that holds
 many connections in one process instead of one each - the latter being the change that would make
 this clause measurable on an ordinary machine rather than only on an empty one.
+
+### Met 2026-09-06: the rig was fixed, and the hold finished
+
+The second option was taken. `examples/soak.rs` gained a player count and holds each player as a task
+on one runtime; `soak_scale.sh` launches one process rather than 255. The per-process overhead that
+dominated the old figure is paid once instead of 255 times: at 24 players the rig went from 328 MiB
+to about 40, and at 255 it peaks at 465 MiB where the fan-out needed roughly 3.5 GB.
+
+With the rig no longer competing with the thing it measures, the 30-minute hold ran to completion on
+the first attempt:
+
+| t (s) | 0 | 120 | 240 | 360 | 480 | 600 | 720 | 840 | 960 | 1080 | 1200 | 1320 | 1440 | 1560 | 1680 | 1800 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| server RSS (MiB) | 95 | 77 | 77 | 158 | 94 | 158 | 149 | 149 | 158 | 117 | 149 | 132 | 66 | 64 | 64 | 65 |
+
+**Peak 158 MiB against the 1 GiB ceiling**, over a full 30 minutes at 255 players, with all 255
+holding to the end and none shed by the server. The curve oscillates between roughly 64 and 158 MiB
+and ends below where it started, which is the plateau shape the clause asks for and not a leak. The
+tick bar was met in the same run (179 samples, median 2314 us, p99 4934 us against a 16667 us
+budget), the world saved clean on shutdown, and the box logged 2 external stalls.
+
+Two things this does not claim. Thirty minutes cannot separate a slow leak from burst working set, so
+this is a ceiling result and leak freedom belongs to the extended pre-release soak, exactly as
+`soak_scale.sh`'s own comment says. And the earlier runs are not retroactively passes: they measured
+a server that behaved well while the harness died around it, which is a different statement from a
+hold that finished.
 
 ## The differential
 

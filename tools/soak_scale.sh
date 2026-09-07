@@ -72,28 +72,34 @@ MEM_START=$(rss_kib "$SRV")
 echo "server ready; RSS at start: $((MEM_START/1024)) MiB"
 
 echo "=== launching $PLAYERS clients in one burst for ${HOLD}s ==="
-CPIDS=()
-for i in $(seq 1 "$PLAYERS"); do
-  depth=$(( (i % 60) * 8 + 200 ))
-  "$SOAK" "127.0.0.1:$PORT" "$HOLD" "$depth" "soak$i" > "$WORK/c$i.log" 2>&1 &
-  CPIDS+=($!)
-done
-echo "all $PLAYERS clients launched"
+# One process holding every connection as a task, rather than one process per player. The fan-out
+# version cost about 13.7 MiB per client process (measured: 24 of them, 328 MiB), nearly all of it
+# per-process overhead, so a 255-player run needed roughly 3.5 GB of test rig before the server
+# under test allocated anything. That is what killed two 255-player runs on 2026-09-06: the
+# operating system's memory watchdog took the process group at 14:43 and 12:19 of a 30-minute hold,
+# while the server itself was peaking at 562 and 296 MiB against a 1 GiB ceiling. The harness was
+# the thing being measured. The client spreads its own players down the column, so the depth
+# argument is unused here.
+"$SOAK" "127.0.0.1:$PORT" "$HOLD" 0 soak "$PLAYERS" > "$WORK/clients.log" 2>&1 &
+CPID=$!
+echo "all $PLAYERS clients launched (one process, pid $CPID)"
 
 # Sample the server's RSS every two minutes across the hold, so a leak shows as a rising curve
 # rather than a single end number.
 : > "$WORK/mem.log"
 ( t=0
   while kill -0 "$SRV" 2>/dev/null; do
-    echo "t=$(printf '%5d' "$t")s  RSS=$(( $(rss_kib "$SRV")/1024 )) MiB"
+    echo "t=$(printf '%5d' "$t")s  RSS=$(( $(rss_kib "$SRV")/1024 )) MiB  rig=$(( $(rss_kib "$CPID")/1024 )) MiB"
     sleep 120; t=$((t+120))
   done ) >> "$WORK/mem.log" 2>&1 &
 SAMPLER=$!
 
-ok=0; kicked=0
-for pid in "${CPIDS[@]}"; do
-  if wait "$pid"; then ok=$((ok+1)); else kicked=$((kicked+1)); fi
-done
+wait "$CPID"
+# The client process prints its own tally and prints it whether or not it exits zero, so read the
+# line rather than inferring a count from one exit code covering every player.
+ok=$(grep -oE 'held [0-9]+' "$WORK/clients.log" | grep -oE '[0-9]+' | tail -1)
+ok="${ok:-0}"
+kicked=$((PLAYERS - ok))
 kill "$SAMPLER" 2>/dev/null
 MEM_END=$(rss_kib "$SRV")
 
