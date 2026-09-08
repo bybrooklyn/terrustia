@@ -46,6 +46,7 @@ pub mod liquid_settle;
 pub mod living_trees;
 pub mod manifest;
 pub mod micro_biomes;
+pub mod mining_explosives;
 pub mod moss;
 pub mod oasis;
 pub mod passes;
@@ -152,6 +153,8 @@ pub struct Built {
     pub thin_ice: usize,
     /// Surface dune fields: rolling sand hills over the desert instead of a flat shelf.
     pub dune_fields: usize,
+    /// Rigged ore veins: explosives wired to a detonator. Zero under No Traps World.
+    pub rigged_veins: usize,
     /// Enchanted Sword shrines: a flooded, vine-hung cavity with a sword in a dirt mound.
     pub sword_shrines: usize,
     /// Ebonstone sinkholes with a hollow core, Corruption-only.
@@ -475,6 +478,11 @@ pub fn build_with_secret_seed(
     // pass; it is a separate call here only because it is a separate module.
     let sword_shrines = enchanted_sword::scatter(&mut world, &plan, &mut structures, &mut rand);
 
+    // Rigged ore veins: explosives wired to a detonator. Vanilla runs these in the same block, and
+    // skips them entirely under No Traps World, which this honours.
+    let rigged_veins =
+        mining_explosives::scatter(&mut world, &plan, &mut structures, &mut rand, honoured);
+
     // Pots, statues, piles and fallen logs: the small object-placement passes built on
     // `place_object`. Ground-truth loot and decoration that makes a cave look excavated rather
     // than merely hollow.
@@ -630,6 +638,7 @@ pub fn build_with_secret_seed(
         cloud_lakes: floating_islands.lakes,
         thin_ice: micro_biomes.thin_ice,
         dune_fields,
+        rigged_veins,
         sword_shrines,
         corruption_pits: micro_biomes.corruption_pits,
         spike_pits: micro_biomes.spike_pits,
@@ -1038,6 +1047,16 @@ mod tests {
             }
         }
         assert!(total > 0, "no sword shrine placed across four full worlds");
+        // Same claim for the rigged veins, which share the pipeline and the same silent-absence
+        // failure mode.
+        let (veins_world, veins_built) = build(SMALL_WIDTH, SMALL_HEIGHT, "rigged veins", 11);
+        assert!(veins_built.rigged_veins > 0, "no rigged ore vein placed");
+        let detonators = (0..veins_world.width()).step_by(2).any(|x| {
+            (0..veins_world.height())
+                .step_by(2)
+                .any(|y| veins_world.tile(x, y).block == 411)
+        });
+        assert!(detonators, "veins placed but no detonator wired to any");
         assert!(
             swords > 0,
             "shrines placed but no Enchanted Sword tile in any"

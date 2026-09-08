@@ -1499,7 +1499,7 @@ roster asked at neutral luck alone would keep reporting it unreachable for ever.
 1. **v0.0.2, the worldgen release**: the seven remaining secret seeds' generation content (Not the
    Bees, Drunk World, Remix, Celebrationmk10, "get fixed boi", Don't Starve, Skyblock; Don't
    Starve alone touches 53+ scattered branch points across nearly the whole of `WorldGen.cs`, and
-   the others are comparable or larger) and the 5 of 15 remaining micro-biomes. The six deferred
+   the others are comparable or larger) and the 4 of 15 remaining micro-biomes. The six deferred
    drop-table gaps ride along: five need Remix's own generation content, the sixth is the
    documented npc-44 nested-fallback shape.
 
@@ -1516,7 +1516,6 @@ roster asked at neutral luck alone would keep reporting it unreachable for ever.
    | class | what it still needs on top of `genpipe` |
    |---|---|
    | `MahoganyTreeBiome` (94) | a second tree-growth engine (`ShapeBranch`/`ShapeRoot`) |
-   | `MiningExplosivesBiome` (85) | a wandering tunnel (`ShapeRunner`) and `WorldUtils.WireLine` |
    | `HiveBiome` (425) | its own pocket/stalactite carving, plus the `Beehives` world pass |
    | `DeadMansChestBiome` (626) | a trappable-chest mechanism and `DitherSnake` (~500 more lines) |
    | `DesertBiome` (72) | the whole `Terraria.GameContent.Biomes.Desert` sub-namespace it dispatches to |

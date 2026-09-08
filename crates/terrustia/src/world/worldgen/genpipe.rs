@@ -47,7 +47,7 @@
 
 use std::collections::HashMap;
 
-use terrustia_proto::{Liquid, Tile, TileFlags};
+use terrustia_proto::{Liquid, Tile, TileFlags, tile_solid};
 
 use super::rand::UnifiedRandom;
 use super::shape_data::ShapeData;
@@ -67,6 +67,8 @@ pub struct Ctx<'a> {
     /// Where `TileScanner` accumulates. Vanilla passes a dictionary per scanner; only one scanner
     /// is ever live at a time in the biomes ported here, so one map is enough.
     scan: HashMap<u16, i32>,
+    /// `Actions.Scanner`'s counters. Vanilla hands each one a `Ref<int>`.
+    counters: Vec<i32>,
 }
 
 impl<'a> Ctx<'a> {
@@ -76,6 +78,7 @@ impl<'a> Ctx<'a> {
             rand,
             out: Vec::new(),
             scan: HashMap::new(),
+            counters: Vec::new(),
         }
     }
 
@@ -106,6 +109,16 @@ impl<'a> Ctx<'a> {
     /// The count `TileScanner` accumulated for one tile id, zero if it saw none.
     pub fn scan_count(&self, id: u16) -> i32 {
         self.scan.get(&id).copied().unwrap_or(0)
+    }
+
+    /// Reserve a counter for `Actions.Scanner`.
+    pub fn counter(&mut self) -> usize {
+        self.counters.push(0);
+        self.counters.len() - 1
+    }
+
+    pub fn counted(&self, slot: usize) -> i32 {
+        self.counters[slot]
     }
 }
 
@@ -186,6 +199,11 @@ pub enum Action {
     /// `ActionGrass` (`Terraria.GameContent.Generation/ActionGrass.cs`). Places grass or its
     /// jungle counterpart on an empty tile with empty space above.
     Grass,
+    /// `Modifiers.IsSolid` (`Modifiers.cs:551-561`): pass only on an active, solid tile.
+    IsSolid,
+    /// `Actions.Scanner` (`Actions.cs:44-58`): count the units that reach it, into a counter slot.
+    /// Vanilla passes a `Ref<int>`; a slot index says the same thing without the shared borrow.
+    Scanner(usize),
 }
 
 /// Run a chain from its head. `true` when nothing in it failed.
@@ -375,6 +393,19 @@ fn apply(
                 false
             }
         }
+        Action::IsSolid => {
+            let t = ctx.world.tile(x, y);
+            if t.is_active() && tile_solid::solid(t.block) {
+                unit_apply(link, rest, ctx, origin, x, y)
+            } else {
+                false
+            }
+        }
+        Action::Scanner(slot) => {
+            let slot = *slot;
+            ctx.counters[slot] += 1;
+            unit_apply(link, rest, ctx, origin, x, y)
+        }
         Action::Grass => {
             if ctx.world.tile(x, y).is_active() || ctx.world.tile(x, y - 1).is_active() {
                 return false;
@@ -407,6 +438,14 @@ pub enum Shape {
     },
     /// `Shapes.Circle` (`:7-48`).
     Circle { h_radius: i32, v_radius: i32 },
+    /// `ShapeRunner` (`Terraria.GameContent.Generation/ShapeRunner.cs`, 98 lines): a blob that
+    /// wanders under a drifting velocity while shrinking, which is how vanilla digs a tunnel that
+    /// looks dug rather than drawn.
+    Runner {
+        strength: f64,
+        steps: i32,
+        velocity: (f64, f64),
+    },
     /// `Shapes.Slime` (`:88-141`): a rounded dome over a shallower lower half.
     Slime {
         radius: i32,
@@ -419,6 +458,35 @@ pub enum Shape {
     All(ShapeData),
     /// `ModShapes.InnerOutline` (`:67-104`): the points of a shape that touch its edge.
     InnerOutline(ShapeData),
+}
+
+/// `Utils.RandomVector2D(random, min, max)`. Two draws, x then y - the order matters.
+fn random_vector(rand: &mut UnifiedRandom, min: f64, max: f64) -> (f64, f64) {
+    let x = rand.next_double() * (max - min) + min;
+    let y = rand.next_double() * (max - min) + min;
+    (x, y)
+}
+
+/// `WorldUtils.WireLine` (`WorldUtils.cs:111-131`): an L of red wire from `start` to `end`,
+/// horizontal along the start's row and vertical down the end's column.
+pub fn wire_line(world: &mut World, start: (i32, i32), end: (i32, i32)) {
+    let (x0, x1) = (start.0.min(end.0), start.0.max(end.0));
+    let (y0, y1) = (start.1.min(end.1), start.1.max(end.1));
+    for x in x0..=x1 {
+        place_wire(world, x, start.1);
+    }
+    for y in y0..=y1 {
+        place_wire(world, end.0, y);
+    }
+}
+
+fn place_wire(world: &mut World, x: i32, y: i32) {
+    if !world.in_bounds(x, y) {
+        return;
+    }
+    let mut t = world.tile(x, y);
+    t.flags = TileFlags(t.flags.0 | TileFlags::WIRE_RED);
+    world.set_tile(x, y, t);
 }
 
 /// The eight neighbour offsets `ModShapes` uses, in vanilla's own order.
@@ -438,7 +506,38 @@ const POINT_OFFSETS: [(i32, i32); 8] = [
 /// `quit_on_fail` is vanilla's `GenShape.QuitOnFail`, off by default: a chain that rejects a unit
 /// normally just moves on to the next one.
 pub fn gen_shape(ctx: &mut Ctx, origin: (i32, i32), shape: &Shape, chain: &mut [Link]) -> bool {
-    gen_inner(ctx, origin, shape, chain, false)
+    gen_inner(ctx, origin, shape, chain, None, false)
+}
+
+/// `WorldUtils.Gen(origin, shape.Output(data), action)`: as [`gen_shape`], and the shape also
+/// records every unit it visits into `slot`, whatever the chain then does with it.
+///
+/// This is vanilla's `GenShape.Output` (`GenShape.cs:22-26`), which records in `UnitApply` before
+/// the action runs - so a unit the chain rejects is still in the shape.
+pub fn gen_shape_out(
+    ctx: &mut Ctx,
+    origin: (i32, i32),
+    shape: &Shape,
+    chain: &mut [Link],
+    slot: usize,
+) -> bool {
+    gen_inner(ctx, origin, shape, chain, Some(slot), false)
+}
+
+/// `GenShape.UnitApply` (`GenShape.cs:14-21`): record into the shape's own output, then run the
+/// action chain.
+fn shape_unit(
+    chain: &mut [Link],
+    ctx: &mut Ctx,
+    out: Option<usize>,
+    origin: (i32, i32),
+    x: i32,
+    y: i32,
+) -> bool {
+    if let Some(slot) = out {
+        ctx.out[slot].add(x - origin.0, y - origin.1);
+    }
+    run(chain, ctx, origin, x, y)
 }
 
 fn gen_inner(
@@ -446,6 +545,7 @@ fn gen_inner(
     origin: (i32, i32),
     shape: &Shape,
     chain: &mut [Link],
+    out: Option<usize>,
     quit_on_fail: bool,
 ) -> bool {
     let (ox, oy) = origin;
@@ -458,7 +558,7 @@ fn gen_inner(
         } => {
             for i in (ox + left)..(ox + left + width) {
                 for j in (oy + top)..(oy + top + height) {
-                    if !run(chain, ctx, origin, i, j) && quit_on_fail {
+                    if !shape_unit(chain, ctx, out, origin, i, j) && quit_on_fail {
                         return false;
                     }
                 }
@@ -470,10 +570,59 @@ fn gen_inner(
                 let scaled = f64::from(*h_radius) / f64::from(*v_radius) * f64::from(i - oy);
                 let half = (*h_radius).min((f64::from(num) - scaled * scaled).sqrt() as i32);
                 for j in (ox - half)..=(ox + half) {
-                    if !run(chain, ctx, origin, j, i) && quit_on_fail {
+                    if !shape_unit(chain, ctx, out, origin, j, i) && quit_on_fail {
                         return false;
                     }
                 }
+            }
+        }
+        Shape::Runner {
+            strength,
+            steps,
+            velocity,
+        } => {
+            let mut remaining = f64::from(*steps);
+            let total = f64::from(*steps);
+            let mut power = *strength;
+            let mut at = (f64::from(ox), f64::from(oy));
+            // Vanilla rolls a random direction only when none was given.
+            let mut vel = if *velocity == (0.0, 0.0) {
+                random_vector(ctx.rand, -1.0, 1.0)
+            } else {
+                *velocity
+            };
+            while remaining > 0.0 && power > 0.0 {
+                power = strength * (remaining / total);
+                remaining -= 1.0;
+                let x0 = 1.max((at.0 - power * 0.5) as i32);
+                let y0 = 1.max((at.1 - power * 0.5) as i32);
+                let x1 = ctx.world.width().min((at.0 + power * 0.5) as i32);
+                let y1 = ctx.world.height().min((at.1 + power * 0.5) as i32);
+                for i in x0..x1 {
+                    for j in y0..y1 {
+                        // The jitter term is drawn per tile, so the blob's edge is ragged. It is
+                        // also why this shape consumes far more RNG than its size suggests.
+                        let wobble = 1.0 + f64::from(ctx.rand.next_range(-10, 11)) * 0.015;
+                        if (f64::from(i) - at.0).abs() + (f64::from(j) - at.1).abs()
+                            < power * 0.5 * wobble
+                        {
+                            shape_unit(chain, ctx, out, origin, i, j);
+                        }
+                    }
+                }
+                let stride = (power / 50.0) as i32 + 1;
+                remaining -= f64::from(stride);
+                at = (at.0 + vel.0, at.1 + vel.1);
+                for _ in 0..stride {
+                    at = (at.0 + vel.0, at.1 + vel.1);
+                    let d = random_vector(ctx.rand, -0.5, 0.5);
+                    vel = (vel.0 + d.0, vel.1 + d.1);
+                }
+                let d = random_vector(ctx.rand, -0.5, 0.5);
+                vel = (
+                    (vel.0 + d.0).clamp(-1.0, 1.0),
+                    (vel.1 + d.1).clamp(-1.0, 1.0),
+                );
             }
         }
         Shape::Slime {
@@ -487,7 +636,7 @@ fn gen_inner(
                 let d = f64::from(i - oy) / y_scale;
                 let half = (r * x_scale).min(x_scale * (f64::from(num2) - d * d).sqrt()) as i32;
                 for j in (ox - half)..=(ox + half) {
-                    if !run(chain, ctx, origin, j, i) && quit_on_fail {
+                    if !shape_unit(chain, ctx, out, origin, j, i) && quit_on_fail {
                         return false;
                     }
                 }
@@ -496,7 +645,7 @@ fn gen_inner(
                 let d = f64::from(k - oy) * (2.0 / y_scale);
                 let half = (r * x_scale).min(x_scale * (f64::from(num2) - d * d).sqrt()) as i32;
                 for l in (ox - half)..=(ox + half) {
-                    if !run(chain, ctx, origin, l, k) && quit_on_fail {
+                    if !shape_unit(chain, ctx, out, origin, l, k) && quit_on_fail {
                         return false;
                     }
                 }
@@ -511,7 +660,7 @@ fn gen_inner(
                         * (f64::from(i) - w)) as i32,
                 );
                 for j in 0..columns {
-                    if !run(chain, ctx, origin, i + ox, oy - j) && quit_on_fail {
+                    if !shape_unit(chain, ctx, out, origin, i + ox, oy - j) && quit_on_fail {
                         return false;
                     }
                 }
@@ -519,7 +668,7 @@ fn gen_inner(
         }
         Shape::All(data) => {
             for (dx, dy) in data.iter() {
-                if !run(chain, ctx, origin, dx + ox, dy + oy) && quit_on_fail {
+                if !shape_unit(chain, ctx, out, origin, dx + ox, dy + oy) && quit_on_fail {
                     return false;
                 }
             }
@@ -529,7 +678,8 @@ fn gen_inner(
                 let on_edge = POINT_OFFSETS
                     .iter()
                     .any(|(px, py)| !data.contains(dx + px, dy + py));
-                if on_edge && !run(chain, ctx, origin, dx + ox, dy + oy) && quit_on_fail {
+                if on_edge && !shape_unit(chain, ctx, out, origin, dx + ox, dy + oy) && quit_on_fail
+                {
                     return false;
                 }
             }
