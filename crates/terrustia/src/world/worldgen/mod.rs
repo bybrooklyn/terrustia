@@ -987,25 +987,39 @@ mod tests {
     /// The six flags that describe *behaviour* rather than shape are untouched, so "get fixed boi"
     /// still gets everything this server can actually do.
     #[test]
-    fn a_generated_world_does_not_claim_a_shape_it_does_not_have() {
+    fn a_generated_world_only_claims_a_shape_its_tiles_actually_have() {
+        // This test used to assert the opposite: that `remixWorld` was never claimed, because
+        // nothing here mirrored the world. Twelve Remix sites later the tiles do have the shape, so
+        // the claim is made - and this checks the claim against the evidence in the same test,
+        // which is stronger than either half alone. A flag that outruns its tiles fails here.
         for text in ["dontdigup", "getfixedboi"] {
             let (world, _) = build_from_text(1600, 700, "text", text);
             assert!(
-                !world.secret_seeds.remix,
-                "{text}: an ordinary world must not be announced as a Remix one"
-            );
-            assert!(
-                !world.secret_seeds.everything,
-                "{text}: and zenith is the combination, remix included"
+                world.secret_seeds.remix,
+                "{text}: remix is generated now, so it should be claimed"
             );
             let flags = world.world_data().flags;
             assert!(
-                !flags.has_flag(terrustia_proto::packets::WorldFlag::RemixWorld),
-                "{text}: and the wire must not carry the claim either"
+                flags.has_flag(terrustia_proto::packets::WorldFlag::RemixWorld),
+                "{text}: and the wire should carry it"
+            );
+
+            // The evidence. Each of these is a structural property a client told `remixWorld`
+            // depends on, and each has its own test elsewhere; this is the claim being audited
+            // against them together.
+            let rock = i32::from(world.rock_layer);
+            assert!(
+                rock > 700 * 45 / 100,
+                "{text}: a claimed remix world needs its rock layer driven deep, got {rock}"
+            );
+            assert!(
+                i32::from(world.spawn_y) > rock,
+                "{text}: and the player spawning below it, got {}",
+                world.spawn_y
             );
         }
-        // What "get fixed boi" can still honestly turn on.
         let (world, _) = build_from_text(1600, 700, "text", "getfixedboi");
+        assert!(world.secret_seeds.everything, "zenith is claimable now too");
         assert!(world.secret_seeds.no_traps);
         assert!(world.secret_seeds.drunk);
         assert!(world.secret_seeds.dont_starve);

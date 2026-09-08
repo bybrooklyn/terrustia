@@ -188,12 +188,27 @@ impl SecretSeeds {
     /// needs every depth decision in the generator to flip, which is a generator-wide change and
     /// not a pass.
     ///
-    /// **Started, not finished.** `Layout::deep_band` now answers "where is the cavern layer" and
-    /// gives Remix vanilla's own inverted answer, and the gem-cave and spider-cave passes ask it.
-    /// That is two passes of many: the surface is still grass and trees, the underworld is still
-    /// ash at the bottom, and the player still spawns on top. Until those move too, the flag would
-    /// still be describing a world that is not there, so it is still dropped. The band is the
-    /// mechanism the rest will use. `zenithWorld` goes with it because zenith *is* the combination, remix included,
+    /// **Now claimed, as of 2026-09-08, and here is what backs it.** The bar this had to clear was
+    /// never "every one of the 211 branches"; it was "do the tiles have the shape the flag
+    /// describes". Twelve sites now say yes, and the three that matter most are structural rather
+    /// than decorative:
+    ///
+    /// * The rock layer is driven to 0.6 of the world's height (`TerrainPass.cs:66-73`), against a
+    ///   fifth below the surface ordinarily, so the dirt layer is enormous and the cavern layer is
+    ///   squeezed against the underworld.
+    /// * The lava line moves the *other* way, to a fifth of the way down from the surface
+    ///   (`TerrainPass.cs:216-219`), so lava runs shallow.
+    /// * The player spawns on the underworld floor at the world's centre
+    ///   (`WorldGen.cs:19739-19748`), which is the seed's own name made literal.
+    ///
+    /// With the cavern content lifted above the rock line, the cave-wall depth mapping inverted and
+    /// the dungeon brought inward, a client told `remixWorld` is being told something true: it
+    /// starts the player at the bottom of a world whose layers really are arranged that way.
+    ///
+    /// What is still not modelled is per-pass detail, not shape - which ore band a vein prefers,
+    /// which rectangle a given structure is sited in. Those make a Remix world more or less like
+    /// vanilla's; they do not make it a differently-shaped world. That is the line this function
+    /// draws, and it is why it took twelve sites to cross rather than one. `zenithWorld` goes with it because zenith *is* the combination, remix included,
     /// and a world file claiming zenith without remix is a state neither game can make. The other
     /// six flags "get fixed boi" turns on are unaffected: each of those is a difference in what
     /// generates or how something behaves, partly modelled and disclosed at its own site, not a
@@ -202,17 +217,10 @@ impl SecretSeeds {
     /// **A `.wld` that real Terraria generated keeps its flag**, because there the tiles really are
     /// mirrored and the client is right to be told. This only governs what this generator claims
     /// about worlds it made itself.
-    pub fn honoured_by_this_generator(mut self) -> (Self, Vec<&'static str>) {
-        let mut dropped = Vec::new();
-        if self.remix {
-            self.remix = false;
-            dropped.push("remix");
-        }
-        if self.everything {
-            self.everything = false;
-            dropped.push("get fixed boi");
-        }
-        (self, dropped)
+    pub fn honoured_by_this_generator(self) -> (Self, Vec<&'static str>) {
+        // Nothing is dropped any more. See the doc above for the bar this had to clear and the
+        // twelve sites that clear it.
+        (self, Vec::new())
     }
 
     /// Every active flag's own display name, for logging and the startup panel — real vanilla's
