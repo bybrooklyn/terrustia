@@ -767,7 +767,7 @@ pub fn build_with_secret_seed(
     // structure pass has laid its tiles down and before the cosmetic tail, which is the point the
     // repeated calls converge on. `FinishNotTheBees` turns the water to honey at the very end.
     if honoured.not_the_bees {
-        not_the_bees::convert(&mut world, &plan, &mut rand);
+        not_the_bees::convert(&mut world, &plan, &mut rand, honoured);
     }
 
     let quick_cleanup = tile_cleanup::quick_cleanup(&mut world, &plan);
@@ -812,7 +812,7 @@ pub fn build_with_secret_seed(
     // `FinishTenthAnniversaryWorld`: Celebrationmk10 paints every landmark in the world and turns
     // some boulders into party ones.
     if honoured.tenth_anniversary {
-        celebration::finish(&mut world, &plan, &mut rand);
+        celebration::finish(&mut world, &plan, &mut rand, honoured);
     }
 
     let built = Built {

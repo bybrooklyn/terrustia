@@ -14,11 +14,17 @@
 //! 7, the pyramids 12. Boulders become party-coloured ones one time in four. The colours are fixed
 //! constants in vanilla, not rolls, so a Celebrationmk10 world looks the same shade every time.
 //!
-//! # Scoped to this seed alone
+//! # Seed combinations
 //!
-//! `FinishTenthAnniversaryWorld` opens with a condition on four other seeds and skips most of
-//! itself under `remixWorldGen`, `getGoodWorldGen` or `drunkWorldGen`. All are false here, which is
-//! the plain `celebrationmk10` path.
+//! `FinishTenthAnniversaryWorld` opens with a condition on four other seeds, and they are honoured
+//! now that those seeds exist:
+//!
+//! * **Remix** skips the whole painting block (`:24509`), so a remix party world is unpainted.
+//! * **For the Worthy** skips the boulder conversion and the chest upgrade (`:24537`, `:24549`) -
+//!   it is the seed that makes the world harder, so it declines the seed that makes it friendlier.
+//!
+//! What remains unmodelled is the `notTheBees`/`dontStarve` half of the opening condition, which
+//! selects between two ways of *not* skipping and so has no visible effect here.
 //!
 //! # Disclosed narrowings
 //!
@@ -55,7 +61,16 @@ fn is_dungeon_wall(wall: u16) -> bool {
 }
 
 /// `FinishTenthAnniversaryWorld`. One sweep, painting every landmark, then the boulders.
-pub fn finish(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
+pub fn finish(
+    world: &mut World,
+    layout: &Layout,
+    rand: &mut UnifiedRandom,
+    secret: super::secret_seed::SecretSeeds,
+) {
+    // `:24509`: Remix skips the painting entirely.
+    if secret.remix {
+        return;
+    }
     for x in 10..world.width() - 10 {
         for y in 10..world.height() - 10 {
             let mut t = world.tile(x, y);
@@ -126,6 +141,11 @@ pub fn finish(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
         }
     }
 
+    // `:24537`: For the Worthy declines the party boulders.
+    if secret.get_good {
+        return;
+    }
+
     // One boulder in four becomes a party boulder. Vanilla keys on the top-left cell of the 2x2.
     for x in 50..world.width() - 50 {
         for y in 50..world.height() - 50 {
@@ -149,6 +169,7 @@ pub fn finish(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::world::worldgen::secret_seed::SecretSeeds;
     use terrustia_proto::Tile;
 
     fn world_with(w: i32, h: i32) -> (World, Layout) {
@@ -176,7 +197,7 @@ mod tests {
         world.set_tile(200, 300, Tile::block(151)); // sandstone brick
 
         let mut rand = UnifiedRandom::new(10);
-        finish(&mut world, &layout, &mut rand);
+        finish(&mut world, &layout, &mut rand, SecretSeeds::none());
 
         assert_eq!(world.tile(100, 300).color, DUNGEON);
         assert_eq!(world.tile(120, 300).color, TEMPLE_TILE);
@@ -197,7 +218,7 @@ mod tests {
             world.set_tile(x, 300, t);
         }
         let mut rand = UnifiedRandom::new(11);
-        finish(&mut world, &layout, &mut rand);
+        finish(&mut world, &layout, &mut rand, SecretSeeds::none());
         assert_eq!(world.tile(100, 300).wall_color, DUNGEON);
         assert_eq!(world.tile(120, 300).wall_color, TEMPLE_WALL_COLOUR);
         assert_eq!(world.tile(140, 300).wall_color, PYRAMID);
@@ -215,7 +236,7 @@ mod tests {
             }
         }
         let mut rand = UnifiedRandom::new(12);
-        finish(&mut world, &layout, &mut rand);
+        finish(&mut world, &layout, &mut rand, SecretSeeds::none());
 
         let mut converted = 0;
         for i in 0..40 {
@@ -238,6 +259,55 @@ mod tests {
         );
     }
 
+    /// The two combinations vanilla spells out: Remix skips the painting, For the Worthy skips the
+    /// party boulders. Both are exercised by a real "get fixed boi" world, which turns on all three.
+    #[test]
+    fn other_seeds_can_turn_parts_of_the_party_off() {
+        let paint_count = |secret: SecretSeeds| {
+            let (mut world, layout) = world_with(600, 500);
+            for x in 200..240 {
+                world.set_tile(x, 300, Tile::block(41));
+            }
+            let mut rand = UnifiedRandom::new(13);
+            finish(&mut world, &layout, &mut rand, secret);
+            let mut painted = 0usize;
+            for x in 200..240 {
+                if world.tile(x, 300).color != 0 {
+                    painted += 1;
+                }
+            }
+            painted
+        };
+
+        assert!(
+            paint_count(SecretSeeds::none()) > 0,
+            "a plain party world paints"
+        );
+        let mut remix = SecretSeeds::none();
+        remix.remix = true;
+        assert_eq!(paint_count(remix), 0, "remix skips the painting entirely");
+
+        // For the Worthy still paints, but declines the boulders.
+        let mut worthy = SecretSeeds::none();
+        worthy.get_good = true;
+        assert!(paint_count(worthy) > 0, "for the worthy still gets painted");
+
+        let (mut world, layout) = world_with(600, 500);
+        for i in 0..40 {
+            let x = 100 + i * 4;
+            for (dx, dy) in [(0, 0), (0, 1), (1, 0), (1, 1)] {
+                let t = Tile::framed(BOULDER, (dx as i16) * 18, (dy as i16) * 18);
+                world.set_tile(x + dx, 300 + dy, t);
+            }
+        }
+        let mut rand = UnifiedRandom::new(13);
+        finish(&mut world, &layout, &mut rand, worthy);
+        let converted = (0..40)
+            .filter(|i| world.tile(100 + i * 4, 300).block == PARTY_BOULDER)
+            .count();
+        assert_eq!(converted, 0, "for the worthy declines the party boulders");
+    }
+
     #[test]
     fn the_pass_is_reproducible_from_the_seed() {
         let run = || {
@@ -246,7 +316,7 @@ mod tests {
                 world.set_tile(x, 300, Tile::block(41));
             }
             let mut rand = UnifiedRandom::new(444);
-            finish(&mut world, &layout, &mut rand);
+            finish(&mut world, &layout, &mut rand, SecretSeeds::none());
             let mut fingerprint = Vec::new();
             for x in (0..400).step_by(5) {
                 for y in (100..400).step_by(5) {

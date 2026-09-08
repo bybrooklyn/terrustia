@@ -15,14 +15,22 @@
 //! result and turns *exposed* hive back into mud and exposed crispy honey into its own grass, so
 //! the surface of the world reads as jungle rather than as a solid block of hive.
 //!
-//! # Scoped to this seed alone, deliberately
+//! # Seed combinations
 //!
-//! `NotTheBees` is 280 lines and roughly a third of them are conditions on *other* secret seeds:
-//! `remixWorldGen`, `dontStarveWorldGen`, `tenthAnniversaryWorldGen`, `drunkWorldGen`,
-//! `skyblockWorldGen` and `dualDungeons` all change what it does. Those seeds have no generation
-//! content here yet, so this transcribes the function with every one of them false, which is
-//! exactly the path a plain `notthebees` world takes. Combining seeds is not supported and the
-//! branches for it are not guessed at; when another seed lands, its interactions come with it.
+//! `NotTheBees` is 280 lines and roughly a third of them are conditions on *other* secret seeds.
+//! Those seeds now have generation content, so the interactions are honoured rather than assumed
+//! away:
+//!
+//! * **Remix** suppresses the coastal branch outright and moves the crispy-honey line to
+//!   `maxTilesY - 180` rather than the midpoint (`:25394-25396`, `:25407`).
+//! * **Don't Starve** and **Celebrationmk10** each force the coastal branch on for the whole world
+//!   rather than only the dungeon's own half (`:25407`).
+//! * **Don't Starve** additionally protects the stone-family tiles from conversion (`:25446`), so a
+//!   Constant world keeps its stone where an ordinary bees world would turn it to hive.
+//!
+//! What is still not modelled is `skyblockWorldGen` (which cancels this pass along with everything
+//! else, and is handled by `skyblock.rs`'s own branch before this runs) and `dualDungeons`, which
+//! is a `SecretSeed.Variations` flag with no counterpart here.
 //!
 //! Also not modelled: the ocean/beach branch's dungeon recolouring (this generator does not paint
 //! dungeon tiles), and the long wall-conversion tail, which in the shipped code is a chain of
@@ -102,10 +110,20 @@ fn enclosed(world: &World, x: i32, y: i32) -> bool {
 
 /// `WorldGen.NotTheBees`. Runs over the whole world; vanilla calls it repeatedly and so does this
 /// generator, because each call converts whatever the passes since the last one laid down.
-pub fn convert(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
-    let lava_line = layout.underworld;
-    // `num2`: below this, hive becomes crispy honey instead.
-    let honey_line = (lava_line + world.height() - 180) / 2;
+pub fn convert(
+    world: &mut World,
+    layout: &Layout,
+    rand: &mut UnifiedRandom,
+    secret: super::secret_seed::SecretSeeds,
+) {
+    let lava_line = layout.lava_line();
+    // `num2`: below this, hive becomes crispy honey instead. Remix takes the world's own floor
+    // rather than the midpoint (`:25394-25396`).
+    let honey_line = if secret.remix {
+        world.height() - 180
+    } else {
+        (lava_line + world.height() - 180) / 2
+    };
     // The beach band. `layout` already decided where the oceans are, so read that rather than
     // re-deriving vanilla's `beachDistance`.
     let beach = layout.ocean_left.to.max(60);
@@ -118,9 +136,13 @@ pub fn convert(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
     for i in 5..world.width() - 5 {
         for j in 5..bottom {
             // The ocean and beach band is left as ocean, not converted.
-            let coastal = j < (layout.surface + layout.rock * 2) / 3 + rand.next_max(3)
+            // `:25407`: the coastal band is left as ocean. Remix suppresses the branch entirely;
+            // Don't Starve and Celebrationmk10 force it on for the whole world rather than only
+            // the dungeon's half, which this generator has no side for anyway.
+            let near_coast = j < (layout.surface + layout.rock * 2) / 3 + rand.next_max(3)
                 && (i < beach - 50 - rand.next_max(3)
                     || i > world.width() - beach + 50 + rand.next_max(3));
+            let coastal = near_coast && !secret.remix;
             if coastal {
                 continue;
             }
@@ -135,6 +157,13 @@ pub fn convert(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
             }
 
             if !t.is_active() || !tile_solid::solid(t.block) || untouchable(t.block) {
+                continue;
+            }
+            // `:25446`: a Constant world keeps its stone family rather than turning it to hive.
+            if secret.dont_starve
+                && !secret.remix
+                && matches!(t.block, 1 | 147 | 161 | 30 | 321 | 158 | 190 | 162)
+            {
                 continue;
             }
 
@@ -258,6 +287,7 @@ pub fn finish(world: &mut World) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::world::worldgen::secret_seed::SecretSeeds;
     use terrustia_proto::Tile;
 
     fn plain(w: i32, h: i32) -> (World, Layout) {
@@ -281,7 +311,7 @@ mod tests {
     fn stone_becomes_hive_and_dirt_becomes_mud() {
         let (mut world, layout) = plain(1200, 800);
         let mut rand = UnifiedRandom::new(11);
-        convert(&mut world, &layout, &mut rand);
+        convert(&mut world, &layout, &mut rand, SecretSeeds::none());
 
         let mut hive = 0;
         let mut mud = 0;
@@ -305,7 +335,7 @@ mod tests {
             world.set_tile(x, 300, Tile::block(7));
         }
         let mut rand = UnifiedRandom::new(12);
-        convert(&mut world, &layout, &mut rand);
+        convert(&mut world, &layout, &mut rand, SecretSeeds::none());
         assert_eq!(
             world.tile(605, 300).block,
             7,
@@ -327,12 +357,43 @@ mod tests {
         );
     }
 
+    /// Don't Starve protects the stone family from the bees conversion (`WorldGen.cs:25446`),
+    /// which is one of the interactions "get fixed boi" actually exercises.
+    #[test]
+    fn dont_starve_keeps_its_stone_when_the_bees_arrive() {
+        let convert_with = |secret: SecretSeeds| {
+            let (mut world, layout) = plain(1200, 800);
+            let mut rand = UnifiedRandom::new(11);
+            convert(&mut world, &layout, &mut rand, secret);
+            let mut stone = 0usize;
+            for x in 500..700 {
+                for y in 250..400 {
+                    if world.tile(x, y).block == 1 && world.tile(x, y).is_active() {
+                        stone += 1;
+                    }
+                }
+            }
+            stone
+        };
+
+        let plain_bees = convert_with(SecretSeeds::none());
+        let mut with_constant = SecretSeeds::none();
+        with_constant.dont_starve = true;
+        let bees_and_constant = convert_with(with_constant);
+
+        assert_eq!(plain_bees, 0, "a plain bees world converts all its stone");
+        assert!(
+            bees_and_constant > 1000,
+            "with Don't Starve the stone survives, saw {bees_and_constant}"
+        );
+    }
+
     #[test]
     fn the_conversion_is_reproducible_from_the_seed() {
         let run = || {
             let (mut world, layout) = plain(800, 500);
             let mut rand = UnifiedRandom::new(404);
-            convert(&mut world, &layout, &mut rand);
+            convert(&mut world, &layout, &mut rand, SecretSeeds::none());
             let mut fingerprint = Vec::new();
             for x in (100..700).step_by(5) {
                 for y in (120..450).step_by(5) {
