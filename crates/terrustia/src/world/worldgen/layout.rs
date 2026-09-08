@@ -77,9 +77,30 @@ pub struct Layout {
     /// Drunk World only: the second evil's band, mirroring `evil_band` onto the other half. `None`
     /// in every other world.
     pub second_evil_band: Option<Band>,
+    /// Remix (`dontdigup`): the world is read from the bottom up, and every pass that places
+    /// cavern-layer content asks [`Layout::deep_band`] for where "deep" is instead of assuming it
+    /// is below the rock layer.
+    pub remix: bool,
 }
 
 impl Layout {
+    /// The rows a pass should treat as the cavern layer: where ore veins, gem caves, chasm floors
+    /// and buried structures go.
+    ///
+    /// Ordinarily that is below the rock layer, which is what every pass here already assumed.
+    /// Remix moves it *above*: vanilla's own branches read
+    /// `remix ? Next(worldSurface + 50, rockLayer - 50) : Next(rockLayer + 50, maxTilesY - 300)`
+    /// and repeat that shape at `WorldGen.cs:12637`, `:12842`, `:12864`, `:12927`, `:12949` and
+    /// `:17639`. That is the whole seed at this level: the deep content comes up, because in a
+    /// Remix world the player starts underneath everything and digs up.
+    pub fn deep_band(&self) -> (i32, i32) {
+        if self.remix {
+            (self.surface + 50, (self.rock - 50).max(self.surface + 60))
+        } else {
+            (self.rock + 50, (self.height - 300).max(self.rock + 60))
+        }
+    }
+
     /// Which evil is at this column. One answer for an ordinary world; two for Drunk World.
     pub fn evil_at(&self, x: i32) -> Evil {
         match self.drunk_crimson_left {
@@ -243,6 +264,7 @@ impl Layout {
             temple,
             drunk_crimson_left: None,
             second_evil_band: None,
+            remix: false,
         }
     }
 
@@ -334,6 +356,28 @@ pub enum Surface {
 
 #[cfg(test)]
 mod tests {
+
+    /// `deep_band` is where cavern content goes, and Remix moves it above the rock line.
+    #[test]
+    fn remix_moves_the_cavern_layer_above_the_rock_line() {
+        let mut ordinary = Layout::plan(4200, 1200, &mut UnifiedRandom::new(3));
+        let (top, bottom) = ordinary.deep_band();
+        assert!(
+            top > ordinary.rock,
+            "ordinary cavern content goes below the rock layer"
+        );
+        assert!(bottom > top);
+
+        ordinary.remix = true;
+        let (rtop, rbottom) = ordinary.deep_band();
+        assert!(
+            rbottom < ordinary.rock,
+            "remix cavern content goes above the rock layer: {rtop}..{rbottom} vs rock {}",
+            ordinary.rock
+        );
+        assert!(rtop > ordinary.surface, "but below the surface");
+        assert!(rbottom > rtop, "and the band must not be inverted or empty");
+    }
     use super::*;
 
     fn layout(seed: i32) -> Layout {

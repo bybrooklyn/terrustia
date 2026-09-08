@@ -186,7 +186,14 @@ impl SecretSeeds {
     /// inverts *depth*, not left and right, so honouring the flag on that world would have produced
     /// precisely the failure this comment describes - ordinary depths drawn upside down. The seed
     /// needs every depth decision in the generator to flip, which is a generator-wide change and
-    /// not a pass. `zenithWorld` goes with it because zenith *is* the combination, remix included,
+    /// not a pass.
+    ///
+    /// **Started, not finished.** `Layout::deep_band` now answers "where is the cavern layer" and
+    /// gives Remix vanilla's own inverted answer, and the gem-cave and spider-cave passes ask it.
+    /// That is two passes of many: the surface is still grass and trees, the underworld is still
+    /// ash at the bottom, and the player still spawns on top. Until those move too, the flag would
+    /// still be describing a world that is not there, so it is still dropped. The band is the
+    /// mechanism the rest will use. `zenithWorld` goes with it because zenith *is* the combination, remix included,
     /// and a world file claiming zenith without remix is a state neither game can make. The other
     /// six flags "get fixed boi" turns on are unaffected: each of those is a difference in what
     /// generates or how something behaves, partly modelled and disclosed at its own site, not a

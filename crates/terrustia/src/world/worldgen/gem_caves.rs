@@ -186,7 +186,9 @@ pub fn scatter(
     for _ in 0..attempts {
         let mut tries = 0;
         let mut x = rand.next_range(200, layout.width - 200);
-        let mut y = rand.next_range(layout.rock + 30, world.height() - 230);
+        // Remix moves the cavern layer above the rock line; see `Layout::deep_band`.
+        let (deep_top, deep_bottom) = layout.deep_band();
+        let mut y = rand.next_range(deep_top, deep_bottom);
         let mut found = cave_flood::count(world, x, y, 300, false, false);
         while (found.tiles >= 300
             || found.tiles < 50
@@ -197,7 +199,7 @@ pub fn scatter(
         {
             tries += 1;
             x = rand.next_range(200, layout.width - 200);
-            y = rand.next_range(layout.rock + 30, world.height() - 230);
+            y = rand.next_range(deep_top, deep_bottom);
             found = cave_flood::count(world, x, y, 300, false, false);
         }
         if tries < 1000 {

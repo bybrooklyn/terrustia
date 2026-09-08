@@ -350,6 +350,11 @@ pub fn build_with_secret_seed(
     // Drunk World is the one seed that changes the *layout* rather than decorating it: both evils,
     // one per half of the world (`WorldGen.cs:2052-2062`). Decided here, before terrain runs, so
     // every pass that asks `evil_at` gets a consistent answer.
+    // Remix: the cavern layer moves above the rock line, so every pass that places deep content
+    // asks `deep_band` rather than assuming. Set before any pass reads the layout.
+    if honoured.remix {
+        plan.remix = true;
+    }
     if honoured.drunk {
         plan.drunk_crimson_left = Some(rand.next_max(2) == 0);
         // Mirror the evil band onto the other half, so both evils get real surface.
