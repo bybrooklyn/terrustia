@@ -15,12 +15,10 @@
 //! of the world centre, each with up to three statues standing on it. And the water line opened
 //! into a continuous horizontal gallery with lava pooled along it.
 //!
-//! # Scoped to this seed alone
+//! # Seed combinations
 //!
-//! As with `not_the_bees`, every branch that reads another secret seed is taken with that seed
-//! false: `remixWorldGen` thirds the wavy-cave count, and `tenthAnniversaryWorldGen` or
-//! `remixWorldGen` suppress the lava layer entirely. Those seeds have no generation content here,
-//! so this is the plain `theconstant` path.
+//! Both of vanilla's are honoured: `remixWorldGen` thirds the wavy-cave count (`:12322`), and
+//! `tenthAnniversaryWorldGen` or `remixWorldGen` suppress the lava layer entirely (`:14938`).
 //!
 //! # Disclosed narrowings
 //!
@@ -112,7 +110,11 @@ pub fn wavy_caverer(
 /// The `WavyCaves` pass (`:12315-12352`). Returns how many tunnels were cut.
 pub fn wavy_caves(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) -> usize {
     let scale = f64::from(layout.width) / 4200.0;
-    let count = (35.0 * scale * scale) as i32;
+    // `:12322`: a Remix world gets a third as many.
+    let mut count = (35.0 * scale * scale) as i32;
+    if layout.remix {
+        count /= 3;
+    }
     if count < 1 {
         return 0;
     }

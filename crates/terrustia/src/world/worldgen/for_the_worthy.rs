@@ -23,12 +23,11 @@
 //! * **Turns some obsidian to lava**, one tile in fifteen.
 //! * **Multiplies counts by 1.5**: ore veins, surface pots, and explosive traps.
 //!
-//! # Scoped to this seed alone
+//! # Seed combinations
 //!
-//! Every branch reading another seed is taken with that seed false: `drunkWorldGen` and `notTheBees`
-//! suppress the wall painting, `tenthAnniversaryWorldGen` and `notTheBees` suppress the evil grass,
-//! and `remixWorldGen` suppresses the obsidian conversion. None of those has generation content
-//! here yet.
+//! All three of vanilla's are honoured: `drunkWorldGen` or `notTheBees` suppress the wall painting,
+//! `tenthAnniversaryWorldGen` or `notTheBees` suppress the sky corruption, and `remixWorldGen`
+//! suppresses the obsidian-to-lava conversion.
 //!
 //! # Disclosed narrowings
 //!
@@ -74,7 +73,12 @@ fn is_dungeon_wall(wall: u16) -> bool {
 }
 
 /// `FinishGetGoodWorld`. Runs once, last, over the whole world.
-pub fn finish(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
+pub fn finish(
+    world: &mut World,
+    layout: &Layout,
+    rand: &mut UnifiedRandom,
+    secret: super::secret_seed::SecretSeeds,
+) {
     // The cloud line: the lowest row above the surface that still holds a cloud tile. Vanilla
     // scans top-down and keeps the last row it saw one on.
     let mut cloud_line = 0;
@@ -121,7 +125,8 @@ pub fn finish(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
                 t.color = colour;
                 changed = true;
             }
-            if is_dungeon_wall(t.wall) {
+            // Drunk World and Not the Bees both suppress the wall painting.
+            if is_dungeon_wall(t.wall) && !secret.drunk && !secret.not_the_bees {
                 t.wall_color = colour;
                 changed = true;
             }
@@ -141,7 +146,8 @@ pub fn finish(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
                 changed = true;
             }
 
-            if t.is_active() && t.block == OBSIDIAN && rand.next_max(15) == 0 {
+            // Remix leaves the obsidian alone.
+            if !secret.remix && t.is_active() && t.block == OBSIDIAN && rand.next_max(15) == 0 {
                 if world.tile(x, y - 1).block == OBSIDIAN {
                     t.flags = TileFlags(t.flags.0 & !TileFlags::ACTIVE);
                     t.block = 0;
@@ -154,7 +160,13 @@ pub fn finish(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
             }
 
             // The evil takes the sky islands: rows above the cloud line, not the surface.
-            if t.is_active() && y < cloud_line && t.block == GRASS {
+            // Celebrationmk10 and Not the Bees both spare the sky islands.
+            if !secret.tenth_anniversary
+                && !secret.not_the_bees
+                && t.is_active()
+                && y < cloud_line
+                && t.block == GRASS
+            {
                 t.block = if crimson {
                     CRIMSON_GRASS
                 } else {
@@ -190,6 +202,7 @@ pub fn count_scale(active: bool) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::world::worldgen::secret_seed::SecretSeeds;
     use terrustia_proto::Tile;
 
     fn world_with(w: i32, h: i32) -> (World, Layout) {
@@ -220,7 +233,7 @@ mod tests {
         let (mut world, layout) = world_with(600, 500);
         world.crimson = false;
         let mut rand = UnifiedRandom::new(19);
-        finish(&mut world, &layout, &mut rand);
+        finish(&mut world, &layout, &mut rand, SecretSeeds::none());
         assert_eq!(
             world.tile(120, 90).block,
             CORRUPT_GRASS,
@@ -238,7 +251,7 @@ mod tests {
         let (mut world, layout) = world_with(600, 500);
         world.crimson = true;
         let mut rand = UnifiedRandom::new(19);
-        finish(&mut world, &layout, &mut rand);
+        finish(&mut world, &layout, &mut rand, SecretSeeds::none());
         assert_eq!(world.tile(120, 90).block, CRIMSON_GRASS);
     }
 
@@ -251,7 +264,7 @@ mod tests {
             }
         }
         let mut rand = UnifiedRandom::new(21);
-        finish(&mut world, &layout, &mut rand);
+        finish(&mut world, &layout, &mut rand, SecretSeeds::none());
         let first = world.tile(210, 310).color;
         assert!(first > 0, "the dungeon was not painted");
         assert_eq!(
@@ -269,7 +282,7 @@ mod tests {
         t.wall = TEMPLE_WALL;
         world.set_tile(301, 300, t);
         let mut rand = UnifiedRandom::new(22);
-        finish(&mut world, &layout, &mut rand);
+        finish(&mut world, &layout, &mut rand, SecretSeeds::none());
         assert_eq!(
             world.tile(300, 300).color,
             17,
@@ -283,7 +296,7 @@ mod tests {
         let run = || {
             let (mut world, layout) = world_with(400, 400);
             let mut rand = UnifiedRandom::new(333);
-            finish(&mut world, &layout, &mut rand);
+            finish(&mut world, &layout, &mut rand, SecretSeeds::none());
             let mut fingerprint = Vec::new();
             for x in (0..400).step_by(5) {
                 for y in (100..400).step_by(5) {

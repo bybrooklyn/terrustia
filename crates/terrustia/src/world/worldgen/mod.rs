@@ -755,7 +755,10 @@ pub fn build_with_secret_seed(
     // "The Constant" (Don't Starve): the three passes vanilla adds only under this seed.
     let (wavy_caves, marble_piles) = if honoured.dont_starve {
         let caves = dont_starve::wavy_caves(&mut world, &plan, &mut rand);
-        dont_starve::lava_layer(&mut world, &plan, &mut rand);
+        // `:14938`: Celebrationmk10 or Remix suppress the lava layer.
+        if !honoured.tenth_anniversary && !honoured.remix {
+            dont_starve::lava_layer(&mut world, &plan, &mut rand);
+        }
         let piles = dont_starve::marble_piles(&mut world, &plan, &mut rand);
         (caves, piles)
     } else {
@@ -806,7 +809,7 @@ pub fn build_with_secret_seed(
     // little obsidian to lava. After the bees, because vanilla runs it after too and several of
     // its own branches read what that conversion left.
     if honoured.get_good {
-        for_the_worthy::finish(&mut world, &plan, &mut rand);
+        for_the_worthy::finish(&mut world, &plan, &mut rand, honoured);
     }
 
     // `FinishTenthAnniversaryWorld`: Celebrationmk10 paints every landmark in the world and turns
@@ -1698,6 +1701,57 @@ mod tests {
         assert!(
             i32::from(ordinary.spawn_y) < underworld,
             "an ordinary spawn is nowhere near the underworld"
+        );
+    }
+
+    /// "get fixed boi" exercises the cross-seed branches, and this asserts they fired.
+    ///
+    /// The composite is where combinations actually matter: seven seeds at once, several of which
+    /// switch parts of each other off. Each claim here corresponds to a branch in vanilla, so a
+    /// module that reverted to its single-seed path would fail.
+    #[test]
+    fn the_composite_seed_takes_the_combined_paths() {
+        let (world, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "zenith", "getfixedboi");
+        let s = built.secret_seeds;
+        assert!(s.everything && s.remix && s.not_the_bees && s.get_good && s.tenth_anniversary);
+
+        // Celebrationmk10's painting is skipped under Remix (`:24509`), and For the Worthy's wall
+        // painting is skipped under Not the Bees. So a zenith world carries far less paint than a
+        // plain Celebrationmk10 one.
+        let painted = |w: &World| {
+            let mut n = 0usize;
+            for x in (0..w.width()).step_by(2) {
+                for y in (0..w.height()).step_by(2) {
+                    if w.tile(x, y).color != 0 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let (party, _) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "party", "celebrationmk10");
+        assert!(
+            painted(&party) > painted(&world),
+            "zenith should carry less paint than a plain party world: \
+             zenith {}, party {}",
+            painted(&world),
+            painted(&party)
+        );
+
+        // Don't Starve's stone protection holds inside the composite: a plain bees world melts all
+        // its stone, a zenith world keeps some.
+        let mut stone = 0usize;
+        for x in (0..world.width()).step_by(3) {
+            for y in (0..world.height()).step_by(3) {
+                let t = world.tile(x, y);
+                if t.is_active() && t.block == 1 {
+                    stone += 1;
+                }
+            }
+        }
+        assert!(
+            stone > 0,
+            "Don't Starve should have protected stone from the bees conversion"
         );
     }
 
