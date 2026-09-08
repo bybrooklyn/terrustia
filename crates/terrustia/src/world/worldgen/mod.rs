@@ -370,6 +370,25 @@ pub fn build_with_secret_seed(
         let jitter = f64::from(rand.next_range(95, 106)) * 0.01;
         plan.rock = ((f64::from(height) * base * jitter) as i32)
             .clamp(plan.surface + 40, plan.underworld - 40);
+
+        // `WorldGen.cs:15942-15955`: the dungeon comes inward. An ordinary world pushes it out
+        // toward one edge; Remix draws it from a fifth to four fifths across, rejecting anything in
+        // the middle fifth so it never lands on the spawn.
+        let lo = (f64::from(width) * 0.2) as i32;
+        let hi = (f64::from(width) * 0.8) as i32;
+        if hi > lo {
+            let (mid_lo, mid_hi) = (
+                (f64::from(width) * 0.4) as i32,
+                (f64::from(width) * 0.6) as i32,
+            );
+            let mut x = rand.next_range(lo, hi);
+            let mut guard = 1000;
+            while x > mid_lo && x < mid_hi && guard > 0 {
+                x = rand.next_range(lo, hi);
+                guard -= 1;
+            }
+            plan.dungeon_x = x;
+        }
     }
     if honoured.drunk {
         plan.drunk_crimson_left = Some(rand.next_max(2) == 0);
@@ -1616,6 +1635,20 @@ mod tests {
         assert_eq!(
             remixed.surface, ordinary.surface,
             "remix moves the rock layer, not the surface"
+        );
+
+        // And the dungeon comes inward, out of the outer fifths and away from the middle fifth.
+        let dx = remixed
+            .dungeon_x
+            .expect("a remix world still has a dungeon");
+        let (lo, hi) = (SMALL_WIDTH / 5, SMALL_WIDTH * 4 / 5);
+        assert!(
+            dx >= lo && dx <= hi,
+            "a remix dungeon belongs in the middle three fifths, got {dx}"
+        );
+        assert!(
+            !(dx > SMALL_WIDTH * 2 / 5 && dx < SMALL_WIDTH * 3 / 5),
+            "but not in the middle fifth, where the spawn is: {dx}"
         );
     }
 
