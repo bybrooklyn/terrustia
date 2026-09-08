@@ -18,7 +18,7 @@
 
 use terrustia_proto::Tile;
 
-use super::layout::{Evil, Layout, Surface};
+use super::layout::{Band, Evil, Layout, Surface};
 use super::place_object::place_object;
 use super::rand::UnifiedRandom;
 use super::tiles::{self, walls};
@@ -494,12 +494,18 @@ pub fn ores(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
 /// This is the one structure whose *contents* are progression rather than decoration: three orbs
 /// smashed is the Eater of Worlds or the Brain of Cthulhu, and that is the whole of the first
 /// act's gating.
+/// `override_evil` replaces the layout's own evil and band for this call. It exists for Drunk
+/// World, which puts Corruption on one half of the world and Crimson on the other
+/// (`WorldGen.cs:2052-2062`, keyed on `GenVars.crimsonLeft`) - two calls, one per side, rather
+/// than one biome with a mixed identity.
 pub fn evil_chasms(
     world: &mut World,
     layout: &Layout,
     heights: &[i32],
     rand: &mut UnifiedRandom,
+    override_evil: Option<(Evil, Band)>,
 ) -> usize {
+    let (evil, evil_band) = override_evil.unwrap_or((layout.evil, layout.evil_band));
     let orb_tile = tiles::SHADOW_ORB;
     let chasms = 3 + rand.next_max(3);
     let mut orbs = 0;
@@ -508,7 +514,7 @@ pub fn evil_chasms(
     // (`WorldGen.cs:76866`), so this pass has to place it rather than inherit it: `terrain::fill`
     // no longer walls the cavern layer at all (see `terrain::wall_for`), which is right for a cave
     // and wrong for a chasm.
-    let evil_wall = if layout.evil == Evil::Crimson {
+    let evil_wall = if evil == Evil::Crimson {
         walls::CRIMSTONE
     } else {
         walls::EBONSTONE
@@ -516,7 +522,7 @@ pub fn evil_chasms(
 
     for nth in 0..chasms {
         // Spread the chasms across the band rather than stacking them.
-        let band = layout.evil_band;
+        let band = evil_band;
         let step = band.width() / (chasms + 1).max(1);
         let x = band.from + step * (nth + 1) + rand.next_range(-step / 3, step / 3 + 1);
         if x <= 2 || x >= layout.width - 2 {
@@ -565,7 +571,7 @@ pub fn evil_chasms(
         // Frames say which half of the sheet the sprite comes from, and a crimson heart is the
         // right-hand half — `frameX >= 36`, which is what the break handler reads to decide
         // which boss to wake. Getting it wrong gives a corruption world crimson hearts.
-        let frame_x: i16 = if layout.evil == Evil::Crimson { 36 } else { 0 };
+        let frame_x: i16 = if evil == Evil::Crimson { 36 } else { 0 };
         for (dx, dy) in [(0i32, 0i32), (1, 0), (0, 1), (1, 1)] {
             let mut tile = Tile::framed(orb_tile, frame_x + (dx as i16) * 18, (dy as i16) * 18);
             // Was hardcoded to Ebonstone, so a crimson world's heart room carried a corruption
@@ -1419,7 +1425,7 @@ mod evil_chasm_walls {
         world.crimson = crimson;
         let heights = crate::world::worldgen::terrain::heightmap(&layout, &mut rand);
         crate::world::worldgen::terrain::fill(&mut world, &layout, &heights, &mut rand);
-        let orbs = evil_chasms(&mut world, &layout, &heights, &mut rand);
+        let orbs = evil_chasms(&mut world, &layout, &heights, &mut rand, None);
         assert!(orbs > 0, "the pass must have dug something to measure");
 
         // Every wall found behind a Shadow Orb tile, which is the one place the old code named
@@ -1472,7 +1478,7 @@ mod evil_chasm_walls {
         let mut world = World::empty(1200, 600, "chasm mouth");
         let heights = crate::world::worldgen::terrain::heightmap(&layout, &mut rand);
         crate::world::worldgen::terrain::fill(&mut world, &layout, &heights, &mut rand);
-        evil_chasms(&mut world, &layout, &heights, &mut rand);
+        evil_chasms(&mut world, &layout, &heights, &mut rand, None);
 
         // Somewhere in the evil band there is an open, unwalled column of chasm within twenty
         // rows of the surface, and walled chasm below it.

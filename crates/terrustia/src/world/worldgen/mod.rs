@@ -345,7 +345,33 @@ pub fn build_with_secret_seed(
     // The same generator the parity work uses, so a seed means the same thing in both.
     let mut rand = UnifiedRandom::new(seed as i32);
 
-    let plan = Layout::plan(width, height, &mut rand);
+    let mut plan = Layout::plan(width, height, &mut rand);
+    // Drunk World is the one seed that changes the *layout* rather than decorating it: both evils,
+    // one per half of the world (`WorldGen.cs:2052-2062`). Decided here, before terrain runs, so
+    // every pass that asks `evil_at` gets a consistent answer.
+    if honoured.drunk {
+        plan.drunk_crimson_left = Some(rand.next_max(2) == 0);
+        // Mirror the evil band onto the other half, so both evils get real surface.
+        let half = plan.width / 2;
+        let width = plan.evil_band.width().max(80);
+        plan.second_evil_band = Some(if plan.evil_band.centre() < half {
+            let from = (half + (half - plan.evil_band.centre()) - width / 2)
+                .clamp(half + 20, plan.width - 80 - width);
+            layout::Band {
+                from,
+                to: from + width,
+            }
+        } else {
+            let from = (plan.evil_band.centre() - half)
+                .max(80)
+                .min(half - 20 - width);
+            layout::Band {
+                from,
+                to: from + width,
+            }
+        });
+    }
+    let plan = plan;
     // Shared across every Tier 2 pass that sites a set-piece structure — `GenVars.structures` in
     // vanilla, one session-global instance so a jungle shrine and an underground cabin (once that
     // lands) never overlap each other, the same way they cannot in a real generated world.
@@ -387,7 +413,37 @@ pub fn build_with_secret_seed(
     let gravitating_sand = tile_cleanup::gravitating_sand_cleanup(&mut world, &plan);
     let dirt_wall_cleared = dirt_wall_cleanup::scrub(&mut world, &plan, &mut rand);
 
-    let orbs = structures::evil_chasms(&mut world, &plan, &heights, &mut rand);
+    // Drunk World puts both evils in one world, split down the middle (`WorldGen.cs:2052-2062`).
+    // Every other world has one evil across one band, which is the `None` case.
+    let orbs = if let Some(crimson_left) = plan.drunk_crimson_left {
+        let half = plan.width / 2;
+        let left = layout::Band { from: 60, to: half };
+        let right = layout::Band {
+            from: half,
+            to: plan.width - 60,
+        };
+        let (crimson_band, corrupt_band) = if crimson_left {
+            (left, right)
+        } else {
+            (right, left)
+        };
+        world.crimson = crimson_left;
+        structures::evil_chasms(
+            &mut world,
+            &plan,
+            &heights,
+            &mut rand,
+            Some((layout::Evil::Crimson, crimson_band)),
+        ) + structures::evil_chasms(
+            &mut world,
+            &plan,
+            &heights,
+            &mut rand,
+            Some((layout::Evil::Corruption, corrupt_band)),
+        )
+    } else {
+        structures::evil_chasms(&mut world, &plan, &heights, &mut rand, None)
+    };
     structures::dungeon(&mut world, &plan, &heights, &mut rand);
     structures::temple(&mut world, &plan, &mut rand);
     let hive = structures::hive(&mut world, &plan, &mut rand);
@@ -1292,6 +1348,45 @@ mod tests {
         assert!(
             dungeon_paint.contains(&24),
             "the dungeon should be painted 24, saw {dungeon_paint:?}"
+        );
+    }
+
+    /// A Drunk World has both evils in it; every other world has exactly one.
+    ///
+    /// This is the seed's defining feature and the one a player notices first. Asserted by
+    /// counting the two evils' own stone, which only their own chasm builder ever places.
+    #[test]
+    fn drunk_world_has_both_evils_and_an_ordinary_world_has_one() {
+        let evils = |world: &World| {
+            let (mut ebon, mut crim) = (0usize, 0usize);
+            for x in (0..world.width()).step_by(2) {
+                for y in (0..world.height()).step_by(2) {
+                    match world.tile(x, y).block {
+                        25 => ebon += 1,
+                        203 => crim += 1,
+                        _ => {}
+                    }
+                }
+            }
+            (ebon, crim)
+        };
+
+        let (drunk, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "drunk", "5162020");
+        assert!(
+            built.secret_seeds.drunk,
+            "the numeric drunk seed was not detected"
+        );
+        let (ebon, crim) = evils(&drunk);
+        assert!(
+            ebon > 100 && crim > 100,
+            "a drunk world needs both evils: ebonstone {ebon}, crimstone {crim}"
+        );
+
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 93);
+        let (ebon, crim) = evils(&ordinary);
+        assert!(
+            (ebon > 100) != (crim > 100),
+            "an ordinary world must have exactly one evil: ebonstone {ebon}, crimstone {crim}"
         );
     }
 

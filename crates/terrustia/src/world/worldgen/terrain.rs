@@ -104,7 +104,7 @@ pub fn fill(world: &mut World, layout: &Layout, heights: &[i32], rand: &mut Unif
 
         for y in top..layout.height {
             let depth = y - top;
-            let block = material(layout, biome, y, depth, rand);
+            let block = material(layout, biome, x, y, depth, rand);
             let mut tile = Tile::block(block);
             // The top two rows show sky behind them; below that a wall, or a cave's background
             // once something carves into it.
@@ -135,6 +135,7 @@ pub fn fill(world: &mut World, layout: &Layout, heights: &[i32], rand: &mut Unif
 fn material(
     layout: &Layout,
     biome: Option<Surface>,
+    x: i32,
     y: i32,
     depth: i32,
     rand: &mut UnifiedRandom,
@@ -192,7 +193,7 @@ fn material(
             }
         }
         Some(Surface::Evil) => {
-            let (grass, stone, sand) = match layout.evil {
+            let (grass, stone, sand) = match layout.evil_at(x) {
                 Evil::Corruption => (tiles::CORRUPT_GRASS, tiles::EBONSTONE, tiles::EBONSAND),
                 Evil::Crimson => (tiles::CRIMSON_GRASS, tiles::CRIMSTONE, tiles::CRIMSAND),
             };

@@ -70,6 +70,30 @@ pub struct Layout {
     pub evil_band: Band,
     /// Where the jungle temple's entrance is, deep under the jungle.
     pub temple: (i32, i32),
+    /// Drunk World only: which half of the world holds the Crimson, the other holding the
+    /// Corruption (`WorldGen.cs:2052-2062`, `GenVars.crimsonLeft`). `None` in every other world,
+    /// which has one evil across one band.
+    pub drunk_crimson_left: Option<bool>,
+    /// Drunk World only: the second evil's band, mirroring `evil_band` onto the other half. `None`
+    /// in every other world.
+    pub second_evil_band: Option<Band>,
+}
+
+impl Layout {
+    /// Which evil is at this column. One answer for an ordinary world; two for Drunk World.
+    pub fn evil_at(&self, x: i32) -> Evil {
+        match self.drunk_crimson_left {
+            None => self.evil,
+            Some(crimson_left) => {
+                let left = x < self.width / 2;
+                if left == crimson_left {
+                    Evil::Crimson
+                } else {
+                    Evil::Corruption
+                }
+            }
+        }
+    }
 }
 
 /// How wide an ocean is on a full-sized world, in tiles.
@@ -217,6 +241,8 @@ impl Layout {
             desert,
             evil_band,
             temple,
+            drunk_crimson_left: None,
+            second_evil_band: None,
         }
     }
 
@@ -287,7 +313,8 @@ impl Layout {
             Some(Surface::Snow)
         } else if self.desert.contains(x) {
             Some(Surface::Desert)
-        } else if self.evil_band.contains(x) {
+        } else if self.evil_band.contains(x) || self.second_evil_band.is_some_and(|b| b.contains(x))
+        {
             Some(Surface::Evil)
         } else {
             None

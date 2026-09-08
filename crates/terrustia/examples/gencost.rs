@@ -134,7 +134,7 @@ fn main() {
 
     timed!(
         "structures::evil_chasms",
-        structures::evil_chasms(&mut world, &plan, &heights, &mut rand)
+        structures::evil_chasms(&mut world, &plan, &heights, &mut rand, None)
     );
     timed!(
         "structures::dungeon",
