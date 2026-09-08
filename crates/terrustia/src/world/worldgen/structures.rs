@@ -394,8 +394,15 @@ pub fn caves(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) {
                 x = rand.next_range(0, layout.width);
                 y = rand.next_range(surface_high, layout.underworld);
             }
-            let strength = f64::from(rand.next_range(min_strength, max_strength));
-            let steps = rand.next_range(min_steps, max_steps);
+            let mut strength = f64::from(rand.next_range(min_strength, max_strength));
+            let mut steps = rand.next_range(min_steps, max_steps);
+            // `WorldGen.cs:12082` and `:12097`: under Remix a hole below the rock layer is made
+            // smaller, because that is the shallow end of a Remix world's progression rather than
+            // the deep one.
+            if layout.remix && y > layout.rock {
+                strength *= 0.8;
+                steps = (f64::from(steps) * 0.9) as i32;
+            }
             tile_runner(world, x, y, strength, steps, None, false, rand);
         }
     }

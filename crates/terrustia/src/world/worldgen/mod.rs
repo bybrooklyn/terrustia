@@ -1516,6 +1516,50 @@ mod tests {
         );
     }
 
+    /// Remix moves the cavern layer up, and the passes that place cavern content follow it.
+    ///
+    /// Counted rather than spot-checked: gem caves, spider caves, moss caves and glowing-mushroom
+    /// patches all site themselves through `deep_band`, so under Remix their walls and pockets sit
+    /// above the rock line where an ordinary world puts them below it.
+    #[test]
+    fn remix_puts_cavern_content_above_the_rock_line() {
+        let deep_wall_rows = |world: &World, rock: i32| {
+            let (mut above, mut below) = (0usize, 0usize);
+            for x in (0..world.width()).step_by(3) {
+                for y in (0..world.height()).step_by(3) {
+                    // Mushroom and moss walls are the ones these passes paint.
+                    let w = world.tile(x, y).wall;
+                    if matches!(w, 80 | 180 | 181 | 182 | 183) {
+                        if y < rock {
+                            above += 1;
+                        } else {
+                            below += 1;
+                        }
+                    }
+                }
+            }
+            (above, below)
+        };
+
+        let (remixed, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "remix", "dontdigup");
+        // The flag is deliberately not claimed on the world; the generation still happens.
+        assert!(built.secret_seeds.remix, "the seed should be detected");
+        let rock = i32::from(remixed.rock_layer);
+        let (r_above, r_below) = deep_wall_rows(&remixed, rock);
+
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 97);
+        let (o_above, o_below) = deep_wall_rows(&ordinary, i32::from(ordinary.rock_layer));
+
+        assert!(
+            o_below > o_above,
+            "an ordinary world puts this content below the rock line: {o_above} above, {o_below} below"
+        );
+        assert!(
+            r_above > o_above,
+            "remix should lift it: remix {r_above} above vs ordinary {o_above},              remix {r_below} below vs ordinary {o_below}"
+        );
+    }
+
     /// Spawn is somewhere a player can stand: air above, ground below, no water.
     #[test]
     fn spawn_is_somewhere_survivable() {
