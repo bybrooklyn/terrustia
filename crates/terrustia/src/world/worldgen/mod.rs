@@ -350,9 +350,16 @@ pub fn build_with_secret_seed(
     // Drunk World is the one seed that changes the *layout* rather than decorating it: both evils,
     // one per half of the world (`WorldGen.cs:2052-2062`). Decided here, before terrain runs, so
     // every pass that asks `evil_at` gets a consistent answer.
-    // Remix: the cavern layer moves above the rock line, so every pass that places deep content
-    // asks `deep_band` rather than assuming. Set before any pass reads the layout.
-    if honoured.remix {
+    // Remix reads the *detected* seed, not the honoured one, and the difference is the point.
+    // `honoured_by_this_generator` strips the remix flag so the world file never claims a shape it
+    // does not have - see that function's doc. But the tiles can still be generated Remix's way,
+    // and every site that has been ported is strictly closer to the seed than an ordinary world
+    // would be. Generating like Remix is a fact about the tiles; claiming `remixWorld` is a promise
+    // to the client. This does the first and not the second.
+    //
+    // This was wrong for nine commits: the passes were gated on `honoured.remix`, which is always
+    // false, so none of them ever ran. A test asserting the spawn moved is what caught it.
+    if secret.remix {
         plan.remix = true;
     }
     if honoured.drunk {
@@ -655,10 +662,27 @@ pub fn build_with_secret_seed(
     let hellforges = underworld_ruins::scatter_hellforges(&mut world, &plan, &mut rand);
 
     // Spawn goes on the surface in the middle, in a pocket cleared for it.
-    let spawn_y = heights[plan.spawn_x as usize];
-    world.spawn_x = plan.spawn_x as i16;
+    // `WorldGen.cs:19739-19748`, the `SpawnPoint` pass: a Remix world spawns the player at the
+    // world's centre column, on the first non-solid tile walking *up* from ten rows off the bottom.
+    // That is the underworld floor, which is where a Remix player starts and why the seed is called
+    // "don't dig up".
+    let (spawn_x, spawn_y) = if plan.remix {
+        let x = width / 2;
+        let mut y = height - 10;
+        while y > 1 {
+            let t = world.tile(x, y);
+            if !(t.is_active() && terrustia_proto::tile_solid::solid(t.block)) {
+                break;
+            }
+            y -= 1;
+        }
+        (x, y + 1)
+    } else {
+        (plan.spawn_x, heights[plan.spawn_x as usize])
+    };
+    world.spawn_x = spawn_x as i16;
     world.spawn_y = spawn_y as i16;
-    terrain::clear_spawn(&mut world, plan.spawn_x, spawn_y);
+    terrain::clear_spawn(&mut world, spawn_x, spawn_y);
     world.dungeon_y = Some(heights[plan.dungeon_x.clamp(0, width - 1) as usize]);
 
     let chests = chests.saturating_sub(drop_orphaned_chests(&mut world));
@@ -1516,20 +1540,20 @@ mod tests {
         );
     }
 
-    /// Remix moves the cavern layer up, and the passes that place cavern content follow it.
+    /// Remix moves the cavern layer up, and the passes sited through `deep_band` follow it.
     ///
-    /// Counted rather than spot-checked: gem caves, spider caves, moss caves and glowing-mushroom
-    /// patches all site themselves through `deep_band`, so under Remix their walls and pockets sit
-    /// above the rock line where an ordinary world puts them below it.
+    /// Measured on the exposed-gem pass, because that is one of the passes actually moved and it
+    /// places a distinctive tile. An earlier version of this test counted cave *walls*, which was
+    /// wrong twice over: the wall ids were the wrong ones, and once corrected they measure pocket
+    /// siting, which this work has not moved. The lesson kept rather than the test deleted.
     #[test]
-    fn remix_puts_cavern_content_above_the_rock_line() {
-        let deep_wall_rows = |world: &World, rock: i32| {
+    fn remix_lifts_the_gem_pass_above_the_rock_line() {
+        let gems = |world: &World, rock: i32| {
             let (mut above, mut below) = (0usize, 0usize);
-            for x in (0..world.width()).step_by(3) {
-                for y in (0..world.height()).step_by(3) {
-                    // Mushroom and moss walls are the ones these passes paint.
-                    let w = world.tile(x, y).wall;
-                    if matches!(w, 80 | 180 | 181 | 182 | 183) {
+            for x in 0..world.width() {
+                for y in 0..world.height() {
+                    let t = world.tile(x, y);
+                    if t.is_active() && (63..=68).contains(&t.block) {
                         if y < rock {
                             above += 1;
                         } else {
@@ -1542,21 +1566,55 @@ mod tests {
         };
 
         let (remixed, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "remix", "dontdigup");
-        // The flag is deliberately not claimed on the world; the generation still happens.
         assert!(built.secret_seeds.remix, "the seed should be detected");
-        let rock = i32::from(remixed.rock_layer);
-        let (r_above, r_below) = deep_wall_rows(&remixed, rock);
+        let (r_above, r_below) = gems(&remixed, i32::from(remixed.rock_layer));
 
         let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 97);
-        let (o_above, o_below) = deep_wall_rows(&ordinary, i32::from(ordinary.rock_layer));
+        let (o_above, o_below) = gems(&ordinary, i32::from(ordinary.rock_layer));
 
         assert!(
             o_below > o_above,
-            "an ordinary world puts this content below the rock line: {o_above} above, {o_below} below"
+            "an ordinary world puts its gems below the rock line: {o_above} above, {o_below} below"
         );
         assert!(
             r_above > o_above,
-            "remix should lift it: remix {r_above} above vs ordinary {o_above},              remix {r_below} below vs ordinary {o_below}"
+            "remix should lift them: remix {r_above} above vs ordinary {o_above} \
+             (below: remix {r_below}, ordinary {o_below})"
+        );
+    }
+
+    /// Remix spawns the player in the underworld, at the world's centre.
+    ///
+    /// This is the seed's own name made literal - "don't dig up" - and vanilla's `SpawnPoint` pass
+    /// does it by walking up from ten rows off the bottom to the first non-solid tile.
+    #[test]
+    fn remix_spawns_the_player_under_the_world() {
+        let (remixed, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "remix", "dontdigup");
+        assert!(built.secret_seeds.remix, "the seed should be detected");
+
+        let spawn_y = i32::from(remixed.spawn_y);
+        let underworld = SMALL_HEIGHT - (f64::from(SMALL_HEIGHT) * 0.14) as i32;
+        assert_eq!(
+            i32::from(remixed.spawn_x),
+            SMALL_WIDTH / 2,
+            "a remix spawn is at the world's centre column"
+        );
+        assert!(
+            spawn_y > underworld,
+            "a remix spawn belongs in the underworld: spawn {spawn_y}, underworld top {underworld}"
+        );
+        // `spawnTileY` is the floor the player stands *on*, so the tile itself is solid and the
+        // space above it is what must be clear. Vanilla's own loop returns exactly that row.
+        let sx = i32::from(remixed.spawn_x);
+        assert!(
+            !remixed.tile(sx, spawn_y - 1).is_active(),
+            "there is no headroom above the remix spawn"
+        );
+
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 99);
+        assert!(
+            i32::from(ordinary.spawn_y) < underworld,
+            "an ordinary spawn is nowhere near the underworld"
         );
     }
 

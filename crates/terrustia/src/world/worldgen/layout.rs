@@ -101,6 +101,23 @@ impl Layout {
         }
     }
 
+    /// `GenVars.lavaLine`: the row below which the cavern layer's pools are lava rather than water.
+    ///
+    /// `TerrainPass.cs:214-219` derives it as roughly the midpoint of rock layer and world bottom -
+    /// **except under Remix, where it is redefined outright** as `(worldSurface * 4 + rockLayer)/5`,
+    /// a fifth of the way from the surface down to the rock layer. That is very shallow, and it is
+    /// not a detail: several passes take `lavaLine` as a range bound, and one of them
+    /// (`WorldGen.cs:17755`) reads `Next(lavaLine, rockLayer + 50)`, which is only a forward range
+    /// at all because Remix moved the line above the rock layer. Getting this wrong produced a
+    /// backwards range and a panic, which is how it was found.
+    pub fn lava_line(&self) -> i32 {
+        if self.remix {
+            (self.surface * 4 + self.rock) / 5
+        } else {
+            ((self.rock + self.height) / 2 + 65).min(self.underworld)
+        }
+    }
+
     /// Which evil is at this column. One answer for an ordinary world; two for Drunk World.
     pub fn evil_at(&self, x: i32) -> Evil {
         match self.drunk_crimson_left {

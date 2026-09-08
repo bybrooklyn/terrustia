@@ -218,7 +218,7 @@ pub fn scatter(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) -> 
         // `WorldGen.cs:17755`: Remix draws this band from the lava line up to just past the rock
         // layer, where the ordinary world draws it from the water line down to the underworld.
         let y = if layout.remix {
-            rand.next_range(layout.underworld, layout.rock + 50)
+            rand.next_range(layout.lava_line(), layout.rock + 50)
         } else {
             rand.next_range((layout.surface + layout.rock) / 2, layout.underworld)
         };
