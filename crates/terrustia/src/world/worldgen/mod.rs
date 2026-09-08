@@ -52,6 +52,7 @@ pub mod manifest;
 pub mod micro_biomes;
 pub mod mining_explosives;
 pub mod moss;
+pub mod not_the_bees;
 pub mod oasis;
 pub mod passes;
 pub mod piles;
@@ -600,6 +601,14 @@ pub fn build_with_secret_seed(
     // vanilla interleaving with those four can't be reproduced without re-litigating where
     // `smooth()` belongs (see this wave's own opening comment); their relative order against each
     // other and against the rest of this trailing wave is preserved instead.
+    // "Not the bees": the whole-world conversion to jungle and hive. Vanilla runs `NotTheBees`
+    // five times across generation; this generator runs it once here, after every terrain and
+    // structure pass has laid its tiles down and before the cosmetic tail, which is the point the
+    // repeated calls converge on. `FinishNotTheBees` turns the water to honey at the very end.
+    if honoured.not_the_bees {
+        not_the_bees::convert(&mut world, &plan, &mut rand);
+    }
+
     let quick_cleanup = tile_cleanup::quick_cleanup(&mut world, &plan);
     let surface_ore_and_stone = tile_cleanup::surface_ore_and_stone(&mut world, &plan, &mut rand);
     let surface_dirt_walls_to_grass_walls =
@@ -625,6 +634,12 @@ pub fn build_with_secret_seed(
     let speleothems = speleothems::scatter(&mut world, &plan, &mut rand);
     let broken_trap_cleanup = tile_cleanup::broken_trap_cleanup(&mut world);
     let final_cleanup = tile_cleanup::final_cleanup(&mut world, &plan);
+
+    // `FinishNotTheBees`: every pool of water in the world becomes honey. Last, so it catches the
+    // liquid every pass above settled.
+    if honoured.not_the_bees {
+        not_the_bees::finish(&mut world);
+    }
 
     let built = Built {
         lakes,
@@ -1102,6 +1117,62 @@ mod tests {
             swords > 0,
             "shrines placed but no Enchanted Sword tile in any"
         );
+    }
+
+    /// A real `notthebees` world is made of hive and mud, and an ordinary world at the same size
+    /// is not. End-to-end through `build_from_text`, the same path `main.rs` takes.
+    ///
+    /// The comparison against an ordinary world is the point: asserting only that hive exists
+    /// would pass on a world that merely has a bee hive in it, which every world has.
+    #[test]
+    fn not_the_bees_turns_the_whole_world_to_hive_and_mud() {
+        let count = |world: &World, block: u16| {
+            let mut n = 0usize;
+            for x in (0..world.width()).step_by(3) {
+                for y in (0..world.height()).step_by(3) {
+                    if world.tile(x, y).block == block && world.tile(x, y).is_active() {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+
+        let (bees, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "bees", "notthebees");
+        assert!(built.secret_seeds.not_the_bees, "the seed was not detected");
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 77);
+
+        let bee_hive = count(&bees, 225);
+        let plain_hive = count(&ordinary, 225);
+        assert!(
+            bee_hive > plain_hive * 20 && bee_hive > 1000,
+            "hive {bee_hive} vs ordinary {plain_hive}: the world was not converted"
+        );
+
+        let bee_mud = count(&bees, 59);
+        let plain_mud = count(&ordinary, 59);
+        assert!(
+            bee_mud > plain_mud,
+            "mud {bee_mud} vs ordinary {plain_mud}: dirt was not converted"
+        );
+
+        // And the water is honey.
+        let mut water = 0;
+        let mut honey = 0;
+        for x in (0..bees.width()).step_by(3) {
+            for y in (0..bees.height()).step_by(3) {
+                let t = bees.tile(x, y);
+                if t.liquid > 0 {
+                    match t.liquid_kind {
+                        terrustia_proto::Liquid::Water => water += 1,
+                        terrustia_proto::Liquid::Honey => honey += 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        assert_eq!(water, 0, "water survived FinishNotTheBees");
+        assert!(honey > 0, "no honey at all in a not-the-bees world");
     }
 
     /// Spawn is somewhere a player can stand: air above, ground below, no water.
