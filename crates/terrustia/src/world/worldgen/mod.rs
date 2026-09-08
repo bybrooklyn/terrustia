@@ -32,6 +32,7 @@
 //! points that actually check seed text against it; [`build`]/[`generate`] never do.
 
 pub mod cave_flood;
+pub mod celebration;
 pub mod dead_mans_chest;
 pub mod desert;
 pub mod dirt_wall_cleanup;
@@ -664,6 +665,12 @@ pub fn build_with_secret_seed(
         for_the_worthy::finish(&mut world, &plan, &mut rand);
     }
 
+    // `FinishTenthAnniversaryWorld`: Celebrationmk10 paints every landmark in the world and turns
+    // some boulders into party ones.
+    if honoured.tenth_anniversary {
+        celebration::finish(&mut world, &plan, &mut rand);
+    }
+
     let built = Built {
         lakes,
         trees,
@@ -1261,6 +1268,30 @@ mod tests {
             painted(&ordinary),
             0,
             "an ordinary world must carry no paint at all"
+        );
+    }
+
+    /// Celebrationmk10 paints its landmarks, and picks different colours from For the Worthy.
+    ///
+    /// The two seeds are both "paint the world" seeds, so asserting only that paint exists would
+    /// pass for either. This asserts the dungeon takes Celebrationmk10's own fixed 24.
+    #[test]
+    fn celebrationmk10_paints_the_dungeon_its_own_colour() {
+        let (party, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "party", "celebrationmk10");
+        assert!(built.secret_seeds.tenth_anniversary, "seed not detected");
+
+        let mut dungeon_paint = std::collections::HashSet::new();
+        for x in 0..party.width() {
+            for y in 0..party.height() {
+                let t = party.tile(x, y);
+                if t.is_active() && matches!(t.block, 41 | 43 | 44) {
+                    dungeon_paint.insert(t.color);
+                }
+            }
+        }
+        assert!(
+            dungeon_paint.contains(&24),
+            "the dungeon should be painted 24, saw {dungeon_paint:?}"
         );
     }
 
