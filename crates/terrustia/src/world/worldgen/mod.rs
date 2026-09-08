@@ -39,6 +39,7 @@ pub mod fallen_logs;
 pub mod floating_islands;
 pub mod gem_caves;
 pub mod genpipe;
+pub mod hive;
 pub mod jungle_shrines;
 pub mod lakes;
 pub mod layout;
@@ -154,6 +155,8 @@ pub struct Built {
     pub thin_ice: usize,
     /// Surface dune fields: rolling sand hills over the desert instead of a flat shelf.
     pub dune_fields: usize,
+    /// Wild bee hives: honey chambers carved through the jungle, each with a larva stand.
+    pub wild_hives: usize,
     /// Living Mahogany trees: a hollow jungle trunk with a chest in its base.
     pub mahogany_trees: usize,
     /// Rigged ore veins: explosives wired to a detonator. Zero under No Traps World.
@@ -483,6 +486,10 @@ pub fn build_with_secret_seed(
 
     // Rigged ore veins: explosives wired to a detonator. Vanilla runs these in the same block, and
     // skips them entirely under No Traps World, which this honours.
+    // Wild bee hives, vanilla's `Beehives` pass. Distinct from `structures::hive`, which builds
+    // the one Queen Bee hive: these are the five-to-eight scattered honey chambers.
+    let wild_hives = hive::scatter(&mut world, &plan, &mut structures, &mut rand);
+
     // The jungle's Living Mahogany trees, which vanilla grows alongside the living trees.
     let mahogany_trees = mahogany::scatter(&mut world, &plan, &mut structures, &mut rand);
 
@@ -644,6 +651,7 @@ pub fn build_with_secret_seed(
         cloud_lakes: floating_islands.lakes,
         thin_ice: micro_biomes.thin_ice,
         dune_fields,
+        wild_hives: wild_hives.len(),
         mahogany_trees,
         rigged_veins,
         sword_shrines,

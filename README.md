@@ -70,7 +70,7 @@ the glowing mushroom biome, and the full cosmetic and cleanup tail. Vanilla's se
 plus two more real ones an earlier pass had missed, are detected by their real magic strings (`--seed
 "getfixedboi"` is recognised, though a world this generator makes does not claim the flag, since
 nothing here mirrors the world), and one of the nine, No Traps World, is fully wired. What is left
-of worldgen is 3 of 15 micro-biome classes and the other eight seeds' own generation-content
+of worldgen is 2 of 15 micro-biome classes and the other eight seeds' own generation-content
 differences, sized in [`TODO.md`](TODO.md)'s v0.0.2 section and deferred to v0.0.2.
 
 ## Running
@@ -238,7 +238,7 @@ against these notes. [`AUDIT.md`](AUDIT.md) has the findings behind it, and
 <summary><b>World generation</b></summary>
 
 Tier 1 (the passes that make a world stop looking like a prototype), Tier 2 (biome set pieces) and
-Tier 3 (the cosmetic and cleanup tail) are all done. What is left: 3 of 15 real `MicroBiome`
+Tier 3 (the cosmetic and cleanup tail) are all done. What is left: 2 of 15 real `MicroBiome`
 classes, and eight of the nine known secret seeds' own generation-content differences (the ninth, No
 Traps World, is done).
 
@@ -264,7 +264,7 @@ is the reason the count can move again.
 | ✅ | Traps | Dart traps, land mines, boulder traps, geysers, and the desert's sand trap, transcribed from `placeTrap` and `PlaceSandTrap`. A real 4200×1200 world: 72 dart traps, 10 mines, 4 boulder traps, 1 geyser |
 | ✅ | Smoothed terrain (`SmoothWorld`) | Transcribed, with one deliberate reordering: this generator smooths last, after decoration; see `smooth.rs`. 30,107 tiles smoothed on the same world |
 | ✅ | Floating islands, spider and gem caves, pyramids, living trees, jungle shrines, underground cabins, oasis, glowing mushroom biome (Tier 2) | A roughly 200-line structure-overlap tracker (`StructureMap`) turned out to be enough for all nine, with no port of vanilla's shape and structure DSL needed |
-| 🟡 | Micro-biomes | 12 of 15 real `MicroBiome` classes done. The Enchanted Sword shrine and the surface dune fields are the newest two, and the first built on `worldgen/genpipe.rs`, a real transcription of vanilla's own shape/modifier/action generation pipeline rather than the plain circles the earlier six used. The remaining 3 each need their own subsystem on top of it (a trappable-chest mechanism, a second tree-growth engine, a wandering-tunnel shape); the table is in `TODO.md` |
+| 🟡 | Micro-biomes | 13 of 15 real `MicroBiome` classes done. The Enchanted Sword shrine and the surface dune fields are the newest two, and the first built on `worldgen/genpipe.rs`, a real transcription of vanilla's own shape/modifier/action generation pipeline rather than the plain circles the earlier six used. The remaining 2 each need their own subsystem on top of it (a trappable-chest mechanism, a second tree-growth engine, a wandering-tunnel shape); the table is in `TODO.md` |
 | ✅ | Moss, wall variety, waterfalls, thin ice, speleothems, exposed gems, lily pads, coral, cacti, the seven-pass tile-cleanup bundle (Tier 3) | All 8 sizing-table items landed, each with its own disclosed narrowing; see the pre-roadmap ledger's Done rows (`plan.md`, in git history) |
 | 🟡 | Secret seeds (Celebrationmk10, Drunk World, Not the Bees, Remix, No Traps, "get fixed boi", Don't Starve, For the Worthy, Skyblock) | All nine detected by their real magic strings (an earlier pass had six of seven wrong: Remix's real trigger is `dontdigup`, Drunk World has only the numeric 5162020, and so on), fixed against source, plus two more the original investigation never named. Seven persist through save and reload and reach a client's packet 7. Remix and "get fixed boi" are deliberately **not** claimed on worlds this generator makes, because nothing here mirrors the world and telling a client otherwise is a false claim about which way up it is (`secret_seed.rs:191-202`); a `.wld` real Terraria generated keeps its flag. No Traps World is fully wired (0 trap tiles versus 397 on an ordinary seed). The other eight seeds' generation-content differences are detected but not implemented; sized in `TODO.md`'s v0.0.2 section, deferred to v0.0.2 |
 | ⬜ | Seed-identical worlds | Sized at 219 to 372 engineer-days. Feature-complete is the goal; byte-identical is not |
