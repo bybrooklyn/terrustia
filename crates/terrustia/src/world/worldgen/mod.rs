@@ -35,6 +35,7 @@ pub mod cave_flood;
 pub mod dead_mans_chest;
 pub mod desert;
 pub mod dirt_wall_cleanup;
+pub mod dont_starve;
 pub mod dunes;
 pub mod enchanted_sword;
 pub mod fallen_logs;
@@ -163,6 +164,10 @@ pub struct Built {
     /// Dead Man's Chests: a gold chest re-skinned as bait and wired to darts, boulders and
     /// explosives. Zero under No Traps World.
     pub dead_mans_chests: usize,
+    /// Don't Starve's wavy caves: long sinusoidal tunnels across the cavern layer.
+    pub wavy_caves: usize,
+    /// Don't Starve's marble piles, each with up to three statues.
+    pub marble_piles: usize,
     /// Wild bee hives: honey chambers carved through the jungle, each with a larva stand.
     pub wild_hives: usize,
     /// Living Mahogany trees: a hollow jungle trunk with a chest in its base.
@@ -601,6 +606,16 @@ pub fn build_with_secret_seed(
     // vanilla interleaving with those four can't be reproduced without re-litigating where
     // `smooth()` belongs (see this wave's own opening comment); their relative order against each
     // other and against the rest of this trailing wave is preserved instead.
+    // "The Constant" (Don't Starve): the three passes vanilla adds only under this seed.
+    let (wavy_caves, marble_piles) = if honoured.dont_starve {
+        let caves = dont_starve::wavy_caves(&mut world, &plan, &mut rand);
+        dont_starve::lava_layer(&mut world, &plan, &mut rand);
+        let piles = dont_starve::marble_piles(&mut world, &plan, &mut rand);
+        (caves, piles)
+    } else {
+        (0, 0)
+    };
+
     // "Not the bees": the whole-world conversion to jungle and hive. Vanilla runs `NotTheBees`
     // five times across generation; this generator runs it once here, after every terrain and
     // structure pass has laid its tiles down and before the cosmetic tail, which is the point the
@@ -682,6 +697,8 @@ pub fn build_with_secret_seed(
         thin_ice: micro_biomes.thin_ice,
         underground_desert: underground_desert.is_some(),
         dune_fields,
+        wavy_caves,
+        marble_piles,
         dead_mans_chests,
         wild_hives: wild_hives.len(),
         mahogany_trees,
@@ -1173,6 +1190,34 @@ mod tests {
         }
         assert_eq!(water, 0, "water survived FinishNotTheBees");
         assert!(honey > 0, "no honey at all in a not-the-bees world");
+    }
+
+    /// A real `theconstant` world gets Don't Starve's three passes, and an ordinary world does not.
+    #[test]
+    fn dont_starve_cuts_wavy_caves_and_raises_marble() {
+        let (world, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "constant", "theconstant");
+        assert!(built.secret_seeds.dont_starve, "the seed was not detected");
+        assert!(built.wavy_caves > 0, "no wavy caves were cut");
+
+        let (_ordinary, plain) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 88);
+        assert_eq!(plain.wavy_caves, 0, "an ordinary world must get none");
+        assert_eq!(plain.marble_piles, 0);
+
+        // The marble is really there, not just counted.
+        if built.marble_piles > 0 {
+            let mut marble = 0;
+            for x in (0..world.width()).step_by(2) {
+                for y in (0..world.height()).step_by(2) {
+                    if world.tile(x, y).block == 367 {
+                        marble += 1;
+                    }
+                }
+            }
+            assert!(
+                marble > 0,
+                "marble piles were counted but none is in the world"
+            );
+        }
     }
 
     /// Spawn is somewhere a player can stand: air above, ground below, no water.
