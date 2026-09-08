@@ -133,9 +133,14 @@ descendant_pid() { # descendant_pid <pid>
 # `-L 1` and not more: each sample prints its own row carrying the *cumulative* total, so summing
 # across `-L 2` reports exactly twice the real figure and `-L 3` three times. Measured, not assumed:
 # 16936, 33872, 50808 for the same idle process.
-bytes_out() { # bytes_out <pid>
+# A pid nettop said nothing numeric about is not a pid that sent nothing, and printing 0 for both
+# is the one thing this function must not do: the README's "100% less" row is computed from it, so
+# a nettop that returned no rows at all (a pid already gone, a future macOS wanting different
+# privileges) would publish as a perfect score. Verified 2026-09-08 that an idle terrustia does
+# yield a row - `terrustia.<pid>,,,0,0` - so the zero in the table is measured and not this case.
+bytes_out() { # bytes_out <pid>; prints bytes, or "none" if nettop reported nothing numeric
   nettop -P -x -L 1 -p "$1" 2>/dev/null |
-    awk -F, '$6 ~ /^[0-9]+$/ { s += $6 } END { if (s == "") print 0; else print s }'
+    awk -F, '$6 ~ /^[0-9]+$/ { s += $6; n++ } END { if (n) print s; else print "none" }'
 }
 
 # Watch a running server for WINDOW seconds and print "cpu_pct peak_rss_kb bytes_sent".
@@ -151,6 +156,13 @@ watch_idle() { # watch_idle <pid>
   done
   c1="$(cpu_seconds "$pid")"
   b1="$(bytes_out "$pid")"
+  # Carry the unmeasured case through as -1 rather than folding it into 0, so the caller can print
+  # it as unmeasured instead of as a win.
+  if [ "$b0" = none ] || [ "$b1" = none ]; then
+    awk -v c0="$c0" -v c1="$c1" -v w="$WINDOW" -v p="$peak" \
+      'BEGIN { printf "%.2f %d -1\n", (c1 - c0) * 100.0 / w, p }'
+    return
+  fi
   awk -v c0="$c0" -v c1="$c1" -v w="$WINDOW" -v p="$peak" -v b0="$b0" -v b1="$b1" \
     'BEGIN { printf "%.2f %d %d\n", (c1 - c0) * 100.0 / w, p, (b1 - b0 < 0 ? 0 : b1 - b0) }'
 }
@@ -244,9 +256,18 @@ printf "| RAM, idle | %s MB | **%s MB** | %s less |\n" \
   "$(awk -v k="$VRSS" 'BEGIN { printf "%.1f", k / 1024 }')" \
   "$(awk -v k="$ORSS" 'BEGIN { printf "%.1f", k / 1024 }')" \
   "$(ratio "$VRSS" "$ORSS")"
-printf "| Bandwidth over %s minutes | %s B | **%s B** | %s |\n" \
-  "$(awk -v w="$WINDOW" 'BEGIN { printf "%g", w / 60 }')" "$VNET" "$ONET" \
-  "$(awk -v a="$VNET" -v b="$ONET" 'BEGIN { if (a == 0) print "n/a"; else printf "%.0f%% less", (a - b) * 100.0 / a }')"
+if [ "$VNET" = -1 ] || [ "$ONET" = -1 ]; then
+  # nettop reported nothing for at least one of the two. Say so rather than printing a number: an
+  # unmeasured row that reads as "0 B, 100% less" is the most flattering possible way to be wrong.
+  printf "| Bandwidth over %s minutes | %s | %s | UNMEASURED: nettop returned no rows |\n" \
+    "$(awk -v w="$WINDOW" 'BEGIN { printf "%g", w / 60 }')" \
+    "$([ "$VNET" = -1 ] && echo "n/a" || echo "$VNET B")" \
+    "$([ "$ONET" = -1 ] && echo "n/a" || echo "$ONET B")"
+else
+  printf "| Bandwidth over %s minutes | %s B | **%s B** | %s |\n" \
+    "$(awk -v w="$WINDOW" 'BEGIN { printf "%g", w / 60 }')" "$VNET" "$ONET" \
+    "$(awk -v a="$VNET" -v b="$ONET" 'BEGIN { if (a == 0) print "n/a"; else printf "%.0f%% less", (a - b) * 100.0 / a }')"
+fi
 echo
 echo "load average during the run: $(uptime | sed 's/.*averages*: *//')"
 [ "$BUSY" = 1 ] && echo "NOT PUBLISHABLE: the machine was contended. Re-run when quiet."
