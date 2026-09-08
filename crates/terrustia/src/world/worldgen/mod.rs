@@ -33,6 +33,7 @@
 
 pub mod cave_flood;
 pub mod dead_mans_chest;
+pub mod desert;
 pub mod dirt_wall_cleanup;
 pub mod dunes;
 pub mod enchanted_sword;
@@ -154,6 +155,8 @@ pub struct Built {
     pub cloud_lakes: usize,
     /// Frozen-pond patches of breakable ice, in the snow.
     pub thin_ice: usize,
+    /// Whether the Underground Desert was carved, and where.
+    pub underground_desert: bool,
     /// Surface dune fields: rolling sand hills over the desert instead of a flat shelf.
     pub dune_fields: usize,
     /// Dead Man's Chests: a gold chest re-skinned as bait and wired to darts, boulders and
@@ -425,6 +428,10 @@ pub fn build_with_secret_seed(
     // `Oasis` (16338) alike, though it rarely interacts with either in practice: a pyramid's own
     // site check only ever looks at the one point it starts digging from, not a wide window the
     // way oasis does.
+    // The Underground Desert, before the pyramids that sit on top of it. Vanilla runs `DesertBiome`
+    // in its own pass ahead of both.
+    let underground_desert = desert::scatter(&mut world, &plan, &mut structures, &mut rand, seed);
+
     // Dunes before pyramids, because vanilla runs `DunesBiome` inside the same desert pass and
     // ahead of the pyramid siting loop (`WorldGen.cs:11573`), and a pyramid sited against a flat
     // shelf that then grows dunes on top of it would end up buried.
@@ -658,6 +665,7 @@ pub fn build_with_secret_seed(
         floating_island_houses: floating_islands.houses,
         cloud_lakes: floating_islands.lakes,
         thin_ice: micro_biomes.thin_ice,
+        underground_desert: underground_desert.is_some(),
         dune_fields,
         dead_mans_chests,
         wild_hives: wild_hives.len(),

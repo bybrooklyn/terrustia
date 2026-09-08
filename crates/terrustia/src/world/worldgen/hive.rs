@@ -145,6 +145,10 @@ fn tunnel(world: &mut World, rand: &mut UnifiedRandom, from: (i32, i32)) -> (f64
                         t.flags = TileFlags(t.flags.0 | TileFlags::ACTIVE);
                         t.slope = 0;
                         t.block = HIVE;
+                        // Hive is not frame-important, so its frames must read -1 or the running
+                        // world disagrees with what a save writes. Same defect the desert had.
+                        t.frame_x = -1;
+                        t.frame_y = -1;
                     }
                     world.set_tile(k, l, t);
                 }
@@ -210,6 +214,8 @@ fn honey_cube(world: &mut World, x: i32, y: i32) {
             } else {
                 t.flags = TileFlags(t.flags.0 | TileFlags::ACTIVE);
                 t.block = HIVE;
+                t.frame_x = -1;
+                t.frame_y = -1;
             }
             world.set_tile(i, j, t);
         }
@@ -266,6 +272,8 @@ fn larva_stand(world: &mut World, at: (f64, f64)) -> (i32, i32) {
                 t.flags = TileFlags(t.flags.0 | TileFlags::ACTIVE);
                 t.block = HIVE;
                 t.slope = 0;
+                t.frame_x = -1;
+                t.frame_y = -1;
                 world.set_tile(i, j, t);
             }
         }

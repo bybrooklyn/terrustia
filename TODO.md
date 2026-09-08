@@ -1499,7 +1499,8 @@ roster asked at neutral luck alone would keep reporting it unreachable for ever.
 1. **v0.0.2, the worldgen release**: the seven remaining secret seeds' generation content (Not the
    Bees, Drunk World, Remix, Celebrationmk10, "get fixed boi", Don't Starve, Skyblock; Don't
    Starve alone touches 53+ scattered branch points across nearly the whole of `WorldGen.cs`, and
-   the others are comparable or larger) and the 1 of 15 remaining micro-biomes. The six deferred
+   the others are comparable or larger). **The micro-biomes are done: all 15 classes are ported
+   as of 2026-09-08.** The six deferred
    drop-table gaps ride along: five need Remix's own generation content, the sixth is the
    documented npc-44 nested-fallback shape.
 
