@@ -55,8 +55,11 @@ on the same 4200×1200 world with nobody connected:
 
 Saves are verified before they replace anything, then fsynced, and three backups are kept in
 rotation. A crash partway through a write cannot destroy the previous save. The file header is
-preserved byte for byte and patched, so everything this server does not model (Journey research, the
-bestiary, pylon rooms) survives untouched.
+preserved byte for byte and patched, so everything the header holds that this server does not model
+survives untouched. The sections that carry live state (Journey research, pylon rooms, tile
+entities) are re-encoded from the running server rather than copied, which is what keeps a pylon
+placed this session from vanishing. The bestiary is the exception and it is a real loss: see the
+World files table below.
 
 The short version: point it at a `.wld` you already have and it serves it well, with the same
 clients, the same file, and a much lighter footprint than the official server. Point it at nothing
@@ -65,7 +68,8 @@ cacti, lakes, settled water, pots, statues, piles, fallen logs, traps, rounded t
 islands, spider and gem caves, pyramids, living trees, jungle shrines, underground cabins, an oasis,
 the glowing mushroom biome, and the full cosmetic and cleanup tail. Vanilla's seven secret seeds,
 plus two more real ones an earlier pass had missed, are detected by their real magic strings (`--seed
-"getfixedboi"` works and persists), and one of the nine, No Traps World, is fully wired. What is left
+"getfixedboi"` is recognised, though a world this generator makes does not claim the flag, since
+nothing here mirrors the world), and one of the nine, No Traps World, is fully wired. What is left
 of worldgen is 7 of 15 micro-biome classes and the other eight seeds' own generation-content
 differences, sized in [`TODO.md`](TODO.md)'s v0.0.2 section and deferred to v0.0.2.
 
@@ -208,7 +212,7 @@ against these notes. [`AUDIT.md`](AUDIT.md) has the findings behind it, and
 | ✅ | Handshake, world data, section streaming | Checked against a real `TerrariaServer`, not only against our own client |
 | ✅ | Server password | |
 | ✅ | Localized announcements | Keys with substitutions, as the game sends, so a non-English client reads its own language |
-| 🟡 | Packet coverage | 111 of 163 message ids handled. Most of the rest are outbound-only or dead in vanilla too. Genuinely missing: portal-gunning an NPC (100), spectating (150), shop overrides (104) |
+| 🟡 | Packet coverage | 111 of 163 message ids handled. Most of the rest are outbound-only or dead in vanilla too. Genuinely missing, per `tools/packet_audit.py`'s own count: portal-gunning an NPC (100), shop overrides (104), and the dead-player fade cue (135). Spectating (150) is host migration and does not apply to a dedicated server |
 | ⬜ | Steam P2P and lobbies | Steamworks' licence is incompatible with AGPL |
 | ⬜ | Encryption | Terraria's protocol has none. `/login` sends a password as ordinary chat text, so do not reuse a real one |
 
@@ -221,11 +225,12 @@ against these notes. [`AUDIT.md`](AUDIT.md) has the findings behind it, and
 |---|---|---|
 | ✅ | Load `.wld` (format 279 to 326) | Refuses older and newer by name rather than guessing |
 | ✅ | Save `.wld` | Header preserved byte for byte and patched, so state we do not model survives untouched |
-| ✅ | Journey research, bestiary, pylon rooms, pressure plates | Carried through verbatim, verified by section index rather than assumed |
+| ✅ | Journey research, pylon rooms, tile entities | Re-encoded from the server's own live state, not copied from the loaded bytes. It has to be: a pylon placed while the server ran is not in the bytes it opened, and one that was mined still is (`wld_save.rs:124-152`) |
+| ✅ | Held pressure plates | Written empty, which is the correct minimum rather than a gap: vanilla's own loader throws the pressed set away on every load too (`wld_save.rs:538-550`) |
 | ✅ | Verified before replacing, fsynced, 3 rotating backups | So a crash mid-write cannot leave a corrupt file in place of a good one |
 | ✅ | `--new <name>` | Generates a fresh world into the world directory, under vanilla's own space-to-underscore filename convention. Refuses rather than overwrites if that name is taken |
-| 🟡 | Bestiary | Existing data is preserved; kills during a session are not added to it |
-| 🟡 | In-progress blood moon or eclipse | Not resumed from the file. The file's own bytes are undisturbed |
+| 🔴 | Bestiary | **Not preserved.** This server keeps no kill/sighting/chat tracker, so the section is written empty on every save and a world opened here loses the bestiary progress it arrived with. Deliberate and reasoned at `wld_save.rs:576-584` (carrying the bytes forward would claim progress the server cannot keep in step with), but a player will notice |
+| ✅ | In-progress blood moon or eclipse | Read on load and patched back on save, so an event survives a restart (`wld.rs:1028-1033`) |
 
 </details>
 
@@ -256,7 +261,7 @@ Traps World, is done). Both are v0.0.2 scope.
 | ✅ | Floating islands, spider and gem caves, pyramids, living trees, jungle shrines, underground cabins, oasis, glowing mushroom biome (Tier 2) | A roughly 200-line structure-overlap tracker (`StructureMap`) turned out to be enough for all nine, with no port of vanilla's shape and structure DSL needed |
 | 🟡 | Micro-biomes | 8 of 15 real `MicroBiome` classes done. The other 7 each need a genuinely separate subsystem this project does not have yet (a trappable-chest mechanism, a second tree-growth engine, a wandering-tunnel shape, and so on); sized in `TODO.md`'s v0.0.2 section |
 | ✅ | Moss, wall variety, waterfalls, thin ice, speleothems, exposed gems, lily pads, coral, cacti, the seven-pass tile-cleanup bundle (Tier 3) | All 8 sizing-table items landed, each with its own disclosed narrowing; see the pre-roadmap ledger's Done rows (`plan.md`, in git history) |
-| 🟡 | Secret seeds (Celebrationmk10, Drunk World, Not the Bees, Remix, No Traps, "get fixed boi", Don't Starve, For the Worthy, Skyblock) | All nine detected by their real magic strings (an earlier pass had six of seven wrong: Remix's real trigger is `dontdigup`, Drunk World has only the numeric 5162020, and so on), fixed against source, plus two more the original investigation never named. All nine persist through save and reload and reach a client's packet 7. No Traps World is fully wired (0 trap tiles versus 397 on an ordinary seed). The other eight seeds' generation-content differences are detected and persisted but not yet implemented; sized in `TODO.md`'s v0.0.2 section, deferred to v0.0.2 |
+| 🟡 | Secret seeds (Celebrationmk10, Drunk World, Not the Bees, Remix, No Traps, "get fixed boi", Don't Starve, For the Worthy, Skyblock) | All nine detected by their real magic strings (an earlier pass had six of seven wrong: Remix's real trigger is `dontdigup`, Drunk World has only the numeric 5162020, and so on), fixed against source, plus two more the original investigation never named. Seven persist through save and reload and reach a client's packet 7. Remix and "get fixed boi" are deliberately **not** claimed on worlds this generator makes, because nothing here mirrors the world and telling a client otherwise is a false claim about which way up it is (`secret_seed.rs:191-202`); a `.wld` real Terraria generated keeps its flag. No Traps World is fully wired (0 trap tiles versus 397 on an ordinary seed). The other eight seeds' generation-content differences are detected but not implemented; sized in `TODO.md`'s v0.0.2 section, deferred to v0.0.2 |
 | ⬜ | Seed-identical worlds | Sized at 219 to 372 engineer-days. Feature-complete is the goal; byte-identical is not |
 
 </details>
@@ -311,7 +316,7 @@ Traps World, is done). Both are v0.0.2 scope.
 |---|---|---|
 | ✅ | PvP, teams, deaths, respawn, chat | |
 | ✅ | Accounts, groups, permissions, bans by name, address or uuid | Argon2, off the game task |
-| 🟡 | Chat commands | 18 of them. No warps, regions, or item bans yet; that is the deferred TShock-shaped work |
+| 🟡 | Chat commands | 22 of them, as `/help` lists (`game/server/console.rs:662-685`). No warps, regions, or item bans yet; that is the deferred TShock-shaped work |
 | ✅ | Whitelist | Empty means off, so it cannot lock the operator out on the day it is enabled |
 | ✅ | Web admin panel | A full subsystem embedded in the binary, off by default: player list with kick and ban, whitelist, world switching (a real graceful restart), a live console and chat stream, a metrics dashboard, backups and rollback, groups and accounts admin, world creation, and a stylized live world view with player avatars coloured from their own real skin, hair and gear over the wire, no game assets shipped or read. Always localhost-only |
 
@@ -334,7 +339,7 @@ Traps World, is done). Both are v0.0.2 scope.
 
 | | | Notes |
 |---|---|---|
-| ✅ | Linux x86_64 and aarch64, macOS arm64 and x86_64, Windows x86_64 | All five pass `cargo check` |
+| ✅ | Linux x86_64 and aarch64, macOS arm64 and x86_64, Windows x86_64 and arm64 | Six release targets, all building on every push. Three of them (macOS arm64, both Windows) run the **full test suite** host-native rather than only compiling, which is what closed the era when every test this project passed, it passed on Linux. riscv64 is compile-checked by decision, not a release target |
 | 🟡 | Container image, signed releases, packaging | The container workflow has run for real: multi-arch image built, pushed, cosign-signed, smoke-tested. Signed releases are still untested; that workflow only triggers on a `v*` tag |
 
 </details>
@@ -377,17 +382,19 @@ trail is in [`AUDIT.md`](AUDIT.md); these are the ones worth telling.
 
 ## Verification
 
-Beyond the unit and integration tests, several `terrustia-client` examples check this implementation
-against the real game rather than against itself. `probe` dumps and compares the packet sequence.
-`diff_sections` and `verify_sections` compare captures at the tile level and re-encode real payloads.
-`verify` joins, spawns things, and confirms enemies move, shoot, hurt, and drop loot.
-`stress`, `crowd` and `load` hold the world full while the server reports its own per-phase tick
+Beyond the unit and integration tests, several examples check this implementation against the real
+game rather than against itself. They are split across both crates, so each needs its own `-p`:
+`probe` (in `terrustia`) dumps and compares the packet sequence, and `diff_sections` and
+`verify_sections` (also `terrustia`) compare captures at the tile level and re-encode real payloads.
+`conform` and `verify` (in `terrustia-client`) re-encode a real server's own bytes, and join, spawn
+things and confirm enemies move, shoot, hurt and drop loot. `stress` and `crowd` (`terrustia`) and
+`load` (`terrustia-client`) hold the world full while the server reports its own per-phase tick
 costs. `bot` joins, walks east, and reports, to be run against both servers and compared.
 
 ```sh
-cargo run --release --example probe -- 127.0.0.1:7778          # the real TerrariaServer
-cargo run --release --example probe -- 127.0.0.1:7777          # terrustia
-cargo run --release --example verify -- 127.0.0.1:7777
+cargo run --release -p terrustia --example probe -- 127.0.0.1:7778   # the real TerrariaServer
+cargo run --release -p terrustia --example probe -- 127.0.0.1:7777   # terrustia
+cargo run --release -p terrustia-client --example verify -- 127.0.0.1:7777
 cargo run --release -p terrustia --example stress -- 127.0.0.1:7777 60
 ```
 

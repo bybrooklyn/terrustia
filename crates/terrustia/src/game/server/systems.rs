@@ -4154,6 +4154,7 @@ impl GameServer {
             life: npc.life,
             life_max: npc.life_max,
             release_owner: 255,
+            spawn_needs_syncing: npc.spawn_needs_syncing,
         })
     }
 
@@ -4166,6 +4167,12 @@ impl GameServer {
         let Ok(frame) = sync.encode() else {
             return false;
         };
+        // Cleared here, on the send, exactly where vanilla clears it (`NetMessage.cs:1738`): the
+        // bit rides one frame per spawn and no more. Encoding happened above, so this frame still
+        // carries it.
+        if let Some(npc) = self.npcs.get_mut(index) {
+            npc.spawn_needs_syncing = false;
+        }
         let at = sync.position;
         self.broadcast_near(frame, at, Withheld::Npc(index), MAX_NPC_SYNC_SKIPS, None)
     }
@@ -4467,6 +4474,8 @@ impl GameServer {
             life: 0,
             life_max: 1,
             release_owner: 255,
+            // A death frame is the opposite of a spawn: nothing should be constructed for it.
+            spawn_needs_syncing: false,
         };
         if let Ok(frame) = sync.encode() {
             self.broadcast(frame, None);

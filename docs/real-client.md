@@ -94,7 +94,19 @@ into something that stays checked.
 The recorder and the replay tool have been exercised end to end against `terrustia-client`, which
 proves the plumbing: 9 chunks, 55,972 bytes, both streams re-framing with nothing left over.
 
-**No real Terraria client has been connected yet.** That is the open item, and it needs a person
-with the game installed. Until it happens, the claim that this server is protocol-correct rests on
-reading Terraria's decompiled source carefully — which is a good reason to believe it, and not the
-same thing as having checked.
+**A real Terraria client has been connected, and it found a bug no test of ours could.** The server
+was broadcasting message id 18 (`TimeSet`) every sixty seconds, which real vanilla's server never
+sends at all: grepping the whole decompiled tree finds zero `SendData(18)` calls by anyone. The
+client's own handler assigns the time with no smoothing, so a player watched the sky snap visibly
+to a different time of day. Every test this project had asserted only that our own encoder agreed
+with our own claim, and one of them had codified the bug outright. Fixed in `fc2f190`; the account
+is in `AUDIT.md`.
+
+**A real `TerrariaServer` has also been recorded and re-encoded**, which is the other direction:
+66,542 bytes of Re-Logic's own output, re-framed with nothing left over, and every id with an
+encoder coming back byte-identical, all 15 `TileSection` frames included.
+
+**What is still open is checking a capture in.** Both runs were one-off and their bytes live under
+`.scratch/`, out of the tree on purpose (rule 2 keeps game-derived data out). Nothing replays them
+on a schedule, so "somebody once connected the real game and it was fine" is still what the record
+rests on between sessions.

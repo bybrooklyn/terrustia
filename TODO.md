@@ -35,10 +35,11 @@ system is a gap like any other, so it went into scope and was built from
 
 **It has since landed, and this entry described the world before that.**
 `crates/terrustia-proto/src/happiness.rs` is 734 lines transcribing `ShopHelper.ProcessMood`
-(`ShopHelper.cs:99-178`) with its own test module, wired through `server/mod.rs:1424-1490` and
-reported by `/happy` (`console.rs:810-830`), with `examples/happiness_cost.rs` measuring what it
-costs. The multiplier is taken once per chat, on `SetTalkNPC` (`dispatch.rs:1685-1695`), the same
-moment vanilla takes it. Anything still outstanding under this gate needs naming from a fresh
+(`ShopHelper.cs:99-178`) with its own test module, wired through `server/mod.rs` (`shopping_zones`
+at `:1579`, `price_multiplier` at `:1633`) and reported by `/happy` (`game/server/console.rs:833`), with
+`examples/happiness_cost.rs` measuring what it costs. The multiplier is taken once per chat, on
+`SetTalkNPC` (`dispatch.rs:1750`), the same moment vanilla takes it. Three of those four line
+references were pointing at unrelated code by 2026-09-06 and have been re-derived. Anything still outstanding under this gate needs naming from a fresh
 reading of the code, not from this paragraph. Left here rather than deleted because the gate's history is the point: a system missing
 from both the code and the plan is invisible twice over, and so is one this file still calls
 missing after it exists.
@@ -58,10 +59,11 @@ subsystem, and fixes folded into that subsystem's single visit (split the file, 
 apply the audit fixes, tidy) so heavy files were churned once. Single-owner hot files
 (`game/server.rs`, `world/worldgen/mod.rs`) took one change at a time.
 
-All eight lanes (A-H) below landed. The from-scratch re-audit (Lane C's C2) then ran as its own
-wave and is recorded under Lane C. The lane detail is kept below as the built record; the only
-open Phase 1 item is C3 (adopting the fork's spawn module), which is blocked on the fork, not on
-us. What remains before the tag is Phase 2 qualification.
+All eight lanes (A-H) below landed, Lane B last, on 2026-09-06 - and every one of its bullets had
+been built for some time; what was missing was anybody checking. The from-scratch re-audit (Lane
+C's C2) then ran as its own wave and is recorded under Lane C. The lane detail is kept below as the
+built record. The only open Phase 1 item is C3 (adopting the fork's spawn module), which is blocked
+on the fork, not on us. What remains before the tag is Phase 2 qualification.
 
 ### Lane A: split `game/server.rs` by responsibility (done)
 
@@ -72,21 +74,49 @@ update calls), and a thin `mod.rs` keeping the `GameServer` state and actor entr
 change; production panics on caller- or environment-triggerable paths cleared in the moved code;
 the single-writer actor preserved; suite, clippy and fmt green per extraction.
 
-### Lane B: error handling and data safety
+### Lane B: error handling and data safety (done)
 
-- Clear every non-test `.unwrap()`/`.expect()`/panicking index/truncating cast from paths the
-  outside world can trigger; replace each with propagation and an operator-facing message. The
-  `net::listener::bind` mapping for `os error 28` is the pattern: keep the error kind, add advice.
-- Capped backoff in the accept loop on persistent `accept()` failure, so descriptor exhaustion does
-  not become a hot loop.
-- ENOSPC, read-only filesystems and vanished directories handled on every write path: world save
+**Closed 2026-09-06, and every bullet was already built when it was.** Nothing here needed writing;
+what it needed was somebody checking, because all four had landed and none had been marked. The
+last one held the lane open on a count that was wrong by fifty times, in a file that had the
+instrument to measure it correctly sitting in its own test suite. The
+other three landed and went unmarked, which is how this lane came to be described as wholly open in
+two documents at once.
+
+- ~~Clear every non-test `.unwrap()`/`.expect()`/panicking index/truncating cast from paths the
+  outside world can trigger; replace each with propagation and an operator-facing message.~~
+  **Done, and demonstrated 2026-09-06.** The `net::listener::bind` mapping for `os error 28` stays
+  the pattern for anything new: keep the error kind, add advice.
+
+  `docs/release-blockers.md` recorded "485 `.unwrap()` calls remain in production files" and named
+  five. All five have **zero**: every occurrence in them is inside `#[cfg(test)]`. 485 was a naive
+  whole-file grep, and three counting methods tried on 2026-09-06 gave 505, 1 and 9, because each
+  mishandles `#[cfg(test)]`, a comment, or a method this workspace happens to have named `expect`.
+
+  The real number is **12**, and `crates/terrustia/tests/panic_budget.rs` has been pinning it all
+  along - a fact neither backlog entry knew, which is why a second checker was written on
+  2026-09-06 before anyone found the first. It was thrown away rather than kept: `panic_budget` is
+  already in the test suite and therefore already in CI, it lists every site when it fails, and it
+  catches the one site a `syn` parse structurally cannot (`reader.rs`'s unwrap inside a
+  `macro_rules!` body). The two implementations agreeing on 12 from opposite directions is worth
+  more than either alone, and is recorded in `docs/release-blockers.md`.
+
+  All twelve are triaged there. Each is an invariant local to its own function with the reason
+  written at the site; none can be driven to fire by a client. What does **not** exist is automated
+  reachability analysis, and at twelve sites that is a question a person can answer.
+- ~~Capped backoff in the accept loop on persistent `accept()` failure, so descriptor exhaustion does
+  not become a hot loop.~~ **Done**: `accept_backoff` (`net/listener.rs:157`), wired at `:263`.
+- ~~ENOSPC, read-only filesystems and vanished directories handled on every write path: world save
   and autosave, rotating backups, the admin store, the setup-wizard config. Write to a temp path
   and rename into place everywhere; never lose the last good save to a half write. A failed
   autosave warns and retries: console and panel on the first failure, and after a few consecutive
-  failures an in-game broadcast that saves are failing and progress is at risk.
-- From the P0 verification: a game-side reaper for stale non-Playing slots older than
+  failures an in-game broadcast that saves are failing and progress is at risk.~~ **Done**:
+  `safe_write.rs`'s `write_atomic`/`copy_atomic` on every write path, and the escalation is
+  `note_save_failed` with `SAVE_FAILURES_BEFORE_ALARM` (`game/server/mod.rs:91`, `:1829`).
+- ~~From the P0 verification: a game-side reaper for stale non-Playing slots older than
   `handshake_timeout` (the connection-level 64-frame deadline is escapable by sending frames), and
-  the persistence refusal in Lane C1 below.
+  the persistence refusal in Lane C1 below.~~ **Done**: `reap_stalled_handshakes`
+  (`game/server/tick.rs:420`).
 
 ### Lane C: parity completion and the from-scratch re-audit
 
@@ -143,8 +173,13 @@ lesson that a fix is a change and deserves the same suspicion. It found one majo
 finishing-kill clamp that over-applied to every wave) and four minors, all fixed.
 
 **Deliberate seams, measured not skipped**: the liquid-levelling conservation divergence (see "What
-v0.0.1 means"); and C7-01, the Nebula Brain floater-hurry, which needs the NEBULA_FLOATER charge-up
-projectile AI (ai_style 102) that is not built yet, documented at its drop site. A handful of small
+v0.0.1 means"). C7-01, the Nebula Brain floater-hurry, **is no longer one of them**: it was recorded
+as blocked on the NEBULA_FLOATER charge-up (ai_style 102) not being built, and `1d40bff` built it -
+`tick_hovering_escorts` (`game/server/systems.rs:2693`) gives the floater the `ai[0]` charge timer
+(`NEBULA_HOVER`), owner tracking through `ai[1]`, and the server-side pass over the projectile store
+that the seam named as its three missing pieces. What is left is the one-line consumer of
+`out.hurried_floaters` the seam itself promised, plus its test; the drop-site comment at
+`game/ai/mod.rs:1084-1094` still states the old reason and goes with it. A handful of small
 narrowings are disclosed in-code where they were made (for example the liquid cycles round-robin,
 the CheckMech cross-frame refusal modelled per-trip, and a couple of cosmetic gaps).
 
@@ -208,8 +243,9 @@ own comment had predicted exactly this fix and left it for whoever owned the bro
 **C3, the spawn lane**: adopt the fork's spawn-parity module structure once Xekep affirms the CLA
 and the posted punch-list is fixed (or take the punch-list over if the fork goes quiet). This is a
 restructure of code we already own and have now audited and fixed, not a gap: `game/spawn.rs` is
-2,340 lines transcribed from `Spawner.SpawnAnNPC` with 34 tests. Nothing about the release waits on
-it.
+**6,701 production lines (16,295 total) with 160 tests**, transcribed from `Spawner.SpawnAnNPC`.
+This entry said 2,340 lines and 34 tests, which is the file as it was a long time ago and makes the
+restructure sound like a far smaller proposal than it is. Nothing about the release waits on it.
 
 **C5, the third from-scratch audit (2026-08-30) and its fix wave.** Eleven read-only lanes over the
 whole tree, ten parity lanes against the decompiled source plus one over-engineering lane kept
@@ -243,10 +279,17 @@ Both are the argument for the instrument campaign below.
 **The secret seeds, quantified for the first time, and it is a disclosure problem as much as a
 parity one.** An audit lane counted the sites rather than estimating them:
 
-- **`Main.getGoodWorld` (For the Worthy): 101 sites in `NPC.cs`, 79 of them in NPC AI.** Three are
-  implemented (the Wall of Flesh pace, the lunar pillar surface clamp, `DESTROYER_SEGMENTS_GOOD`),
-  five more are explicitly disclosed as absent at their sites, and **roughly 71 are silently
-  absent**, including all eleven of the Eye of Cthulhu's and all nine of the Twins'.
+- **`Main.getGoodWorld` (For the Worthy): 101 sites in `NPC.cs`, 79 of them in NPC AI.** When this
+  was written three were implemented; **re-counted 2026-09-06, the flag is now read in roughly a
+  dozen production modules** - the Twins' speed and acceleration (`ai/boss/twins.rs`), Golem's
+  airborne cap, Plantera's extra tentacles, the Creeper blend and pull, the Fighter's door
+  politeness through a blood moon, `DESTROYER_TURN_GET_GOOD` (`ai/worm.rs`), the King Slime torch
+  exemption and the town-NPC damage multiplier (`game/buffs.rs`), and the tenth-anniversary
+  exclusion in `systems.rs`, on top of the original three. **The Twins clause is therefore wrong
+  and is dropped**; the Eye of Cthulhu's eleven are still absent (`ai/boss/eye.rs` reads the flag
+  nowhere). The remaining count needs re-deriving before it is quoted again - and three of the new
+  sites carry a comment saying the flag "was read by only two routines in the whole workspace",
+  which was true when each was written and is not now.
 - ~~**`Main.remixWorld`: 85 sites, zero consumed by AI**, and yet **advertised to clients**.~~
   **The false claim is closed, 2026-09-05.** `SecretSeeds::honoured_by_this_generator` drops `remix`
   (and `everything`, since zenith *is* the combination) from any world this generator makes, so the
@@ -277,8 +320,10 @@ doc claimed "a handful of behaviours cover everything the roster and the world's
 count said otherwise: of the **79 projectile types something in this server can put in the air, 43
 reached no arm of their own** and flew straight because that is what the fallthrough does.
 
-**Sixteen of those 43 are closed**, which is every style that puts a projectile on an arc. Twenty-six
-are left and the doc now carries that number.
+**All 43 are closed as of 2026-09-06**, the golf ball last (`8eea7ec`). The roster grew to 81 along
+the way, because two of the fixes put types in the air that nothing here could launch before, and
+`projectile.rs`'s module doc now reads "none of 81". This paragraph said "twenty-six are left" for a
+day after that stopped being true.
 
 Closed 2026-09-05, each neutralisation-verified:
 
@@ -661,18 +706,6 @@ shape - an assertion that compared two things rather than pinning either. Ice ro
 sand stays true when the split between `direct` and `side` is removed entirely, so the bounce
 *height* needed its own test; and a gale carrying harder than a breeze stays true when the wind
 constant is a thousand times too big.
-**Coverage is 77 of 81** - the roster grew by one, because the Nebula Eye's laser is a type this
-server can now put in the air and could not before. Counted by the audit tool rather than by hand., counted by the audit tool rather than by hand. Style 112 counts as one of
-the eight and not as closed: it is three unrelated bodies keyed on the type inside the arm,
-exactly as vanilla keys them, and only the Truffle's spore is transcribed - crediting the style
-would credit the Dandelion seed for the spore's arm.
-
-- **45, the Rain Nimbus (264), is already right** and should not be counted as a movement gap: its
-  branch (`:28486-28509`) sets a rotation and bounces off shimmer, and nothing else. Its only
-  divergence is a 300-tick fuse where the table says 120.
-- **149, the golf ball**, is the only large one left: `BallCollision.Step`
-  (`Terraria.Physics/BallCollision.cs:24-90`) plus per-tile friction from `TileGolfPhysics`.
-
 **A neighbouring audit this lane opened and did not close: the invented shot lifetimes.** Forty
 `Shot` literals carry a `time_left` that is not the projectile's own table value, plus nine copies
 of a `const SHOT_LIFETIME: u16 = 300`, one of which documents itself as "matching the other ported
@@ -749,20 +782,30 @@ impossible, `admin::Throttle`); never treat the Terraria UUID as proof of identi
 verification: constant-time comparison for the claim token (`admin::constant_time_eq`, used at both
 the console and panel paths) and an fsync in the admin store's save.
 
-### Lane G: platforms
+### Lane G: platforms (done)
 
 Add `aarch64-pc-windows-msvc` to the CI and release matrices (six official targets), built and
 smoke-tested on GitHub's native `windows-11-arm` runner (falling back to cross-compilation if
 runner availability disappoints); keep `riscv64gc` compiling as a compile-only target; keep the
 matrix affordable.
 
+Every clause holds, and the lane went unmarked for long enough that two documents called it open:
+`ci.yml:93` and `release.yml:30` both carry the target on `windows-11-arm`, the release matrix is
+exactly six, the cross-compilation fallback was not needed ("no cross toolchain involved",
+`release.yml:29`), and `riscv64gc` is compile-only by a decision recorded at `ci.yml:94-95`. It also
+did better than the clause asked: `host: true` puts Windows ARM64 in `cargo test --workspace`, so
+the suite runs there rather than only building.
+
 ### Lane H: finish the codegen port (done)
 
 The eight remaining Python generators (`gen_drops`, `gen_projectiles`, `gen_banners`, `gen_buffs`,
 `gen_angler`, `gen_shimmer`, `gen_town_names`, `gen_travel_shop`) become `terrustia-codegen`
 modules, each verified byte-identical against its committed table; `just regen` points at the
-codegen crate and the last `tools/gen_*.py` are deleted. The three checker scripts stay in Python
-by decision (`check_drops.py`, `check_recipes.py`, `packet_audit.py`); note they need the
+codegen crate and the last `tools/gen_*.py` are deleted. The checker scripts stay in Python by
+decision - there were three when this was written (`check_drops.py`, `check_recipes.py`,
+`packet_audit.py`) and there are eight now, the newcomers being `check_citations.py`,
+`check_npc_data.py`, `check_placed_items.py`, `check_spawn_reach.py` and `check_tile_object.py`,
+plus `mutate_tables.py` and `parity_index.py` beside them. All but `packet_audit.py` need the
 decompiled tree, so they run locally at qualification time, never in hosted CI (`just check-data`).
 
 Two of the eight, `gen_shimmer.py` and `gen_travel_shop.py`, initially failed byte-identical for a
@@ -777,12 +820,20 @@ both generators to emit exactly what is committed rather than touching either ta
 - **Dense-file splits**, paired with panic-clearing and idiomatic cleanup in the same visit.
   Measured in **production lines**, with `#[cfg(test)]` bodies excluded (re-measured 2026-08-31,
   refreshed 2026-09-01; the earlier list counted total lines and so listed ten files that were
-  never dense): `game/server/systems.rs` (6,573 -> **6,976**), `game/server/dispatch.rs` (4,943 ->
-  **5,489**, now growing faster than systems.rs, +11% since the last measurement, and not on this
-  watch list until now), `game/server/mod.rs` (2,788 -> **3,042**), `world/wiring.rs` (1,690 production against 1,627 test, not the 2,575 total
-  this list used to quote), `game/spawn.rs` (1,644), `world/wld.rs` (1,364), `game/ai/mod.rs`
-  (1,237), `game/npc.rs` (1,186), `world/wld_save.rs` (1,053). The generated proto tables are
-  excluded: codegen output, never hand-edited, size is
+  never dense; **re-measured 2026-09-06, and every figure below had drifted**, one of them by four
+  times): `game/server/systems.rs` (**10,177**), `game/spawn.rs` (**6,701**),
+  `game/server/dispatch.rs` (**5,717**), `game/server/mod.rs` (**3,226**), `world/wiring.rs`
+  (**2,346**), `game/ai/mod.rs` (**1,449**), `world/wld.rs` (**1,402**), `game/npc.rs` (**1,364**),
+  `world/worldgen/structures.rs` (**1,255**), `world/wld_save.rs` (**1,068**), `world/world.rs`
+  (**1,036**), `term.rs` (**1,018**).
+
+  **`spawn.rs` is the finding.** This list carried it at 1,644 and ranked it fifth; it is 6,701
+  production lines and 16,295 total, which makes it the second-densest file in the tree and larger
+  than `dispatch.rs`. Anything sizing the C3 spawn-module restructure off the old number was sizing
+  a different file. `structures.rs`, `world.rs` and `term.rs` have also crossed 1,000 and come back
+  onto the list from the "off the list" line below.
+
+  The generated proto tables are excluded: codegen output, never hand-edited, size is
   fine. So are `crates/terrustia/tests/*.rs`, which carry no `#[cfg(test)]` and are test files
   entire (`gameplay.rs` would otherwise rank first at 6,907 lines).
 
@@ -790,16 +841,16 @@ both generators to emit exactly what is committed rather than touching either ta
   entries below sat unactioned past its own stated trigger for two days, so it is done now rather
   than staying an open item. `mod.rs` (481 lines) keeps `PanelState`, `run`/`supervise`, static
   asset serving and the shared `ask`/`err`/`send_ws`/`auth_lookup` plumbing every sibling reuses;
-  `auth.rs` (377), `status.rs` (181), `players.rs` (369), `worlds.rs` (430), `settings.rs` (374)
+  `auth.rs` (441), `status.rs` (181), `players.rs` (369), `worlds.rs` (430), `settings.rs` (374)
   and `accounts.rs` (320) hold one resource apiece, each exposing a `router()` the coordinator
   merges — the same shape `game/server/`'s own split settled into.
 
-  Off the list, all under 1,000 production lines: `world/worldgen/traps.rs` (989),
-  `world/worldgen/structures.rs` (950), `term.rs` (929), `world/world.rs` (916), `game/army.rs`
+  Off the list, under 1,000 production lines: `world/worldgen/traps.rs` (990), `game/army.rs`
   (847), `game/buffs.rs` (823), `world/worldgen/mod.rs` (670), `game/ai/town.rs` (654),
-  `game/ai/critter.rs` (654), `game/npc_ai.rs` (555). Note the three at the top of the new list
-  are the hot files the guardrail below sequences last, so the list is now ordered by size and
-  worked in roughly the opposite order.
+  `game/ai/critter.rs` (654), `game/npc_ai.rs` (555). `structures.rs`, `term.rs` and `world.rs`
+  were on this line and have grown past 1,000; they are on the watch list above now. Note the
+  files at the top of the new list are the hot ones the guardrail below sequences last, so the
+  list is ordered by size and worked in roughly the opposite order.
 - **Feature-cohesive layout and a periodic hygiene scan** (requested 2026-08-31, explicitly lower
   priority than parity work and never allowed to derail it). The dense-file list above is organised
   by size; this is the layer above it, organised by subject. A reader who wants to know how Martian
@@ -884,9 +935,10 @@ both generators to emit exactly what is committed rather than touching either ta
   layout): `game/{housing,arrivals,rescues}.rs` into `game/town/`, **before** the newly-gated happiness
   and pricing work needs a home; and `systems.rs` into `game/server/systems/` along its
   already-contiguous feature bands, **after** the parity lanes let go of it — checked 2026-09-01
-  and **not yet met**: `systems.rs` grew 6,573 -> 6,976 production lines and took 18 commits since
-  the last measurement, mostly the spawn-roster and boss-parity work still actively landing there,
-  which is the opposite of the lanes having let go of it. Explicitly do not touch: `wiring.rs` (one
+  and **not yet met**: `systems.rs` was 6,573 production lines when this trigger was written and is
+  **10,177** now, mostly the spawn-roster and boss-parity work still actively landing there, which
+  is the opposite of the lanes having let go of it. The trigger was being judged against 6,976, a
+  figure 3,200 lines out of date, which would have made "has it stopped growing" unanswerable. Explicitly do not touch: `wiring.rs` (one
   algorithm from `Wiring.cs`), `wld.rs` and `wld_save.rs` (sequential readers in the file format's
   own order), `npc_params.rs` (banded by AI style on purpose, which is exactly why its Martian
   constants sit 2,300 lines apart), `game/spawn.rs`, and all of `game/ai/`.
@@ -1024,8 +1076,10 @@ So the lesson is not "audit harder". It is that these defects have mechanical si
 leverage is in tools that find a *class* rather than a person finding an instance. Ranked by value
 over effort; the first three are roughly a day each.
 
-1. **Mutation-test the verifiers.** The highest-leverage item here and the only one that checks the
-   checkers. If `check_drops.py` cannot see a `ByCondition` rule, then deleting a `ByCondition`
+1. **Mutation-test the verifiers. Built and wired; the open work is keeping `BUDGET` empty.**
+   `tools/mutate_tables.py` exists, `just check-mutants` runs it and `just check-data` includes it,
+   and all six targets kill 100% as of 2026-09-05. The rationale below is kept as the record of why.
+   If `check_drops.py` cannot see a `ByCondition` rule, then deleting a `ByCondition`
    drop from the committed table does not make it fail, and that is directly testable: corrupt or
    remove entries programmatically, run the checker and the suite, and assert every mutation is
    caught. A surviving mutant is a blind spot by definition. This would have found the Bone gap
@@ -1037,7 +1091,9 @@ over effort; the first three are roughly a day each.
    fragments, the four missing treasure bags, the 102 unreachable items, the 57 master-mode items
    and the 80 missing projectiles into one query. Most of it exists: the audit lane wrote parsers
    over `ItemDropDatabase.cs` and a full interpreter of `SetupRecipes`, and the C3 wave repaired
-   the checker. What is missing is that it must exit non-zero and be wired into `just check-data`.
+   the checker. **The one stated gap has closed**: both gate now (`check_drops.py:833`,
+   `check_recipes.py:494`) and both are in `just check-data`. What is still uncovered is projectile
+   reachability, which has no checker in `tools/` at all - that is what this item now means.
    **It must stay a second, independent implementation.** Re-running the generator and diffing
    against its own output proves nothing; that is the same tautology as asserting `BUFF_COUNT`
    against the array the same generator sized.
@@ -1056,6 +1112,20 @@ over effort; the first three are roughly a day each.
    `ArmyState::champion_down` and `dungeon_side` were deleted as redundant state, `angler_quests`
    and `golf_score` now feed the rebroadcast the way `NetMessage.cs:1156-1160` does, and the rest
    went onto `ALLOWED` with a traced reason each. Keeping it at zero is the standing work.
+
+   **It did not stay at zero, and nobody noticed for six days.** Run again 2026-09-06, it reported
+   `NetVariant::rarity`: written at all 65 generated sites and read nowhere in production, on `main`
+   as well as on the branch, since `4d27097` added the net-variant table. That is the third checker
+   this project found silently red in one day, after `packet_audit.py` and `just regen` itself, and
+   the lesson each time is the same: a gate that is not part of a routine run is not a gate.
+
+   The field itself is now excused with a traced reason, and the reason names a real gap rather than
+   dismissing it. Vanilla reads `NPC.rarity` in exactly two places: `ContentSamples.cs:1228-1249`
+   sorts the bestiary with it, which is client-side; and `CoinLossRevengeSystem.cs:351` uses
+   `npc.rarity > 0` to *exclude* an NPC from getting a coin-loss revenge marker. This server models
+   the receiving half of that system (packet 92, `dispatch.rs::on_extra_value`, which accumulates
+   because two players can feed the same enemy) but not the marker cache the gate belongs to.
+   **So the open work is the revenge-marker cache**, and `rarity` is the field waiting for it.
 
 4. **Invariants in the soak, not just thresholds.** Liquid conservation is a property: the total in
    a sealed world does not change however many passes run. FIX-B found its blocker by measuring
@@ -1081,19 +1151,12 @@ over effort; the first three are roughly a day each.
    code-signature validation (0.42s), and machine load. It is a heisenbug: a diagnostic that dumps
    the child's output on failure stops it reproducing.
 
-   **The lead worth following**, seen by a second observer during the pillar lane: `Command::spawn`
-   itself returning `ENOENT`. That is not a timeout, it is the binary in `CARGO_BIN_EXE_terrustia`
-   not being there at the instant of the exec, which is exactly what a concurrent relink of
-   `target/debug/terrustia` would produce. It explains every observation at once: only after a
-   relink, never in isolation, worse under load, and heisenbug-shaped because any diagnostic moves
-   the exec relative to the write. A world file that never lands inside 120 s is the same fault seen
-   from further away, since a server that never started cannot write one. The same observer
-   disproved the obvious alternative rather than assuming it: the scratch dirs are keyed off
-   `SystemTime` nanoseconds, and four concurrent readers collided 0 times in 2000 trials at macOS's
-   1 us clock resolution. Next step is to `stat` the binary immediately before spawning and record
-   its inode and mtime on failure; if that confirms it, copy the binary once per test and exec the
-   copy, which `tests/bare_server_boot.rs` already does for a different reason and has never flaked.
-   Full write-up in `.scratch/audit-2026-08-30/FLAKE-new-world-cli.md`.
+   **The `ENOENT`-against-a-concurrent-relink lead that used to be written up here was wrong**, and
+   is deleted rather than left standing: it was a well-argued theory that explained every
+   observation and was still not what was happening. `f9f8b09` measured the real shape - five
+   separate faults, none of them a relink - and the diagnosis is recorded further down this item.
+   Kept as a one-line warning because the lead was persuasive enough to be repeated verbatim into
+   `docs/release-blockers.md`, where it outlived the fix by a day.
 
    ~~`tests/shutdown_signal.rs::sigterm_stops_the_server_and_saves_within_a_bounded_window` belongs
    to the same class.~~ **It did not, and it is fixed (2026-09-05).** The 2026-09-04 measurement was
@@ -1172,17 +1235,11 @@ over effort; the first three are roughly a day each.
    seconds of a real server with `autosave_secs = 1` prints nothing and writes nothing new, because
    the world has been on disk since generation. Autosave is fine; the signal was wrong.
 
-   **`every_newly_covered_town_npc_actually_fights` is a second open flake**, characterised
-   2026-09-05 rather than waved off. It fails on a *different* NPC each time - 453, 453, 588 across
-   four observations - and 588 is the Golfer, whose ball is `aiStyle 149` and has no arm at all,
-   while 453's bone is `aiStyle 2` and does. **A projectile change cannot make both miss**, which is
-   what rules the projectile lane out as the cause. Two runs in three pass; the failing run finished
-   in 78 seconds against 390 for the passing ones, so it bailed on the test's own twenty-second
-   per-NPC deadline rather than losing a shot. The test's own comments already document this
-   deadline as contention-sensitive, and this machine ran two to six concurrent cargo processes all
-   session. The fix is the same shape as `shutdown_signal`'s was: the deadline should be counted in
-   server *ticks* observed rather than wall-clock seconds, so a descheduled runtime slows the test
-   instead of failing it.
+   **`every_newly_covered_town_npc_actually_fights` was characterised here as a second open flake,
+   and it is closed** (`61407f2`): the deadline counts server events rather than wall-clock
+   seconds, exactly as the diagnosis called for, so a descheduled runtime now slows the test instead
+   of failing it. This item carried the closure and the open characterisation in the same section,
+   a few dozen lines apart and contradicting each other; the open one is deleted.
 
 7. **`just check-citations`: does a citation's own lines contain the numbers written beside it?**
    `check-parity` proves a citation still points at the same text and says plainly that it never
@@ -1408,12 +1465,12 @@ roster asked at neutral luck alone would keep reporting it unreachable for ever.
   (`TORTURED_SOUL_ODDS`, `spawn.rs`), and the item interaction this note predicted would need "a
   general item-vs-live-NPC interaction, which nothing in this server currently has" already exists:
   Purification Powder arrives as packet 140 and the *server* settles its effect
-  (`dispatch.rs:3869-3889`), turning a Tortured Soul and setting `saved_tax_collector` through
-  `Server::tick_powders`. `rescues.rs:26-33` explains why the Tax Collector is deliberately absent
+  (`dispatch.rs:4017-4023`), turning a Tortured Soul and setting `saved_tax_collector` through
+  `Server::tick_powders` (`systems.rs:3597`). `rescues.rs:26-33` explains why the Tax Collector is deliberately absent
   from the `Rescue` table rather than missing from the game. The Skeleton Merchant is likewise fully
   wired: its own cavern arm at `SKELETON_MERCHANT_ODDS`, an explicit exemption from the town-NPC
   despawn rule (`npc_ai.rs:501`), and shop handling beside the Old Man and the Travelling Merchant
-  (`systems.rs:3072`).
+  (`systems.rs:5225`).
 - **PALWORLDPAL**: *done*. The two distressed Palworld pets (695, 696) are off `docs/spawn-gaps.tsv`
   with the whole encounter behind them rather than the spawn alone. The ambient arm is the surface
   day's (`NPC.cs:4374-4389`, inside the daytime block at `:4202`): more than `maxTilesX / 8` from

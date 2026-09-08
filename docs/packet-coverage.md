@@ -25,26 +25,26 @@ python3 tools/packet_audit.py --write-doc
 | | |
 |---|---:|
 | Total ids | 163 |
-| Status: client-bookkeeping | 2 |
+| Status: client-bookkeeping | 1 |
 | Status: dead-slot | 3 |
 | Status: deprecated | 9 |
-| Status: live | 143 |
+| Status: live | 144 |
 | Status: modding | 2 |
 | Status: not-applicable-dedicated | 1 |
 | Status: social-host-only | 3 |
-| Dispatched by handle_packet | 77 |
-| Relayed opaquely (received, not parsed) | 34 |
+| Dispatched by handle_packet | 79 |
+| Relayed opaquely (received, not parsed) | 32 |
 | Ignored (falls to the catch-all) | 2 |
-| Sent via a dedicated encoder | 65 |
-| Sent via a generic relay | 44 |
+| Sent via a dedicated encoder | 73 |
+| Sent via a generic relay | 38 |
 
 ## Live ids with no terrustia implementation on either side (3)
 
 Every one of these is a real, currently-used vanilla mechanic (`status = live`) that this server neither receives nor sends. Each is a genuine gap, not a dead id; see its row's evidence column below for what it is and where it comes from.
 
-- **Unknown66** (66) - NOT a dead slot, contrary to the received wisdom this audit was asked to check: Projectile.cs:28951 `NetMessage.SendData(66, -1, -1, null, num389, num395)` inside `aiStyle == 52` is a real client-triggered heal-on-touch broadcast. MessageBuffer.cs:3038 GetData case 66 applies the heal to `player.statLife` and, when `Main.netMode == 2`, relays it to other clients via `TrySendData(66, ...)`. terrustia has no dispatch arm and no encoder for id 66: a genuine unimplemented gap, not a dead id. Reported, not fixed, per this lane's scope.
-- **TeleportNPCThroughPortal** (100) - The decompiled-tree audit (tools/packet_audit.py's NetMode==1 client-send heuristic) classifies it server-to-client only. Needs NPCs to use portals, which they do not in terrustia yet: a genuine gap, not structurally inapplicable.
+- **TeleportNPCThroughPortal** (100) - STOPPED (C1-b item 7), investigated in full rather than left as a guess. Real send site: PortalHelper.TryGoingThroughPortals (Terraria.GameContent/PortalHelper.cs:105-214), server-only (if (Main.netMode == 2)) since NPCs are server-authoritative, firing when an NPC's hitbox crosses a placed Portal Gun portal's own collision line (GetPortalEdges from the portal's position and ai[0] angle) and teleporting it to the paired portal's outing point. terrustia tracks a placed portal projectile only as an ordinary projectile (enough for on_close_portal's packet-95 removal case, which already reads its ai[1] "which" colour value) with no pairing into a linked gate (vanilla's own FoundPortals), no per-tick NPC-vs-portal collision pass, no outing-point/velocity math, and no per-portal-per-NPC cooldown -- the whole trigger this packet reports has no server-side model to report at all. A dispatch arm or encoder with nothing real behind it would be the "fake handler" this lane's own instructions explicitly rule out, so recv_impl/send_impl stay none rather than being stubbed. See id::TELEPORT_N_P_C_THROUGH_PORTAL's own doc comment (terrustia-proto/src/id.rs) for the same account.
 - **ShopOverride** (104) - The decompiled-tree audit (tools/packet_audit.py's NetMode==1 client-send heuristic) classifies it server-to-client only. Needs a shop-price-override model terrustia does not have yet: a genuine gap.
+- **DeadPlayer** (135) - deliberately not dispatched (game/server/dispatch.rs:130-133): vanilla's own case 135 is `if (Main.netMode == 1)`, a client-only immuneAlpha fade, so a dedicated server drops an incoming one exactly like vanilla does. Real gap: vanilla's SyncOnePlayer (NetMessage.cs:2933-2936) also sends this server-to-client when statLife<=0 during a player sync, so newly joined/resyncing observers see an already-dead peer's fade cue; this server never sends it, so that one cosmetic cue is missing. Not implemented, disclosed here rather than papered over.
 
 ## Dead slots and deprecated ids (12)
 
@@ -61,9 +61,8 @@ Every one of these is a real, currently-used vanilla mechanic (`status = live`) 
 - **SyncItemsWithShimmerDeprecated** (145, deprecated) - Deprecated by name (SyncItemsWithShimmerDeprecated), no [Old] attribute needed. No case at all for 145 in either NetMessage.cs SendData or MessageBuffer.cs GetData: fully removed from both switches, superseded mechanism.
 - **SyncItemCannotBeTakenByEnemiesDeprecated** (148, deprecated) - Deprecated by name (SyncItemCannotBeTakenByEnemiesDeprecated). No case at all for 148 in either NetMessage.cs SendData or MessageBuffer.cs GetData: fully removed from both switches, superseded mechanism.
 
-## Not applicable to this build (8)
+## Not applicable to this build (7)
 
-- **SyncPlayerChestIndex** (80, client-bookkeeping) - The decompiled-tree audit (tools/packet_audit.py's NetMode==1 client-send heuristic) classifies it server-to-client only. Client-side chest-UI bookkeeping; not received or sent by terrustia.
 - **ItemTweaker** (88, modding) - The decompiled-tree audit (tools/packet_audit.py's NetMode==1 client-send heuristic) classifies it server-to-client only. A modding hook (ItemTweaker); not received or sent by terrustia.
 - **SocialHandshake** (93, social-host-only) - The decompiled-tree audit (tools/packet_audit.py's NetMode==1 client-send heuristic) classifies it server-to-client only. Steam lobby/social handshake; not applicable off Steam, not received or sent by terrustia.
 - **DevCommands** (94, modding) - The decompiled-tree audit (tools/packet_audit.py's NetMode==1 heuristic; the one id it actually caught client-sending). A dev/admin command channel; terrustia deliberately ignores it (see server.rs catch-all) rather than honouring arbitrary developer commands from any client.
@@ -110,7 +109,7 @@ Every one of these is a real, currently-used vanilla mechanic (`status = live`) 
 | 31 | RequestChestOpen | client->server | yes | no | live | dispatched | none |
 | 32 | SyncChestItem | both | yes | yes | live | dispatched | dedicated-encoder |
 | 33 | SyncPlayerChest | both | yes | yes | live | dispatched | dedicated-encoder |
-| 34 | ChestUpdates | both | yes | yes | live | dispatched | generic-relay |
+| 34 | ChestUpdates | both | yes | yes | live | dispatched | dedicated-encoder |
 | 35 | PlayerHeal | both | yes | yes | live | relayed-opaque | generic-relay |
 | 36 | SyncPlayerZone | both | yes | yes | live | dispatched | generic-relay |
 | 37 | RequestPassword | server->client | no | yes | live | none | dedicated-encoder |
@@ -127,7 +126,7 @@ Every one of these is a real, currently-used vanilla mechanic (`status = live`) 
 | 48 | LiquidUpdate | none | no | no | deprecated | dispatched | none |
 | 49 | InitialSpawn | server->client | no | yes | live | none | dedicated-encoder |
 | 50 | PlayerBuffs | both | yes | yes | live | dispatched | generic-relay |
-| 51 | MiscDataSync | both | yes | yes | live | dispatched | generic-relay |
+| 51 | MiscDataSync | both | yes | yes | live | dispatched | dedicated-encoder |
 | 52 | LockAndUnlock | both | yes | yes | live | dispatched | generic-relay |
 | 53 | AddNPCBuff | both | yes | yes | live | dispatched | dedicated-encoder |
 | 54 | NPCBuffs | server->client | no | yes | live | none | dedicated-encoder |
@@ -135,14 +134,14 @@ Every one of these is a real, currently-used vanilla mechanic (`status = live`) 
 | 56 | UniqueTownNPCInfoSyncRequest | both | yes | yes | live | dispatched | dedicated-encoder |
 | 57 | Unknown57 | server->client | no | yes | live | none | dedicated-encoder |
 | 58 | InstrumentSound | both | yes | yes | live | relayed-opaque | generic-relay |
-| 59 | HitSwitch | both | yes | yes | live | dispatched | generic-relay |
+| 59 | HitSwitch | both | yes | yes | live | dispatched | dedicated-encoder |
 | 60 | Unknown60 | both | yes | yes | live | dispatched | dedicated-encoder |
 | 61 | SpawnBossUseLicenseStartEvent | client->server | yes | no | live | dispatched | none |
 | 62 | SyncDodge | both | yes | yes | live | relayed-opaque | generic-relay |
 | 63 | SyncTilePaintOrCoating | both | yes | yes | live | dispatched | generic-relay |
 | 64 | SyncWallPaintOrCoating | both | yes | yes | live | dispatched | generic-relay |
 | 65 | TeleportEntity | both | yes | yes | live | dispatched | dedicated-encoder |
-| 66 | Unknown66 | both | yes | yes | live | ignored | none |
+| 66 | Unknown66 | both | yes | yes | live | dispatched | dedicated-encoder |
 | 67 | Unknown67 | none | no | no | dead-slot | none | none |
 | 68 | Unknown68 | client->server | yes | no | live | dispatched | none |
 | 69 | ChestName | both | yes | yes | live | dispatched | dedicated-encoder |
@@ -156,7 +155,7 @@ Every one of these is a real, currently-used vanilla mechanic (`status = live`) 
 | 77 | TemporaryAnimation | both | yes | yes | live | relayed-opaque | generic-relay |
 | 78 | InvasionProgressReport | server->client | no | yes | live | none | dedicated-encoder |
 | 79 | PlaceObject | both | yes | yes | live | dispatched | dedicated-encoder |
-| 80 | SyncPlayerChestIndex | server->client | no | yes | client-bookkeeping | none | none |
+| 80 | SyncPlayerChestIndex | server->client | no | yes | live | none | dedicated-encoder |
 | 81 | CombatTextInt | both | yes | yes | live | relayed-opaque | generic-relay |
 | 82 | NetModules | both | yes | yes | live | dispatched | dedicated-encoder |
 | 83 | Unused83 | none | no | no | deprecated | none | none |
@@ -166,8 +165,8 @@ Every one of these is a real, currently-used vanilla mechanic (`status = live`) 
 | 87 | TileEntityPlacement | client->server | yes | no | live | dispatched | none |
 | 88 | ItemTweaker | server->client | no | yes | modding | none | none |
 | 89 | ItemFrameTryPlacing | client->server | yes | no | live | dispatched | none |
-| 90 | SpawnInstancedItem | client->server | yes | no | live | dispatched | none |
-| 91 | SyncEmoteBubble | both | yes | yes | live | relayed-opaque | generic-relay |
+| 90 | SpawnInstancedItem | both | yes | yes | live | dispatched | dedicated-encoder |
+| 91 | SyncEmoteBubble | both | yes | yes | live | relayed-opaque | dedicated-encoder |
 | 92 | SyncExtraValue | both | yes | yes | live | dispatched | dedicated-encoder |
 | 93 | SocialHandshake | server->client | no | yes | social-host-only | none | none |
 | 94 | DevCommands | client->server | yes | no | modding | ignored | none |
@@ -211,7 +210,7 @@ Every one of these is a real, currently-used vanilla mechanic (`status = live`) 
 | 132 | PlayLegacySound | both | yes | yes | live | relayed-opaque | generic-relay |
 | 133 | FoodPlatterTryPlacing | client->server | yes | no | live | dispatched | none |
 | 134 | UpdatePlayerLuckFactors | both | yes | yes | live | relayed-opaque | generic-relay |
-| 135 | DeadPlayer | both | yes | yes | live | relayed-opaque | generic-relay |
+| 135 | DeadPlayer | both | yes | yes | live | ignored | none |
 | 136 | SyncCavernMonsterType | server->client | no | yes | live | none | dedicated-encoder |
 | 137 | RequestNPCBuffRemoval | client->server | yes | no | live | dispatched | none |
 | 138 | ClientSyncedInventory | server->client | no | yes | not-applicable-dedicated | none | none |
@@ -230,7 +229,7 @@ Every one of these is a real, currently-used vanilla mechanic (`status = live`) 
 | 151 | SyncItemDespawn | both | yes | yes | live | dispatched | dedicated-encoder |
 | 152 | ItemUseSound | both | yes | yes | live | relayed-opaque | generic-relay |
 | 153 | NPCDebuffDamage | server->client | no | yes | live | none | dedicated-encoder |
-| 154 | Ping | both | yes | yes | live | relayed-opaque | generic-relay |
+| 154 | Ping | both | yes | yes | live | dispatched | dedicated-encoder |
 | 155 | SyncChestSize | server->client | no | yes | live | none | dedicated-encoder |
 | 156 | TELeashedEntityAnchorPlaceItem | client->server | yes | no | live | dispatched | none |
 | 157 | TeamChangeFromUI | client->server | yes | no | live | dispatched | none |

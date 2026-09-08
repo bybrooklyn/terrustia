@@ -262,24 +262,34 @@ fn check(tallies: &mut BTreeMap<u8, Tally>, packet_id: u8, payload: &[u8]) {
         };
     }
 
-    /// Decode only, for packets this crate never has to write.
-    macro_rules! decode_only {
-        ($ty:path) => {
-            <$ty>::decode(payload)
-                .map(|_| Checked::DecodedOnly)
-                .map_err(|e| e.to_string())
-        };
-    }
+    // There used to be a `decode_only!` macro here, for "packets this crate never has to write".
+    // Every id that had an encoder now uses `round_trip!`, so nothing was left for it to do;
+    // `TileSquare` is the one remaining decode-only case and it needs its own arm regardless,
+    // because decoding it takes a caller-supplied tile lookup.
 
     let outcome: Result<Checked, String> = match packet_id {
         id::WORLD_DATA => round_trip!(WorldData),
         id::PLAYER_SPAWN => round_trip!(packets::PlayerSpawn),
         id::PLAYER_LIFE_MANA => round_trip!(packets::PlayerHealth),
         id::PLAYER_MANA => round_trip!(packets::PlayerMana),
-        id::SYNC_N_P_C => decode_only!(terrustia_proto::npc::SyncNpc),
-        id::SYNC_PROJECTILE => decode_only!(terrustia_proto::projectile::SyncProjectile),
-        id::SYNC_ITEM => decode_only!(terrustia_proto::items::SyncItem),
-        id::TILE_MANIPULATION => decode_only!(packets::TileManipulation),
+        // These four were `decode_only!` on the reasoning that this crate never has to *write*
+        // them. True of the client, irrelevant to the check: the encoders exist because the server
+        // sends all four every tick, and pointing them at Re-Logic's own bytes is exactly what this
+        // example is for. Leaving them decode-only held the byte-verified count at 17 of 681 and
+        // made it look like a limit of the protocol rather than of this match arm.
+        id::SYNC_N_P_C => round_trip!(terrustia_proto::npc::SyncNpc),
+        id::SYNC_PROJECTILE => round_trip!(terrustia_proto::projectile::SyncProjectile),
+        // `SyncItem::encode` is the packet-21 form; `encode_instanced` is the same payload under
+        // id 90, which is why the instanced arm below exists separately rather than sharing this.
+        id::SYNC_ITEM => round_trip!(terrustia_proto::items::SyncItem),
+        id::SPAWN_INSTANCED_ITEM => terrustia_proto::items::SyncItem::decode(payload)
+            .and_then(|value| value.encode_instanced())
+            .map(|frame| Checked::Reencoded {
+                ours: frame[3..].to_vec(),
+                theirs: payload.to_vec(),
+            })
+            .map_err(|e| e.to_string()),
+        id::TILE_MANIPULATION => round_trip!(packets::TileManipulation),
         // Not the `decode_only!` macro: `TileSquare::decode` merges onto whatever tile is already
         // on the ground, so it needs a caller-supplied lookup. There is no real world state to
         // merge onto here (this only inspects a captured byte stream), so every position decodes

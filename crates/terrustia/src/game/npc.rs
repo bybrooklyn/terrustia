@@ -87,6 +87,13 @@ pub struct Npc {
     pub net_id: i16,
     /// Bumped each time a slot is reused, so a stale hit cannot land on the new occupant.
     pub generation: u8,
+    /// `NPC.spawnNeedsSyncing`: true from creation until this NPC's first broadcast.
+    ///
+    /// Vanilla sets it in `NPC.NewNPC` (`NPC.cs:81609`) and clears it in the packet-23 send path
+    /// (`NetMessage.cs:1738`), so exactly one frame per spawn carries the bit. The client treats it
+    /// as "build a fresh instance in this slot rather than reusing what is there"
+    /// (`MessageBuffer.cs:1610-1620`), alongside the generation comparison that does the same job.
+    pub spawn_needs_syncing: bool,
     /// Top-left corner, in pixels.
     pub position: (f32, f32),
     pub velocity: (f32, f32),
@@ -323,6 +330,9 @@ impl Npc {
             npc_type,
             net_id: npc_type as i16,
             generation,
+            // Every NPC vanilla creates is born needing one full sync; the first broadcast clears
+            // it. `Npc::new` is this server's `NPC.NewNPC`.
+            spawn_needs_syncing: true,
             position,
             velocity: (0.0, 0.0),
             life: stats.life_max,

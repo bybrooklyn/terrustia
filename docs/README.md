@@ -7,7 +7,7 @@ written to be read before touching the code it describes.
 |---|---|
 | [protocol-notes.md](protocol-notes.md) | The wire format: frame layout, the handshake, and the packets whose shape is easy to get wrong |
 | [real-client.md](real-client.md) | Why no test here can prove protocol correctness, and the capture-and-replay that can |
-| [packet-coverage.md](packet-coverage.md) | Which of Terraria's 163 message ids (143 live) this server handles, which it does not, and why |
+| [packet-coverage.md](packet-coverage.md) | Which of Terraria's 163 message ids (144 live) this server handles, which it does not, and why |
 | [buffs.md](buffs.md) | Debuffs on NPCs: the twenty slots, damage-over-time, and why armour penetration is the client's job |
 | [tile-entities.md](tile-entities.md) | The furniture that remembers something — pylons, item frames, mannequins — and its two serialised forms |
 | [teleports.md](teleports.md) | The five items that ask the server to move a player, and how a safe landing spot is found |
@@ -24,7 +24,7 @@ written to be read before touching the code it describes.
 
 **Per-type variation lives in generated tables. Hand-written modules hold algorithms only.**
 
-There are 697 NPC types, 754 tiles, 401 buffs and several thousand items. Any rule that differs
+There are 697 NPC type slots (691 defined), 754 tiles, 401 buffs and several thousand items. Any rule that differs
 per type is data, and data belongs in a file generated from the game's own tables — because a
 hand-written match over 697 cases is wrong the moment the game changes, and wrong invisibly.
 

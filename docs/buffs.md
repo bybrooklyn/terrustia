@@ -108,7 +108,8 @@ per tick rather than once per NPC per debuff.
 | 153 | server → clients | damage a debuff did, in its own colour, credited to nobody |
 
 Packet 137 is refused for every buff, and that is the game's behaviour rather than a gap: it
-validates against `BuffID.Sets.CanBeRemovedByNetMessage`, which is **empty** in 1.4.5.7. Reading
+validates against `BuffID.Sets.CanBeRemovedByNetMessage`, which is **empty** in 1.4.5.8 too
+(`Terraria.ID/BuffID.cs:24` is a bare `Factory.CreateBoolSet()`, so every entry is false). Reading
 the packet still matters — several arrive in one batch and skipping its bytes would misparse
 whatever follows.
 

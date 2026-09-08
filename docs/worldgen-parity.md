@@ -106,6 +106,6 @@ still the terrain spine.
 
 ## What is needed from a human
 
-One or two worlds generated in **Terraria 1.4.5.7** at known numeric seeds, both evils, a small
-and a large. The worlds on disk are 1.4.5.6 (format 319) and older; the target is 325. Work can
+One or two worlds generated in **Terraria 1.4.5.8** at known numeric seeds, both evils, a small
+and a large. The worlds on disk are 1.4.5.6 (format 319) and older; the target is 326. Work can
 start against the old one — parity just cannot be *certified* with it.

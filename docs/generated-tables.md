@@ -4,37 +4,45 @@
 
 **Per-type variation lives in generated tables. Hand-written modules hold algorithms only.**
 
-There are 697 NPC types, 754 tiles, 401 buffs and several thousand items. Any rule that differs
-per type is *data*. A hand-written match over 697 cases is wrong the moment the game changes, and
-wrong invisibly — nothing fails, a few types just quietly behave like the wrong thing.
+There are 697 NPC type slots (691 of them defined; `NPC_COUNT` is the array bound and six slots
+carry nothing, which is why the README says 691 and this says 697), 754 tiles, 401 buffs and
+several thousand items. Any rule that differs per type is *data*. A hand-written match over 697
+cases is wrong the moment the game changes, and wrong invisibly — nothing fails, a few types just
+quietly behave like the wrong thing.
 
 So the shape everywhere is: a table generated from the game's own, and a small hand-written module
 that reads it.
 
 ## What is generated
 
-| File | Lines | From | Generator |
-|---|---:|---|---|
-| `npc_data.rs` | 13,422 | `NPC.SetDefaults` | none (`just check-npc-data`) |
-| `tile_object.rs` | 6,138 | `TileObjectData.Initialize` | `terrustia-codegen tile_object` (`just check-tile-object`) |
-| `npc_params.rs` | 4,721 | `NPCID.Sets`, `NPC.SetDefaults` | none |
-| `npc_drops.rs` | ~6,800 | `ItemDropDatabase` | `terrustia-codegen drops` |
-| `projectile_data.rs` | ~10,000 | `Projectile.SetDefaults` | `terrustia-codegen projectiles` |
-| `banners.rs` | ~520 | `BannerSystem` / `ItemID.Sets.KillsToBanner` | `terrustia-codegen banners` |
-| `golf_physics.rs` | ~700 | `MaterialData/Materials.json` + `Tiles.json` | `terrustia-codegen golf` |
-| `placed_items.rs` | 3,322 | `Item.SetDefaults`, `GetItemDrop_*`, six inline arms | none (`just check-placed-items`) |
-| `town_names.rs` | 517 | localisation + `NPC.getNewNPCNameInner` | `terrustia-codegen town_names` |
-| `buffs.rs` | ~450 | `Main.debuff`, `BuffID.Sets`, `NPCID.Sets.DebuffImmunitySets` | `terrustia-codegen buffs` |
-| `tile_drops.rs` | 395 | `WorldGen.KillTile_GetItemDrops` | none |
-| `conditional_drops.rs` | 490 | drop rules with conditions | none |
-| `statues.rs` | 313 | `Wiring.HitSwitch` statue cases | none |
-| `recipes.rs` | 30,638 | `Recipe.SetupRecipes` | `terrustia-codegen recipes` (`just check-recipes`) |
-| `shimmer.rs` | ~200 | `ItemID.Sets`, `NPCID.Sets` | `terrustia-codegen shimmer` |
-| `hurt_tiles.rs` | ~120 | `TileID.Sets` + `Collision.CanTileHurt` | `terrustia-codegen hurt_tiles` |
-| `angler.rs` | ~120 | `Main.AnglerQuestSwap` | `terrustia-codegen angler` |
-| `travel_shop.rs` | ~90 | `Chest.SetupTravelShop_GetItem` | `terrustia-codegen travel_shop` |
-| `tile_death.rs` | 179 | `Main.tileLavaDeath`, `Main.tileWaterDeath` | `terrustia-codegen tile_death` |
-| `net_variants.rs` | ~660 | `NPC.SetDefaultsFromNetId` | `terrustia-codegen net_variants` |
+There was a `Lines` column here until 2026-09-06. It is gone rather than corrected: thirteen of its
+twenty rows were wrong, several by three to eight times (`conditional_drops.rs` was listed at 490
+against 3,850), because a generated file's length changes on every regen and nothing checked the
+column. `wc -l crates/terrustia-proto/src/*.rs` answers the question it was trying to answer, and
+cannot be out of date.
+
+| File | From | Generator |
+|---|---|---|
+| `npc_data.rs` | `NPC.SetDefaults` | none (`just check-npc-data`) |
+| `tile_object.rs` | `TileObjectData.Initialize` | `terrustia-codegen tile_object` (`just check-tile-object`) |
+| `npc_params.rs` | `NPCID.Sets`, `NPC.SetDefaults` | none |
+| `npc_drops.rs` | `ItemDropDatabase` | `terrustia-codegen drops` |
+| `projectile_data.rs` | `Projectile.SetDefaults` | `terrustia-codegen projectiles` |
+| `banners.rs` | `BannerSystem` / `ItemID.Sets.KillsToBanner` | `terrustia-codegen banners` |
+| `golf_physics.rs` | `MaterialData/Materials.json` + `Tiles.json` | `terrustia-codegen golf` |
+| `placed_items.rs` | `Item.SetDefaults`, `GetItemDrop_*`, six inline arms | none (`just check-placed-items`) |
+| `town_names.rs` | localisation + `NPC.getNewNPCNameInner` | `terrustia-codegen town_names` |
+| `buffs.rs` | `Main.debuff`, `BuffID.Sets`, `NPCID.Sets.DebuffImmunitySets` | `terrustia-codegen buffs` |
+| `tile_drops.rs` | `WorldGen.KillTile_GetItemDrops` | none |
+| `conditional_drops.rs` | drop rules with conditions | none |
+| `statues.rs` | `Wiring.HitSwitch` statue cases | none |
+| `recipes.rs` | `Recipe.SetupRecipes` | `terrustia-codegen recipes` (`just check-recipes`) |
+| `shimmer.rs` | `ItemID.Sets`, `NPCID.Sets` | `terrustia-codegen shimmer` |
+| `hurt_tiles.rs` | `TileID.Sets` + `Collision.CanTileHurt` | `terrustia-codegen hurt_tiles` |
+| `angler.rs` | `Main.AnglerQuestSwap` | `terrustia-codegen angler` |
+| `travel_shop.rs` | `Chest.SetupTravelShop_GetItem` | `terrustia-codegen travel_shop` |
+| `tile_death.rs` | `Main.tileLavaDeath`, `Main.tileWaterDeath` | `terrustia-codegen tile_death` |
+| `net_variants.rs` | `NPC.SetDefaultsFromNetId` | `terrustia-codegen net_variants` |
 
 The `gen_*.py` scripts this table used to name are gone: every one of them is now a module of the
 `terrustia-codegen` binary, which `just regen` runs over the whole set at once.

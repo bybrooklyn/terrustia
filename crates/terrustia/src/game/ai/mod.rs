@@ -1083,14 +1083,14 @@ pub fn run<T: TileView>(npc: &mut Npc, world: &World<'_, T>, rng: &mut SmallRng)
             // here, and this is deliberate, not an oversight. Vanilla hurries the brain's live
             // floaters by subtracting from their charge timer (`NPC.cs:39982-40002`, proj 574's
             // `ai[0] -= hurry` for every floater whose `ai[1] == whoAmI`, only while none has
-            // launched). Our NEBULA_FLOATER (`ai_style 102`) has no charge-up AI: it is spawned with
-            // a launch velocity and flies straight, so there is no `ai[0]` timer to hurry, and
-            // `projectile::step` is not passed the player target a charge-then-home floater needs.
-            // Honouring the hurry therefore depends on the floater charge-up (projectile-lane L2-14,
-            // not landed) plus owner tracking and a server-side pass over the projectile store. Left
-            // as a documented seam rather than faked: a hold-then-release floater would not be the
-            // homing attack the hurry exists to bring forward. The `hurried_floaters` flag is kept so
-            // the consumer is a one-line addition once the charge-up lands.
+            // launched). This comment used to say our NEBULA_FLOATER had no charge-up AI to hurry,
+            // and that honouring the hurry depended on that plus owner tracking plus a server-side
+            // pass over the projectile store. All three landed in `1d40bff`:
+            // `tick_hovering_escorts` (`game/server/systems.rs`) counts `ai[0]` up to
+            // `NEBULA_HOVER`, finds the parent through `ai[1]`, and already walks the store every
+            // tick. So the blocker is gone and what is left is the one-line consumer this comment
+            // promised - subtracting the hurry from each owned floater's `ai[0]` - with a test.
+            // Kept as a seam only because it is unwritten, not because it is unreachable.
             let _ = out.hurried_floaters;
         }
         85 => {

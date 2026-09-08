@@ -104,6 +104,12 @@ check-rust:
     cargo clippy -p terrustia --all-targets --no-default-features -- -D warnings
     @echo "── Supply chain (cargo-deny) ──"
     cargo deny check
+    @# CI has run this as its own job for a long time; `just check` did not, so a local run could
+    @# come back "All checks passed" while the packet-id table and the code disagreed and CI was
+    @# red. That is exactly what happened between 9f056a2 and 2026-09-06. It needs no decompiled
+    @# tree and takes under a second, so there is no reason for it to live only in CI.
+    @echo "── Packet id classification ──"
+    python3 tools/packet_audit.py
 
 # Web panel typecheck + build. Goes through `web-build` so it gets the same incomplete-install
 # check; this is the recipe CI runs, and a half-installed cache there fails as a stack trace out of
@@ -200,6 +206,24 @@ check-placed-items:
 check-citations:
     python3 tools/check_citations.py {{DECOMPILED}}
 
+# Do the *documents* still cite the code they were written against?
+#
+# `check-parity` does this for `crates/*/src`. Nothing did it for the markdown, and
+# `docs/release-blockers.md` - the file that exists because a status went stale - went stale twice
+# in three days, the second time caught only by a person reading it line by line. Its own account of
+# the first time says why: "the checkers caught none of these, because none of them check prose."
+#
+# This checks the mechanically checkable half. It reads the `file.rs:1234` and `NPC.cs:81066`
+# references inside the prose and keys each to the lines it points at, so the claim expires when the
+# code moves and the failure names the document and line to re-read. It never judges the sentence.
+check-doc-citations:
+    python3 tools/check_doc_citations.py --self-test
+    python3 tools/check_doc_citations.py {{DECOMPILED}}
+
+# Rebuild docs/doc-citations.tsv and review the diff, as with the generated tables.
+doc-citations-update:
+    python3 tools/check_doc_citations.py {{DECOMPILED}} --update
+
 # Re-read `TileObjectData.Initialize` and hold `tile_object.rs` to it.
 #
 # The table is generated now, so this is the same second opinion `check-drops` gives `npc_drops.rs`:
@@ -237,8 +261,10 @@ spawn-reach-update:
 check-dead-writes:
     cargo run -q -p terrustia-codegen --bin deadwrite
 
-# AGENTS.md rule 2 makes every transcription cite its source, so the tree holds ~1900
-# `NPC.cs:12345` references. `docs/parity-index.tsv` is derived from them and is never hand-edited:
+# AGENTS.md rule 2 makes every transcription cite its source, so the tree holds thousands of
+# `NPC.cs:12345` references - the recipe prints the live count, because every figure written down
+# here has gone stale (this line said ~1900 against an actual 3,848).
+# `docs/parity-index.tsv` is derived from them and is never hand-edited:
 # a hand-maintained parity ledger that rots does not say "unknown", it says "verified". Each entry
 # carries a hash of the cited vanilla lines and a hash of our own item's body, so a claim expires on
 # its own the moment either side moves, and this says which side that was. It answers "is this still
@@ -246,7 +272,7 @@ check-dead-writes:
 #
 # Rebuild the index with `parity-update` and review the diff, exactly as with the generated tables.
 # A regenerated decompiled tree moves every line number at once; that is reported as one sentence
-# rather than 1900 drifts.
+# rather than one drift per citation.
 #
 # Check every vanilla citation against the decompiled tree, and report what is cited by nothing
 check-parity:
@@ -277,13 +303,14 @@ check-mutants *ARGS:
 # reintroduces one.
 #
 # Every data cross-check in one go: the tables, the citations, the dead writes, and the checkers
-check-data: check-drops check-npc-data check-placed-items check-tile-object check-recipes check-parity check-spawn-reach check-mutants check-dead-writes
+check-data: check-drops check-npc-data check-placed-items check-tile-object check-recipes check-parity check-doc-citations check-spawn-reach check-mutants check-dead-writes
 
 # Regenerate every transcribed data table from a decompiled tree, then format
 regen:
     cargo run -q -p terrustia-codegen -- recipes {{DECOMPILED}} crates/terrustia-proto/src/recipes.rs
     cargo run -q -p terrustia-codegen -- drops       {{DECOMPILED}} crates/terrustia-proto/src/npc_drops.rs
     cargo run -q -p terrustia-codegen -- projectiles {{DECOMPILED}} crates/terrustia-proto/src/projectile_data.rs
+    cargo run -q -p terrustia-codegen -- net_variants {{DECOMPILED}} crates/terrustia-proto/src/net_variants.rs
     cargo run -q -p terrustia-codegen -- banners     {{DECOMPILED}} crates/terrustia-proto/src/banners.rs
     cargo run -q -p terrustia-codegen -- golf        {{DECOMPILED}} crates/terrustia-proto/src/golf_physics.rs
     cargo run -q -p terrustia-codegen -- buffs       {{DECOMPILED}} crates/terrustia-proto/src/buffs.rs
