@@ -1394,9 +1394,9 @@ mod tests {
     /// (`WorldSeedOption_Everything`), so its generation content is theirs. This asserts the
     /// cascade actually reaches the passes, rather than only setting flags.
     ///
-    /// Six of the seven contribute here. Remix is still detection-only, and the cross-seed branches
-    /// - the ones each seed's module explicitly declines to guess at - are not modelled, so this is
-    /// deliberately a "did every wired dependency run" test and not a fidelity claim.
+    /// Six of the seven contribute here. Remix is still detection-only, and the cross-seed
+    /// branches (the ones each seed's module explicitly declines to guess at) are not modelled, so
+    /// this is deliberately a "did every wired dependency run" test and not a fidelity claim.
     #[test]
     fn get_fixed_boi_runs_every_dependency_that_is_wired() {
         let (world, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "zenith", "getfixedboi");
