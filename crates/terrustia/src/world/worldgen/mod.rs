@@ -33,6 +33,7 @@
 
 pub mod cave_flood;
 pub mod dirt_wall_cleanup;
+pub mod dunes;
 pub mod enchanted_sword;
 pub mod fallen_logs;
 pub mod floating_islands;
@@ -149,6 +150,8 @@ pub struct Built {
     pub cloud_lakes: usize,
     /// Frozen-pond patches of breakable ice, in the snow.
     pub thin_ice: usize,
+    /// Surface dune fields: rolling sand hills over the desert instead of a flat shelf.
+    pub dune_fields: usize,
     /// Enchanted Sword shrines: a flooded, vine-hung cavity with a sword in a dirt mound.
     pub sword_shrines: usize,
     /// Ebonstone sinkholes with a hollow core, Corruption-only.
@@ -409,6 +412,11 @@ pub fn build_with_secret_seed(
     // `Oasis` (16338) alike, though it rarely interacts with either in practice: a pyramid's own
     // site check only ever looks at the one point it starts digging from, not a wide window the
     // way oasis does.
+    // Dunes before pyramids, because vanilla runs `DunesBiome` inside the same desert pass and
+    // ahead of the pyramid siting loop (`WorldGen.cs:11573`), and a pyramid sited against a flat
+    // shelf that then grows dunes on top of it would end up buried.
+    let dune_fields = dunes::scatter(&mut world, &plan, &mut structures, &mut rand);
+
     let pyramids = pyramids::scatter(&mut world, &plan, &mut rand, &mut forest_rng);
 
     // Living trees, right after pyramids — vanilla's own `LivingTrees` pass (`WorldGen.cs:15562`)
@@ -621,6 +629,7 @@ pub fn build_with_secret_seed(
         floating_island_houses: floating_islands.houses,
         cloud_lakes: floating_islands.lakes,
         thin_ice: micro_biomes.thin_ice,
+        dune_fields,
         sword_shrines,
         corruption_pits: micro_biomes.corruption_pits,
         spike_pits: micro_biomes.spike_pits,
