@@ -1390,6 +1390,55 @@ mod tests {
         );
     }
 
+    /// "get fixed boi" is a composite: it turns on seven other seeds at once
+    /// (`WorldSeedOption_Everything`), so its generation content is theirs. This asserts the
+    /// cascade actually reaches the passes, rather than only setting flags.
+    ///
+    /// Six of the seven contribute here. Remix is still detection-only, and the cross-seed branches
+    /// - the ones each seed's module explicitly declines to guess at - are not modelled, so this is
+    /// deliberately a "did every wired dependency run" test and not a fidelity claim.
+    #[test]
+    fn get_fixed_boi_runs_every_dependency_that_is_wired() {
+        let (world, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "zenith", "getfixedboi");
+        let s = built.secret_seeds;
+        assert!(s.everything && s.remix && s.drunk && s.not_the_bees);
+        assert!(s.no_traps && s.dont_starve && s.tenth_anniversary && s.get_good);
+
+        // No Traps: nothing trapped.
+        assert_eq!(
+            built.dart_traps, 0,
+            "No Traps must still hold inside the composite"
+        );
+        assert_eq!(built.rigged_veins, 0);
+        // Don't Starve: its caves were cut.
+        assert!(
+            built.wavy_caves > 0,
+            "Don't Starve's wavy caves did not run"
+        );
+        // Not the Bees: the world is hive, and there is no water left.
+        let mut hive = 0usize;
+        let mut water = 0usize;
+        let mut painted = 0usize;
+        for x in (0..world.width()).step_by(3) {
+            for y in (0..world.height()).step_by(3) {
+                let t = world.tile(x, y);
+                if t.is_active() && t.block == 225 {
+                    hive += 1;
+                }
+                if t.liquid > 0 && t.liquid_kind == terrustia_proto::Liquid::Water {
+                    water += 1;
+                }
+                if t.color != 0 || t.wall_color != 0 {
+                    painted += 1;
+                }
+            }
+        }
+        assert!(hive > 500, "Not the Bees did not convert the world: {hive}");
+        assert_eq!(water, 0, "Not the Bees left water behind");
+        // For the Worthy and Celebrationmk10 both paint.
+        assert!(painted > 0, "neither painting seed ran");
+    }
+
     /// Spawn is somewhere a player can stand: air above, ground below, no water.
     #[test]
     fn spawn_is_somewhere_survivable() {
