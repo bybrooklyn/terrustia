@@ -178,8 +178,15 @@ impl SecretSeeds {
     /// than not offering the seed at all - and it also writes the claim into the `.wld`, so real
     /// Terraria would believe it too.
     ///
-    /// `remixWorld` is 85 call sites in vanilla and zero of them are consumed here; nothing mirrors
-    /// the world. `zenithWorld` goes with it because zenith *is* the combination, remix included,
+    /// `remixWorld` is 211 call sites in vanilla (measured 2026-09-08; the "85" this line used to
+    /// carry was an undercount) and zero of them are consumed here; nothing mirrors the world.
+    ///
+    /// **This survived an attempt to close it.** A pass was written that mirrored the biome bands
+    /// left-to-right and moved the spawn and dungeon, and it was deleted rather than shipped: Remix
+    /// inverts *depth*, not left and right, so honouring the flag on that world would have produced
+    /// precisely the failure this comment describes - ordinary depths drawn upside down. The seed
+    /// needs every depth decision in the generator to flip, which is a generator-wide change and
+    /// not a pass. `zenithWorld` goes with it because zenith *is* the combination, remix included,
     /// and a world file claiming zenith without remix is a state neither game can make. The other
     /// six flags "get fixed boi" turns on are unaffected: each of those is a difference in what
     /// generates or how something behaves, partly modelled and disclosed at its own site, not a
