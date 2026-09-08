@@ -361,6 +361,15 @@ pub fn build_with_secret_seed(
     // false, so none of them ever ran. A test asserting the spawn moved is what caught it.
     if secret.remix {
         plan.remix = true;
+        // `TerrainPass.cs:66-73`: Remix drives the rock layer far deeper - half the world's height,
+        // or three fifths on a world wider than 2500 - where an ordinary world puts it a fifth
+        // below the surface. That thickens the dirt layer enormously and squeezes the cavern layer
+        // down against the underworld, which is the structural half of the seed. The other half is
+        // `lava_line`, which the same pass moves the other way; see `Layout::lava_line`.
+        let base = if width > 2500 { 0.6 } else { 0.5 };
+        let jitter = f64::from(rand.next_range(95, 106)) * 0.01;
+        plan.rock = ((f64::from(height) * base * jitter) as i32)
+            .clamp(plan.surface + 40, plan.underworld - 40);
     }
     if honoured.drunk {
         plan.drunk_crimson_left = Some(rand.next_max(2) == 0);
@@ -1580,6 +1589,33 @@ mod tests {
             r_above > o_above,
             "remix should lift them: remix {r_above} above vs ordinary {o_above} \
              (below: remix {r_below}, ordinary {o_below})"
+        );
+    }
+
+    /// Remix drives the rock layer deep and the lava line shallow, which is the seed's whole shape.
+    #[test]
+    fn remix_moves_the_layer_boundaries_the_opposite_ways() {
+        let (remixed, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "remix", "dontdigup");
+        assert!(built.secret_seeds.remix);
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 101);
+
+        let r_rock = i32::from(remixed.rock_layer);
+        let o_rock = i32::from(ordinary.rock_layer);
+        assert!(
+            r_rock > o_rock + 100,
+            "remix should drive the rock layer far deeper: remix {r_rock} vs ordinary {o_rock}"
+        );
+        // On a 4200-wide world vanilla uses 0.6 of the height, jittered by 5%.
+        let expected = (f64::from(SMALL_HEIGHT) * 0.6) as i32;
+        assert!(
+            (r_rock - expected).abs() < expected / 10,
+            "remix rock layer {r_rock} should sit near {expected}"
+        );
+        // And the surface is untouched, which is what makes the dirt layer thick rather than the
+        // whole world shifted.
+        assert_eq!(
+            remixed.surface, ordinary.surface,
+            "remix moves the rock layer, not the surface"
         );
     }
 
