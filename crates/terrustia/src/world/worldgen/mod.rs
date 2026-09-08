@@ -66,6 +66,7 @@ pub mod rand;
 pub mod scenery;
 pub mod secret_seed;
 pub mod shape_data;
+pub mod skyblock;
 pub mod smooth;
 pub mod speleothems;
 pub mod spider_caves;
@@ -399,6 +400,36 @@ pub fn build_with_secret_seed(
     world.surface = plan.surface as i16;
     world.rock_layer = plan.rock as i16;
     world.dungeon_x = Some(plan.dungeon_x);
+
+    // Skyblock cancels generation rather than changing it: `Skyblock.denyAllGeneration` is a bare
+    // `=> skyblockWorldGen` gating a hundred call sites across `WorldGen.cs`. Expressed here as one
+    // branch, which is the shape that cannot rot - a pass added to `build` below is skipped
+    // automatically, where a hundred-and-first guard would have to be remembered. See
+    // `skyblock.rs`'s module doc.
+    if honoured.skyblock {
+        // The islands are sited against the ground, because this generator's island pass scans for
+        // a surface below each candidate (its own documented widening over vanilla, which reads
+        // `worldSurface` directly). So the terrain is laid, the islands placed against it, and the
+        // ground then taken away again - which is what a Skyblock world is.
+        let heights = terrain::heightmap(&plan, &mut rand);
+        terrain::fill(&mut world, &plan, &heights, &mut rand);
+        let mut structures = structure_map::StructureMap::new();
+        let islands = floating_islands::scatter(&mut world, &plan, &mut structures, &mut rand);
+        skyblock::strip_the_ground(&mut world, &plan);
+        let (sx, sy) = skyblock::spawn_platform(&mut world, &plan);
+        world.spawn_x = sx as i16;
+        world.spawn_y = sy as i16;
+        world.surface = plan.surface as i16;
+        world.rock_layer = plan.rock as i16;
+        let built = Built {
+            floating_islands: islands.islands,
+            floating_island_houses: islands.houses,
+            cloud_lakes: islands.lakes,
+            secret_seeds: honoured,
+            ..Built::default()
+        };
+        return (world, built);
+    }
 
     let heights = terrain::heightmap(&plan, &mut rand);
     terrain::fill(&mut world, &plan, &heights, &mut rand);
@@ -1010,8 +1041,17 @@ mod tests {
                 built.secret_seeds.any(),
                 "{text:?} should have been detected as a secret seed"
             );
-            assert!(built.chests > 0, "{text:?}: no chests");
-            assert!(built.altars > 0, "{text:?}: no altars");
+            if built.secret_seeds.skyblock {
+                // Skyblock is the one seed with nothing to find: vanilla's own `Skyblock.Calculate`
+                // records `noAltars`, `noDungeon`, `noTemple`, `noHellstone`, `noFossils`,
+                // `noLifeCrystals` and `noHellforge` for exactly this world. Asserting chests and
+                // altars here would be asserting the seed does not work.
+                assert_eq!(built.chests, 0, "skyblock should have no chests");
+                assert_eq!(built.altars, 0, "skyblock should have no altars");
+            } else {
+                assert!(built.chests > 0, "{text:?}: no chests");
+                assert!(built.altars > 0, "{text:?}: no altars");
+            }
             assert_eq!(
                 world.seed_text, text,
                 "{text:?}: seed text was not preserved"
@@ -1437,6 +1477,38 @@ mod tests {
         assert_eq!(water, 0, "Not the Bees left water behind");
         // For the Worthy and Celebrationmk10 both paint.
         assert!(painted > 0, "neither painting seed ran");
+    }
+
+    /// A Skyblock world is islands and sky, with somewhere to stand at spawn and nothing else.
+    #[test]
+    fn skyblock_generates_islands_and_nothing_under_them() {
+        let (world, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "sky", "skyblock");
+        assert!(built.secret_seeds.skyblock, "the seed was not detected");
+        assert!(built.floating_islands > 0, "no islands were placed");
+
+        // Everything the ordinary generator makes is absent.
+        assert_eq!(built.chests, 0, "Skyblock must have no chests");
+        assert_eq!(built.altars, 0, "no altars");
+        assert_eq!(built.trees, 0, "no surface trees");
+
+        // And there is ground at spawn, or the player falls out of the world on the first tick.
+        let (sx, sy) = (i32::from(world.spawn_x), i32::from(world.spawn_y));
+        assert!(
+            world.tile(sx, sy).is_active(),
+            "no ground at spawn: a Skyblock player would fall forever"
+        );
+
+        // Below the islands: sky.
+        let mut layout = crate::world::worldgen::layout::Layout::plan(
+            SMALL_WIDTH,
+            SMALL_HEIGHT,
+            &mut UnifiedRandom::new(1),
+        );
+        layout.surface = i32::from(world.surface);
+        assert!(
+            skyblock::is_empty_below(&world, &layout),
+            "there is solid ground under a Skyblock world"
+        );
     }
 
     /// Spawn is somewhere a player can stand: air above, ground below, no water.
