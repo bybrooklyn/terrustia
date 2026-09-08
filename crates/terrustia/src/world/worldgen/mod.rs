@@ -32,6 +32,7 @@
 //! points that actually check seed text against it; [`build`]/[`generate`] never do.
 
 pub mod cave_flood;
+pub mod dead_mans_chest;
 pub mod dirt_wall_cleanup;
 pub mod dunes;
 pub mod enchanted_sword;
@@ -155,6 +156,9 @@ pub struct Built {
     pub thin_ice: usize,
     /// Surface dune fields: rolling sand hills over the desert instead of a flat shelf.
     pub dune_fields: usize,
+    /// Dead Man's Chests: a gold chest re-skinned as bait and wired to darts, boulders and
+    /// explosives. Zero under No Traps World.
+    pub dead_mans_chests: usize,
     /// Wild bee hives: honey chambers carved through the jungle, each with a larva stand.
     pub wild_hives: usize,
     /// Living Mahogany trees: a hollow jungle trunk with a chest in its base.
@@ -484,6 +488,10 @@ pub fn build_with_secret_seed(
     // pass; it is a separate call here only because it is a separate module.
     let sword_shrines = enchanted_sword::scatter(&mut world, &plan, &mut structures, &mut rand);
 
+    // Dead Man's Chests: gold chests re-skinned and rigged. Must run after every chest exists.
+    let dead_mans_chests =
+        dead_mans_chest::scatter(&mut world, &plan, &mut structures, &mut rand, honoured);
+
     // Rigged ore veins: explosives wired to a detonator. Vanilla runs these in the same block, and
     // skips them entirely under No Traps World, which this honours.
     // Wild bee hives, vanilla's `Beehives` pass. Distinct from `structures::hive`, which builds
@@ -651,6 +659,7 @@ pub fn build_with_secret_seed(
         cloud_lakes: floating_islands.lakes,
         thin_ice: micro_biomes.thin_ice,
         dune_fields,
+        dead_mans_chests,
         wild_hives: wild_hives.len(),
         mahogany_trees,
         rigged_veins,
