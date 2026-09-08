@@ -67,6 +67,8 @@ pub struct Ctx<'a> {
     /// Where `TileScanner` accumulates. Vanilla passes a dictionary per scanner; only one scanner
     /// is ever live at a time in the biomes ported here, so one map is enough.
     scan: HashMap<u16, i32>,
+    /// Where `ShapeBranch` records its limb tips, which is where the caller puts leaves.
+    pub branch_ends: Vec<(i32, i32)>,
     /// `Actions.Scanner`'s counters. Vanilla hands each one a `Ref<int>`.
     counters: Vec<i32>,
 }
@@ -79,6 +81,7 @@ impl<'a> Ctx<'a> {
             out: Vec::new(),
             scan: HashMap::new(),
             counters: Vec::new(),
+            branch_ends: Vec::new(),
         }
     }
 
@@ -201,6 +204,10 @@ pub enum Action {
     Grass,
     /// `Modifiers.IsSolid` (`Modifiers.cs:551-561`): pass only on an active, solid tile.
     IsSolid,
+    /// `Modifiers.SkipWalls` (`Modifiers.cs:461-481`): pass unless the wall is one of these.
+    SkipWalls(Vec<u16>),
+    /// `Actions.RemoveWall` (`Actions.cs:515-522`).
+    RemoveWall,
     /// `Actions.Scanner` (`Actions.cs:44-58`): count the units that reach it, into a counter slot.
     /// Vanilla passes a `Ref<int>`; a slot index says the same thing without the shared borrow.
     Scanner(usize),
@@ -406,6 +413,21 @@ fn apply(
             ctx.counters[slot] += 1;
             unit_apply(link, rest, ctx, origin, x, y)
         }
+        Action::SkipWalls(walls) => {
+            if walls.contains(&ctx.world.tile(x, y).wall) {
+                false
+            } else {
+                unit_apply(link, rest, ctx, origin, x, y)
+            }
+        }
+        Action::RemoveWall => {
+            if ctx.world.in_bounds(x, y) {
+                let mut t = ctx.world.tile(x, y);
+                t.wall = 0;
+                ctx.world.set_tile(x, y, t);
+            }
+            unit_apply(link, rest, ctx, origin, x, y)
+        }
         Action::Grass => {
             if ctx.world.tile(x, y).is_active() || ctx.world.tile(x, y - 1).is_active() {
                 return false;
@@ -454,10 +476,75 @@ pub enum Shape {
     },
     /// `Shapes.Mound` (`:203-236`): a parabola of columns rising from the origin.
     Mound { half_width: i32, height: i32 },
+    /// `ShapeBranch` (`Terraria.GameContent.Generation/ShapeBranch.cs`, 94 lines): a limb from the
+    /// origin to an offset, with smaller limbs forking off it. Records where each limb ends, which
+    /// is where the caller puts leaves.
+    Branch { angle: f64, distance: f64 },
+    /// `ShapeRoot` (`Terraria.GameContent.Generation/ShapeRoot.cs`, 55 lines): a tapering root that
+    /// wanders as it goes, pulled back toward straight down.
+    Root {
+        angle: f64,
+        distance: f64,
+        starting_size: f64,
+        ending_size: f64,
+    },
     /// `ModShapes.All` (`ModShapes.cs:7-25`).
     All(ShapeData),
     /// `ModShapes.InnerOutline` (`:67-104`): the points of a shape that touch its edge.
     InnerOutline(ShapeData),
+}
+
+/// `ShapeBranch.PerformSegment`: a `size`-wide bundle of Bresenham lines from `start` to `end`.
+fn segment(
+    ctx: &mut Ctx,
+    chain: &mut [Link],
+    out: Option<usize>,
+    origin: (i32, i32),
+    start: (i32, i32),
+    end: (i32, i32),
+    size: i32,
+) {
+    let size = size.max(1);
+    for i in -(size >> 1)..(size - (size >> 1)) {
+        for j in -(size >> 1)..(size - (size >> 1)) {
+            plot_line(ctx, chain, out, origin, (start.0 + i, start.1 + j), end);
+        }
+    }
+}
+
+/// `Utils.PlotLine`, the ordinary integer Bresenham walk.
+fn plot_line(
+    ctx: &mut Ctx,
+    chain: &mut [Link],
+    out: Option<usize>,
+    origin: (i32, i32),
+    from: (i32, i32),
+    to: (i32, i32),
+) {
+    let (mut x, mut y) = from;
+    let dx = (to.0 - x).abs();
+    let dy = -(to.1 - y).abs();
+    let sx = if x < to.0 { 1 } else { -1 };
+    let sy = if y < to.1 { 1 } else { -1 };
+    let mut err = dx + dy;
+    // A line is at most the world's diagonal; the bound stops a degenerate call spinning.
+    let mut guard = dx.max(-dy) + 2;
+    loop {
+        shape_unit(chain, ctx, out, origin, x, y);
+        if (x == to.0 && y == to.1) || guard <= 0 {
+            return;
+        }
+        guard -= 1;
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y += sy;
+        }
+    }
 }
 
 /// `Utils.RandomVector2D(random, min, max)`. Two draws, x then y - the order matters.
@@ -664,6 +751,83 @@ fn gen_inner(
                         return false;
                     }
                 }
+            }
+        }
+        Shape::Branch { angle, distance } => {
+            let off = (
+                (angle.cos() * distance) as i32,
+                (angle.sin() * distance) as i32,
+            );
+            let len = (f64::from(off.0).powi(2) + f64::from(off.1).powi(2)).sqrt();
+            let size = (len / 6.0) as i32;
+            let tip = (ox + off.0, oy + off.1);
+            ctx.branch_ends.push(tip);
+            segment(ctx, chain, out, origin, (ox, oy), tip, size);
+
+            let forks = (len / 8.0) as i32;
+            for i in 0..forks {
+                let t = (f64::from(i) + 1.0) / (f64::from(forks) + 1.0);
+                let base = ((t * f64::from(off.0)) as i32, (t * f64::from(off.1)) as i32);
+                let arm = (f64::from(off.0 - base.0), f64::from(off.1 - base.1));
+                let turn = (ctx.rand.next_double() * 0.5 + 1.0)
+                    * if ctx.rand.next_max(2) != 0 { 1.0 } else { -1.0 };
+                let (sin, cos) = turn.sin_cos();
+                let rotated = (
+                    (arm.0 * cos - arm.1 * sin) * 0.75,
+                    (arm.0 * sin + arm.1 * cos) * 0.75,
+                );
+                let tip2 = (
+                    rotated.0 as i32 + base.0 + ox,
+                    rotated.1 as i32 + base.1 + oy,
+                );
+                ctx.branch_ends.push(tip2);
+                segment(
+                    ctx,
+                    chain,
+                    out,
+                    origin,
+                    (base.0 + ox, base.1 + oy),
+                    tip2,
+                    size - 1,
+                );
+            }
+        }
+        Shape::Root {
+            angle,
+            distance,
+            starting_size,
+            ending_size,
+        } => {
+            let target = *angle;
+            let mut a = *angle;
+            let (mut px, mut py) = (f64::from(ox), f64::from(oy));
+            let mut travelled = 0.0f64;
+            while travelled < distance * 0.85 {
+                let t = travelled / distance;
+                let size = starting_size + (ending_size - starting_size) * t;
+                px += a.cos();
+                py += a.sin();
+                // The angle is nudged randomly, then pulled back toward a clamped band and toward
+                // straight down as the root gets further from the trunk.
+                a += f64::from(ctx.rand.next_float()) - 0.5
+                    + f64::from(ctx.rand.next_float())
+                        * (target - std::f64::consts::FRAC_PI_2)
+                        * 0.1
+                        * (1.0 - t);
+                let band = 2.0 * (1.0 - 0.5 * t);
+                a = a * 0.4
+                    + 0.45 * a.clamp(target - band, target + band)
+                    + (target + (std::f64::consts::FRAC_PI_2 - target) * t) * 0.15;
+                for i in 0..size as i32 {
+                    for j in 0..size as i32 {
+                        if !shape_unit(chain, ctx, out, origin, px as i32 + i, py as i32 + j)
+                            && quit_on_fail
+                        {
+                            return false;
+                        }
+                    }
+                }
+                travelled += 1.0;
             }
         }
         Shape::All(data) => {

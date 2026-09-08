@@ -44,6 +44,7 @@ pub mod lakes;
 pub mod layout;
 pub mod liquid_settle;
 pub mod living_trees;
+pub mod mahogany;
 pub mod manifest;
 pub mod micro_biomes;
 pub mod mining_explosives;
@@ -153,6 +154,8 @@ pub struct Built {
     pub thin_ice: usize,
     /// Surface dune fields: rolling sand hills over the desert instead of a flat shelf.
     pub dune_fields: usize,
+    /// Living Mahogany trees: a hollow jungle trunk with a chest in its base.
+    pub mahogany_trees: usize,
     /// Rigged ore veins: explosives wired to a detonator. Zero under No Traps World.
     pub rigged_veins: usize,
     /// Enchanted Sword shrines: a flooded, vine-hung cavity with a sword in a dirt mound.
@@ -480,6 +483,9 @@ pub fn build_with_secret_seed(
 
     // Rigged ore veins: explosives wired to a detonator. Vanilla runs these in the same block, and
     // skips them entirely under No Traps World, which this honours.
+    // The jungle's Living Mahogany trees, which vanilla grows alongside the living trees.
+    let mahogany_trees = mahogany::scatter(&mut world, &plan, &mut structures, &mut rand);
+
     let rigged_veins =
         mining_explosives::scatter(&mut world, &plan, &mut structures, &mut rand, honoured);
 
@@ -638,6 +644,7 @@ pub fn build_with_secret_seed(
         cloud_lakes: floating_islands.lakes,
         thin_ice: micro_biomes.thin_ice,
         dune_fields,
+        mahogany_trees,
         rigged_veins,
         sword_shrines,
         corruption_pits: micro_biomes.corruption_pits,
@@ -1057,6 +1064,15 @@ mod tests {
                 .any(|y| veins_world.tile(x, y).block == 411)
         });
         assert!(detonators, "veins placed but no detonator wired to any");
+
+        // And the mahogany trees, whose site test is the strictest of the three: a six-wide floor
+        // with 30 to 60 tiles of headroom, inside a 50x50 box that is mostly mud.
+        let mut trees = 0;
+        for seed in 20..26u64 {
+            let (_, built) = build(SMALL_WIDTH, SMALL_HEIGHT, "mahogany", seed);
+            trees += built.mahogany_trees;
+        }
+        assert!(trees > 0, "no Living Mahogany tree across six full worlds");
         assert!(
             swords > 0,
             "shrines placed but no Enchanted Sword tile in any"
