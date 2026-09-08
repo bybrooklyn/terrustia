@@ -70,7 +70,7 @@ the glowing mushroom biome, and the full cosmetic and cleanup tail. Vanilla's se
 plus two more real ones an earlier pass had missed, are detected by their real magic strings (`--seed
 "getfixedboi"` is recognised, though a world this generator makes does not claim the flag, since
 nothing here mirrors the world), and one of the nine, No Traps World, is fully wired. What is left
-of worldgen is 7 of 15 micro-biome classes and the other eight seeds' own generation-content
+of worldgen is 6 of 15 micro-biome classes and the other eight seeds' own generation-content
 differences, sized in [`TODO.md`](TODO.md)'s v0.0.2 section and deferred to v0.0.2.
 
 ## Running
@@ -238,9 +238,14 @@ against these notes. [`AUDIT.md`](AUDIT.md) has the findings behind it, and
 <summary><b>World generation</b></summary>
 
 Tier 1 (the passes that make a world stop looking like a prototype), Tier 2 (biome set pieces) and
-Tier 3 (the cosmetic and cleanup tail) are all done. What is left: 7 of 15 real `MicroBiome`
+Tier 3 (the cosmetic and cleanup tail) are all done. What is left: 6 of 15 real `MicroBiome`
 classes, and eight of the nine known secret seeds' own generation-content differences (the ninth, No
-Traps World, is done). Both are v0.0.2 scope.
+Traps World, is done).
+
+The Enchanted Sword shrine closed the ninth class, and it is the first built on a real transcription
+of vanilla's own shape/modifier/action generation pipeline (`worldgen/genpipe.rs`) rather than on
+plain circles. That pipeline is the shared dependency five of the remaining six classes need, so it
+is the reason the count can move again.
 
 | | Feature | Notes |
 |---|---|---|

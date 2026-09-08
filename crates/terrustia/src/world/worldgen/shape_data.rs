@@ -27,6 +27,22 @@ use super::structure_map::Rect;
 #[derive(Debug, Clone, Default)]
 pub struct ShapeData {
     points: HashSet<(i32, i32)>,
+    /// Insertion order, kept alongside the set so iteration is deterministic.
+    ///
+    /// This matters and is not tidiness. `ModShapes::All`/`InnerOutline` walk the point set and
+    /// hand each point to an action chain, and some of those chains consume RNG per point
+    /// (`ActionVines` draws a vine length, `Modifiers.Blotches` draws four offsets). Rust seeds
+    /// each `HashSet` from a per-process random state, so iterating one directly would make world
+    /// generation differ run to run from the same seed - the one thing a world generator may not
+    /// do. Vanilla is not affected because .NET's `HashSet` enumerates its backing slots in order,
+    /// which for a set built by insertion with no intervening removals *is* insertion order, so
+    /// keeping that order is also the faithful choice rather than merely a deterministic one.
+    ///
+    /// May hold points that have since been removed; [`Self::iter`] filters against the set, and
+    /// [`Self::add`] compacts first if anything was removed, so a removed-then-readded point
+    /// cannot appear twice.
+    order: Vec<(i32, i32)>,
+    removed: usize,
 }
 
 impl ShapeData {
@@ -39,7 +55,28 @@ impl ShapeData {
     }
 
     pub fn add(&mut self, x: i32, y: i32) {
-        self.points.insert((x, y));
+        if self.removed > 0 {
+            self.compact();
+        }
+        if self.points.insert((x, y)) {
+            self.order.push((x, y));
+        }
+    }
+
+    /// Drops the removed points from the order list, so it matches the set again.
+    fn compact(&mut self) {
+        let points = &self.points;
+        self.order.retain(|p| points.contains(p));
+        self.removed = 0;
+    }
+
+    /// The points in insertion order. Use this for anything that writes to the world, and
+    /// especially for anything that consumes RNG; see the field doc on `order`.
+    pub fn iter(&self) -> impl Iterator<Item = (i32, i32)> + '_ {
+        self.order
+            .iter()
+            .copied()
+            .filter(|p| self.points.contains(p))
     }
 
     /// Fills the inclusive rectangle `[min_x, max_x] x [min_y, max_y]`.
@@ -52,7 +89,9 @@ impl ShapeData {
     }
 
     pub fn remove(&mut self, x: i32, y: i32) {
-        self.points.remove(&(x, y));
+        if self.points.remove(&(x, y)) {
+            self.removed += 1;
+        }
     }
 
     /// Clears the inclusive rectangle `[min_x, max_x] x [min_y, max_y]`.
@@ -66,6 +105,8 @@ impl ShapeData {
 
     pub fn clear(&mut self) {
         self.points.clear();
+        self.order.clear();
+        self.removed = 0;
     }
 
     pub fn contains(&self, x: i32, y: i32) -> bool {
@@ -88,7 +129,8 @@ impl ShapeData {
             remote_origin.0 - local_origin.0,
             remote_origin.1 - local_origin.1,
         );
-        for &(x, y) in other.data() {
+        // `iter`, not `data`: the order points arrive in becomes this shape's own iteration order.
+        for (x, y) in other.iter() {
             self.add(dx + x, dy + y);
         }
     }
@@ -105,7 +147,7 @@ impl ShapeData {
             remote_origin.0 - local_origin.0,
             remote_origin.1 - local_origin.1,
         );
-        for &(x, y) in other.data() {
+        for (x, y) in other.iter() {
             self.remove(dx + x, dy + y);
         }
     }
@@ -236,5 +278,62 @@ mod tests {
         assert_eq!(blob.count(), 25 + 2);
         let bounds = ShapeData::bounds((500, 300), &[&blob]).unwrap();
         assert_eq!(bounds, Rect::new(497, 298, 6, 4));
+    }
+
+    /// Iteration is insertion-ordered, not hash-ordered.
+    ///
+    /// Worth a test rather than trust: the reason it matters is invisible at this level. The
+    /// pipeline in `genpipe` walks a shape's points handing each to an action chain, and some of
+    /// those chains draw from the world RNG per point, so an iteration order that varies run to
+    /// run makes a seeded world generate differently every time. A plain `HashSet` does exactly
+    /// that in Rust, and the failure would show up nowhere near here.
+    #[test]
+    fn iteration_follows_insertion_and_not_the_hash() {
+        let inserted = [(5, 1), (-3, 9), (0, 0), (12, 12), (-7, 2), (4, -4)];
+        let mut shape = ShapeData::new();
+        for &(x, y) in &inserted {
+            shape.add(x, y);
+        }
+        assert_eq!(shape.iter().collect::<Vec<_>>(), inserted);
+
+        // Re-adding an existing point must not duplicate it or move it.
+        shape.add(0, 0);
+        assert_eq!(shape.iter().collect::<Vec<_>>(), inserted);
+
+        // A removed point leaves the order of the rest alone.
+        shape.remove(0, 0);
+        assert_eq!(
+            shape.iter().collect::<Vec<_>>(),
+            [(5, 1), (-3, 9), (12, 12), (-7, 2), (4, -4)]
+        );
+
+        // Removed and re-added: it goes to the back, and appears exactly once. This is the case
+        // the compaction in `add` exists for; without it the stale entry would still be in the
+        // order list and the point would be yielded twice.
+        shape.add(0, 0);
+        assert_eq!(
+            shape.iter().collect::<Vec<_>>(),
+            [(5, 1), (-3, 9), (12, 12), (-7, 2), (4, -4), (0, 0)]
+        );
+        assert_eq!(shape.count(), 6);
+    }
+
+    /// The same shape built the same way twice iterates identically. This is the property a seeded
+    /// world generator actually depends on; the test above pins the exact order, this one pins
+    /// that there *is* one.
+    #[test]
+    fn two_identically_built_shapes_iterate_identically() {
+        let build = || {
+            let mut s = ShapeData::new();
+            s.add_bounds(-6, -4, 6, 4);
+            let mut hole = ShapeData::new();
+            hole.add_bounds(-2, -2, 2, 2);
+            s.subtract_from(&hole, (0, 0), (0, 0));
+            s
+        };
+        assert_eq!(
+            build().iter().collect::<Vec<_>>(),
+            build().iter().collect::<Vec<_>>()
+        );
     }
 }

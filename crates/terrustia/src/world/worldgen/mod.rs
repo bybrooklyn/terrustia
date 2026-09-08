@@ -33,9 +33,11 @@
 
 pub mod cave_flood;
 pub mod dirt_wall_cleanup;
+pub mod enchanted_sword;
 pub mod fallen_logs;
 pub mod floating_islands;
 pub mod gem_caves;
+pub mod genpipe;
 pub mod jungle_shrines;
 pub mod lakes;
 pub mod layout;
@@ -147,6 +149,8 @@ pub struct Built {
     pub cloud_lakes: usize,
     /// Frozen-pond patches of breakable ice, in the snow.
     pub thin_ice: usize,
+    /// Enchanted Sword shrines: a flooded, vine-hung cavity with a sword in a dirt mound.
+    pub sword_shrines: usize,
     /// Ebonstone sinkholes with a hollow core, Corruption-only.
     pub corruption_pits: usize,
     /// Stone hollows with a spiked floor.
@@ -458,6 +462,11 @@ pub fn build_with_secret_seed(
     // `micro_biomes`'s own module doc for exactly which of the 15 real classes this covers.
     let micro_biomes = micro_biomes::scatter(&mut world, &plan, &mut structures, &mut rand);
 
+    // The Enchanted Sword shrine, the sixteenth `MicroBiome` class and the first built on the real
+    // shape/modifier/action pipeline (`genpipe`). Vanilla runs it inside its own `MicroBiomes`
+    // pass; it is a separate call here only because it is a separate module.
+    let sword_shrines = enchanted_sword::scatter(&mut world, &plan, &mut structures, &mut rand);
+
     // Pots, statues, piles and fallen logs: the small object-placement passes built on
     // `place_object`. Ground-truth loot and decoration that makes a cave look excavated rather
     // than merely hollow.
@@ -612,6 +621,7 @@ pub fn build_with_secret_seed(
         floating_island_houses: floating_islands.houses,
         cloud_lakes: floating_islands.lakes,
         thin_ice: micro_biomes.thin_ice,
+        sword_shrines,
         corruption_pits: micro_biomes.corruption_pits,
         spike_pits: micro_biomes.spike_pits,
         honey_patches: micro_biomes.honey_patches,
@@ -993,6 +1003,35 @@ mod tests {
         assert!(
             differing > 500,
             "two seeds differ in only {differing} sampled tiles"
+        );
+    }
+
+    /// A full-size world gets Enchanted Sword shrines, and the sword is really in them.
+    ///
+    /// End-to-end rather than only in `enchanted_sword`'s own unit tests, because the siting
+    /// checks are strict enough (1250 solid tiles in a 50x50 box, a clear shaft, no sand) that a
+    /// biome can pass in a hand-built stone slab and never once place in a real world. That is the
+    /// failure this asserts against, and it is the same shape as the unreachable-NPC problem
+    /// `check-spawn-reach` exists for: nothing errors, no test fails, the feature is just absent.
+    #[test]
+    fn a_real_world_gets_sword_shrines_with_swords_in_them() {
+        let mut total = 0;
+        let mut swords = 0;
+        for seed in 1..5u64 {
+            let (world, built) = build(SMALL_WIDTH, SMALL_HEIGHT, "sword shrines", seed);
+            total += built.sword_shrines;
+            for x in (0..world.width()).step_by(2) {
+                for y in (0..world.height()).step_by(2) {
+                    if world.tile(x, y).block == 187 {
+                        swords += 1;
+                    }
+                }
+            }
+        }
+        assert!(total > 0, "no sword shrine placed across four full worlds");
+        assert!(
+            swords > 0,
+            "shrines placed but no Enchanted Sword tile in any"
         );
     }
 
