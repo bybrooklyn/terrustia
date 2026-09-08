@@ -208,6 +208,13 @@ pub enum Action {
     SkipWalls(Vec<u16>),
     /// `Actions.RemoveWall` (`Actions.cs:515-522`).
     RemoveWall,
+    /// `Actions.Clear` (`Actions.cs:146-153`): tile and wall both.
+    Clear,
+    /// `Modifiers.NotInShape` (`Modifiers.cs:173-190`): pass only outside the given shape.
+    NotInShape(ShapeData),
+    /// `Actions.Smooth` (`Actions.cs:608-622`). A no-op here: this generator writes no slopes, so
+    /// there is nothing to smooth. Kept as a link so a transcribed chain reads like vanilla's.
+    Smooth,
     /// `Actions.Scanner` (`Actions.cs:44-58`): count the units that reach it, into a counter slot.
     /// Vanilla passes a `Ref<int>`; a slot index says the same thing without the shared borrow.
     Scanner(usize),
@@ -420,6 +427,20 @@ fn apply(
                 unit_apply(link, rest, ctx, origin, x, y)
             }
         }
+        Action::Clear => {
+            if ctx.world.in_bounds(x, y) {
+                ctx.world.set_tile(x, y, Tile::AIR);
+            }
+            unit_apply(link, rest, ctx, origin, x, y)
+        }
+        Action::NotInShape(data) => {
+            if data.contains(x - origin.0, y - origin.1) {
+                false
+            } else {
+                unit_apply(link, rest, ctx, origin, x, y)
+            }
+        }
+        Action::Smooth => unit_apply(link, rest, ctx, origin, x, y),
         Action::RemoveWall => {
             if ctx.world.in_bounds(x, y) {
                 let mut t = ctx.world.tile(x, y);
@@ -488,6 +509,11 @@ pub enum Shape {
         starting_size: f64,
         ending_size: f64,
     },
+    /// `Shapes.Tail` (`Shapes.cs:181-201`) over `Utils.PlotTileTale` (`Utils.cs:2495-2536`): a
+    /// wedge from the origin to `end`, its width tapering to nothing at the far end.
+    Tail { width: f64, end: (f64, f64) },
+    /// `ModShapes.OuterOutline` (`ModShapes.cs:27-65`): the ring of points just outside a shape.
+    OuterOutline(ShapeData),
     /// `ModShapes.All` (`ModShapes.cs:7-25`).
     All(ShapeData),
     /// `ModShapes.InnerOutline` (`:67-104`): the points of a shape that touch its edge.
@@ -508,6 +534,34 @@ fn segment(
     for i in -(size >> 1)..(size - (size >> 1)) {
         for j in -(size >> 1)..(size - (size >> 1)) {
             plot_line(ctx, chain, out, origin, (start.0 + i, start.1 + j), end);
+        }
+    }
+}
+
+/// A plain Bresenham walk that reports its points, for callers that need the line itself rather
+/// than to run a chain over it.
+fn bresenham(from: (i32, i32), to: (i32, i32), mut visit: impl FnMut((i32, i32))) {
+    let (mut x, mut y) = from;
+    let dx = (to.0 - x).abs();
+    let dy = -(to.1 - y).abs();
+    let sx = if x < to.0 { 1 } else { -1 };
+    let sy = if y < to.1 { 1 } else { -1 };
+    let mut err = dx + dy;
+    let mut guard = dx.max(-dy) + 2;
+    loop {
+        visit((x, y));
+        if (x == to.0 && y == to.1) || guard <= 0 {
+            return;
+        }
+        guard -= 1;
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y += sy;
         }
     }
 }
@@ -828,6 +882,49 @@ fn gen_inner(
                     }
                 }
                 travelled += 1.0;
+            }
+        }
+        Shape::Tail { width, end } => {
+            let start = (ox, oy);
+            let finish = (ox + end.0 as i32, oy + end.1 as i32);
+            let len = (end.0 * end.0 + end.1 * end.1).sqrt();
+            if len <= 0.0 {
+                return true;
+            }
+            let dir = (end.0 / len, end.1 / len);
+            let perp = (-dir.1, dir.0);
+            let half = width / 2.0;
+
+            // Vanilla walks the spine once just to count its steps, then again to draw.
+            let mut spine = Vec::new();
+            bresenham(start, finish, |p| spine.push(p));
+            let steps = (spine.len() as i32 - 1).max(1);
+            for (i, p) in spine.iter().enumerate() {
+                let taper = 1.0 - f64::from(i as i32) / f64::from(steps);
+                let arm = (perp.0 * half * taper, perp.1 * half * taper);
+                let a = (p.0 - arm.0 as i32, p.1 - arm.1 as i32);
+                let b = (p.0 + arm.0 as i32, p.1 + arm.1 as i32);
+                let mut pts = Vec::new();
+                bresenham(a, b, |q| pts.push(q));
+                for q in pts {
+                    if !shape_unit(chain, ctx, out, origin, q.0, q.1) && quit_on_fail {
+                        return false;
+                    }
+                }
+            }
+        }
+        Shape::OuterOutline(data) => {
+            for (dx, dy) in data.iter() {
+                for (px, py) in POINT_OFFSETS {
+                    if data.contains(dx + px, dy + py) {
+                        continue;
+                    }
+                    if !shape_unit(chain, ctx, out, origin, ox + dx + px, oy + dy + py)
+                        && quit_on_fail
+                    {
+                        return false;
+                    }
+                }
             }
         }
         Shape::All(data) => {

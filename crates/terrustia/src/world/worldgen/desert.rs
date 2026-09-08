@@ -29,12 +29,11 @@
 //!
 //! # Disclosed narrowings
 //!
-//! * **One entrance style of four.** Vanilla rolls between `ChambersEntrance`, `AnthillEntrance`,
-//!   `LarvaHoleEntrance` and `PitEntrance`. Only the pit is ported: the other three need
-//!   `Shapes.Tail` (a tapered line plot over `Utils.PlotTileTale`), `ModShapes.OuterOutline` and
-//!   `Modifiers.NotInShape`, none of which any other biome here calls. The roll is still made and
-//!   still consumes its draw, so the entrance appears at vanilla's own rate; three quarters of the
-//!   time it is a pit where vanilla would have varied it.
+//! * All four entrance styles are ported - `ChambersEntrance`, `AnthillEntrance`,
+//!   `LarvaHoleEntrance` and `PitEntrance` - which took `Shapes.Tail` (a tapered line plot over
+//!   `Utils.PlotTileTale`), `ModShapes.OuterOutline`, `Modifiers.NotInShape` and `Actions.Clear`
+//!   into [`super::genpipe`]. Each is exercised by its own test, because the seeded end-to-end
+//!   run only ever takes one of the four.
 //! * `Tile.SmoothSlope` is dropped, as everywhere else in this generator: no slopes are written,
 //!   so there is nothing to smooth. This costs the chamber edges their bevel.
 //! * The `remix`, `drunk`, `tenthAnniversary` and `surfaceIsDesert` branches are not modelled.
@@ -42,6 +41,7 @@
 
 use terrustia_proto::{Liquid, Tile, TileFlags, tile_solid};
 
+use super::genpipe::{Action, Ctx, Link, Shape, chain, gen_shape, gen_shape_out};
 use super::layout::Layout;
 use super::rand::UnifiedRandom;
 use super::structure_map::{Rect, StructureMap};
@@ -149,6 +149,10 @@ pub struct Description {
 }
 
 impl Description {
+    fn surface_len(&self) -> i32 {
+        self.surface.len() as i32
+    }
+
     fn surface_at(&self, x: i32) -> i32 {
         if self.surface.is_empty() {
             return 0;
@@ -528,6 +532,377 @@ fn tile_variance(world: &mut World, d: &Description) {
     }
 }
 
+/// The blotchy one-tile bore both the anthill and larva-hole entrances drill with.
+fn bore(blotched: bool) -> Vec<Link> {
+    let mut links = vec![Link::new(Action::IsSolid)];
+    if blotched {
+        links.insert(
+            0,
+            Link::new(Action::Blotches {
+                min_x: 2,
+                min_y: 2,
+                max_x: 2,
+                max_y: 2,
+                chance: 0.3,
+            }),
+        );
+    }
+    links.push(Link::new(Action::Clear));
+    links.push(Link::new(Action::PlaceWall(HIVE_WALL)));
+    links
+}
+
+/// The hardened-sand collar that lines a bore.
+fn collar() -> Vec<Link> {
+    chain([
+        Link::new(Action::IsSolid),
+        Link::new(Action::SetTile(HARDENED_SAND)),
+        Link::new(Action::PlaceWall(HIVE_WALL)),
+    ])
+    .into_iter()
+    .collect()
+}
+
+/// `AnthillEntrance` (`AnthillEntrance.cs`, 54 lines): a cone of sand above a wandering bore.
+fn anthill_entrance(ctx: &mut Ctx, d: &Description, rand_count: i32) {
+    for i in 0..rand_count {
+        let radius = ctx.rand.next_range(15, 18);
+        let mut x =
+            (f64::from(i + 1) / f64::from(rand_count + 1) * f64::from(d.surface_len())) as i32;
+        x += d.desert.x;
+        let y = d.surface_at(x);
+        let origin = (x, y + 6);
+
+        let cone = ctx.slot();
+        let mut c = chain([Link::new(Action::SetTile(SAND)).out(cone)]);
+        gen_shape_out(
+            ctx,
+            origin,
+            &Shape::Tail {
+                width: f64::from(radius * 2),
+                end: (0.0, f64::from(-radius) * 1.5),
+            },
+            &mut c,
+            cone,
+        );
+
+        let mut column = x;
+        let bottom = d.hive.y + (y - d.desert.y) * 2 + 12;
+        for j in y - radius - 3..bottom {
+            let mut c = bore(j >= y);
+            gen_shape(
+                ctx,
+                (column, j),
+                &Shape::Rectangle {
+                    left: 0,
+                    top: 0,
+                    width: 1,
+                    height: 1,
+                },
+                &mut c,
+            );
+            let mut c = collar();
+            gen_shape(
+                ctx,
+                (column, j),
+                &Shape::Circle {
+                    h_radius: 2,
+                    v_radius: 3,
+                },
+                &mut c,
+            );
+            if j % 3 == 0 && j >= y {
+                column += ctx.rand.next_range(-1, 2);
+                let mut c = bore(true);
+                gen_shape(
+                    ctx,
+                    (column, j),
+                    &Shape::Rectangle {
+                        left: 0,
+                        top: 0,
+                        width: 1,
+                        height: 1,
+                    },
+                    &mut c,
+                );
+                if j >= y + 5 {
+                    let mut c = chain([
+                        Link::new(Action::SkipWalls(vec![HIVE_WALL])),
+                        Link::new(Action::SetTile(SAND)),
+                    ]);
+                    gen_shape(
+                        ctx,
+                        (column, j),
+                        &Shape::Circle {
+                            h_radius: radius,
+                            v_radius: 3,
+                        },
+                        &mut c,
+                    );
+                    let mut c = chain([Link::new(Action::PlaceWall(HIVE_WALL))]);
+                    gen_shape(
+                        ctx,
+                        (column, j),
+                        &Shape::Circle {
+                            h_radius: radius - 2,
+                            v_radius: 3,
+                        },
+                        &mut c,
+                    );
+                }
+                let mut c = collar();
+                gen_shape(
+                    ctx,
+                    (column, j),
+                    &Shape::Circle {
+                        h_radius: 2,
+                        v_radius: 3,
+                    },
+                    &mut c,
+                );
+            }
+        }
+
+        // Hollow the cone's own mouth out again.
+        let mut c = chain([
+            Link::new(Action::ClearTile),
+            Link::new(Action::Expand { x: 1, y: 1 }),
+            Link::new(Action::PlaceWall(0)),
+        ]);
+        gen_shape(
+            ctx,
+            (origin.0, origin.1 - (f64::from(radius) * 1.5) as i32 + 3),
+            &Shape::Circle {
+                h_radius: radius / 2,
+                v_radius: radius / 3,
+            },
+            &mut c,
+        );
+        let _ = ctx.take(cone);
+    }
+}
+
+/// `LarvaHoleEntrance` (`LarvaHoleEntrance.cs`, 46 lines): a bell-mouthed shaft.
+fn larva_hole_entrance(ctx: &mut Ctx, d: &Description, rand_count: i32) {
+    for i in 0..rand_count {
+        let radius = ctx.rand.next_range(13, 16);
+        let mut x =
+            (f64::from(i + 1) / f64::from(rand_count + 1) * f64::from(d.surface_len())) as i32;
+        x += d.desert.x;
+        let y = d.surface_at(x);
+        let at = (x, y);
+
+        let dug = ctx.slot();
+        let mut c = chain([Link::new(Action::Clear).out(dug)]);
+        gen_shape(
+            ctx,
+            at,
+            &Shape::Rectangle {
+                left: -radius,
+                top: -radius * 2,
+                width: radius * 2,
+                height: radius * 2,
+            },
+            &mut c,
+        );
+        let mut c = chain([Link::new(Action::Clear).out(dug)]);
+        gen_shape(
+            ctx,
+            at,
+            &Shape::Tail {
+                width: f64::from(radius * 2),
+                end: (0.0, f64::from(radius) * 1.5),
+            },
+            &mut c,
+        );
+
+        let mut column = x;
+        let bottom = d.hive.y + (y - d.desert.y) * 2 + 12;
+        for j in y + (f64::from(radius) * 1.5) as i32..bottom {
+            for step in 0..2 {
+                if step == 1 && j % 3 != 0 {
+                    continue;
+                }
+                if step == 1 {
+                    column += ctx.rand.next_range(-1, 2);
+                }
+                let mut c = bore(true);
+                gen_shape(
+                    ctx,
+                    (column, j),
+                    &Shape::Rectangle {
+                        left: 0,
+                        top: 0,
+                        width: 1,
+                        height: 1,
+                    },
+                    &mut c,
+                );
+                let mut c = collar();
+                gen_shape(
+                    ctx,
+                    (column, j),
+                    &Shape::Circle {
+                        h_radius: 2,
+                        v_radius: 3,
+                    },
+                    &mut c,
+                );
+            }
+        }
+
+        let shape = ctx.take(dug);
+        let mut c = chain([Link::new(Action::PlaceWall(0))]);
+        gen_shape(ctx, (x, y + 2), &Shape::All(shape), &mut c);
+    }
+}
+
+/// `ChambersEntrance` (`ChambersEntrance.cs`, 97 lines): a stack of rooms joined by curved paths.
+fn chambers_entrance(ctx: &mut Ctx, d: &Description) {
+    let cx = d.desert.x + d.desert.width / 2 + ctx.rand.next_range(-40, 41);
+    let cy = d.surface_at(cx);
+    let origin = (cx, cy + 2);
+
+    let bowl = ctx.slot();
+    let mut c = chain([
+        Link::new(Action::Blotches {
+            min_x: 2,
+            min_y: 2,
+            max_x: 2,
+            max_y: 2,
+            chance: 0.3,
+        }),
+        Link::new(Action::SetTile(SAND)).out(bowl),
+    ]);
+    gen_shape(
+        ctx,
+        origin,
+        &Shape::Circle {
+            h_radius: 24,
+            v_radius: 12,
+        },
+        &mut c,
+    );
+
+    let rooms_shape = ctx.slot();
+    let drop = d.hive.y - cy;
+    let mut side = if ctx.rand.next_max(2) != 0 { 1 } else { -1 };
+    // (position, direction) pairs the paths are drawn between.
+    let mut nodes: Vec<((i32, i32), i32)> = vec![((cx - side * 26, cy - 8), side)];
+    let count = ctx.rand.next_range(2, 4);
+    for i in 0..count {
+        let down = (f64::from(i + 1) / f64::from(count) * f64::from(drop)) as i32
+            + ctx.rand.next_range(-8, 9);
+        let across = side * ctx.rand.next_range(20, 41);
+        let width = ctx.rand.next_range(18, 29);
+        let mut c = chain([
+            Link::new(Action::Offset { x: across, y: down }),
+            Link::new(Action::Blotches {
+                min_x: 2,
+                min_y: 2,
+                max_x: 2,
+                max_y: 2,
+                chance: 0.3,
+            }),
+            Link::new(Action::Clear).out(rooms_shape),
+            Link::new(Action::PlaceWall(HIVE_WALL)),
+        ]);
+        gen_shape(
+            ctx,
+            (cx, cy),
+            &Shape::Circle {
+                h_radius: width / 2,
+                v_radius: 3,
+            },
+            &mut c,
+        );
+        nodes.push(((across + width / 2 * -side + cx, down + cy), -side));
+        side *= -1;
+    }
+
+    let rooms = ctx.take(rooms_shape);
+    let mut c = chain([
+        Link::new(Action::Expand { x: 1, y: 1 }),
+        Link::new(Action::OnlyTiles(vec![SAND])),
+        Link::new(Action::SetTile(HARDENED_SAND)),
+        Link::new(Action::PlaceWall(HIVE_WALL)),
+    ]);
+    gen_shape(ctx, (cx, cy), &Shape::OuterOutline(rooms), &mut c);
+
+    // The paths: a cubic Bezier between consecutive rooms, bored 2x4 at a time.
+    for j in 1..nodes.len() {
+        let (a, a_dir) = nodes[j - 1];
+        let (b, b_dir) = nodes[j];
+        let reach = f64::from((b.0 - a.0).abs()) * 1.5;
+        let mut t = 0.0;
+        while t <= 1.0 {
+            let p0 = (
+                f64::from(a.0) + f64::from(a_dir) * reach * t,
+                f64::from(a.1),
+            );
+            let p3 = (
+                f64::from(b.0) + f64::from(b_dir) * reach * (1.0 - t),
+                f64::from(b.1),
+            );
+            let mid = (
+                f64::from(a.0) + (f64::from(b.0) - f64::from(a.0)) * t,
+                f64::from(a.1) + (f64::from(b.1) - f64::from(a.1)) * t,
+            );
+            let l = (p0.0 + (mid.0 - p0.0) * t, p0.1 + (mid.1 - p0.1) * t);
+            let r = (mid.0 + (p3.0 - mid.0) * t, mid.1 + (p3.1 - mid.1) * t);
+            let at = (
+                (l.0 + (r.0 - l.0) * t) as i32,
+                (l.1 + (r.1 - l.1) * t) as i32,
+            );
+            let mut c = chain([
+                Link::new(Action::IsSolid),
+                Link::new(Action::Blotches {
+                    min_x: 2,
+                    min_y: 2,
+                    max_x: 2,
+                    max_y: 2,
+                    chance: 0.3,
+                }),
+                Link::new(Action::Clear),
+                Link::new(Action::Expand { x: 1, y: 1 }),
+                Link::new(Action::PlaceWall(HIVE_WALL)),
+                Link::new(Action::OnlyTiles(vec![SAND])),
+                Link::new(Action::SetTile(HARDENED_SAND)),
+            ]);
+            gen_shape(
+                ctx,
+                at,
+                &Shape::Rectangle {
+                    left: 0,
+                    top: 0,
+                    width: 2,
+                    height: 4,
+                },
+                &mut c,
+            );
+            t += 0.02;
+        }
+    }
+
+    let bowl_shape = ctx.take(bowl);
+    let mut c = chain([
+        Link::new(Action::NotInShape(bowl_shape)),
+        Link::new(Action::Expand { x: 1, y: 1 }),
+        Link::new(Action::PlaceWall(0)),
+    ]);
+    gen_shape(
+        ctx,
+        origin,
+        &Shape::Rectangle {
+            left: -29,
+            top: -12,
+            width: 58,
+            height: 12,
+        },
+        &mut c,
+    );
+}
+
 /// `PitEntrance.PlaceAt` (`:17-58`): the shaft down into the hive.
 fn pit_entrance(world: &mut World, d: &Description, rand: &mut UnifiedRandom) {
     let mut radius = rand.next_range(6, 9);
@@ -603,8 +978,23 @@ pub fn place(
     // Vanilla rolls the entrance, then rolls which of four styles. Both draws are made, so the
     // entrance appears at vanilla's rate; only the style is narrowed. See the module doc.
     if rand.next_double() <= 0.3333 {
-        let _style = rand.next_max(4);
-        pit_entrance(world, &d, rand);
+        match rand.next_max(4) {
+            0 => {
+                let mut ctx = Ctx::new(world, rand);
+                chambers_entrance(&mut ctx, &d);
+            }
+            1 => {
+                let count = rand.next_range(2, 4);
+                let mut ctx = Ctx::new(world, rand);
+                anthill_entrance(&mut ctx, &d, count);
+            }
+            2 => {
+                let count = rand.next_range(2, 4);
+                let mut ctx = Ctx::new(world, rand);
+                larva_hole_entrance(&mut ctx, &d, count);
+            }
+            _ => pit_entrance(world, &d, rand),
+        }
     }
 
     let groups = clusters(&d, rand);
@@ -712,6 +1102,53 @@ mod tests {
         assert!(sandstone > 100, "not enough sandstone: {sandstone}");
         assert!(walls > 1000, "the hive was never walled: {walls}");
         assert!(open > 100, "no open chambers were carved: {open}");
+    }
+
+    /// Every entrance style runs and cuts something. The seeded end-to-end test only ever exercises
+    /// one of the four, so a style that panicked or silently did nothing would hide behind the
+    /// other three - the same silent-absence failure the whole project keeps finding.
+    #[test]
+    fn all_four_entrance_styles_cut_a_way_in() {
+        for style in 0..4 {
+            let mut world = sandy(1600, 900);
+            let layout = layout_for(&world);
+            let mut rand = UnifiedRandom::new(555 + style);
+            let d = describe(&world, &layout, &mut rand, (800, 120))
+                .expect("the description should be valid on a clean site");
+            let before = solid_count(&world, &d);
+            match style {
+                0 => {
+                    let mut ctx = Ctx::new(&mut world, &mut rand);
+                    chambers_entrance(&mut ctx, &d);
+                }
+                1 => {
+                    let mut ctx = Ctx::new(&mut world, &mut rand);
+                    anthill_entrance(&mut ctx, &d, 2);
+                }
+                2 => {
+                    let mut ctx = Ctx::new(&mut world, &mut rand);
+                    larva_hole_entrance(&mut ctx, &d, 2);
+                }
+                _ => pit_entrance(&mut world, &d, &mut rand),
+            }
+            let after = solid_count(&world, &d);
+            assert!(
+                after != before,
+                "entrance style {style} changed nothing at all"
+            );
+        }
+    }
+
+    fn solid_count(world: &World, d: &Description) -> usize {
+        let mut n = 0;
+        for x in d.combined.x.max(0)..d.combined.right().min(world.width()) {
+            for y in 100..d.combined.bottom().min(world.height()) {
+                if world.tile(x, y).is_active() {
+                    n += 1;
+                }
+            }
+        }
+        n
     }
 
     /// A site whose floor row runs through snow is refused, as vanilla refuses it.
