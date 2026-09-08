@@ -40,6 +40,7 @@ pub mod dunes;
 pub mod enchanted_sword;
 pub mod fallen_logs;
 pub mod floating_islands;
+pub mod for_the_worthy;
 pub mod gem_caves;
 pub mod genpipe;
 pub mod hive;
@@ -656,6 +657,13 @@ pub fn build_with_secret_seed(
         not_the_bees::finish(&mut world);
     }
 
+    // `FinishGetGoodWorld`: paint the dungeon and the temple, corrupt the sky islands, and turn a
+    // little obsidian to lava. After the bees, because vanilla runs it after too and several of
+    // its own branches read what that conversion left.
+    if honoured.get_good {
+        for_the_worthy::finish(&mut world, &plan, &mut rand);
+    }
+
     let built = Built {
         lakes,
         trees,
@@ -1218,6 +1226,42 @@ mod tests {
                 "marble piles were counted but none is in the world"
             );
         }
+    }
+
+    /// A real `fortheworthy` world has its dungeon painted, and an ordinary one does not.
+    ///
+    /// Paint is the right thing to assert on: it is the seed's only generation-time mark that
+    /// survives into the file, and this generator sets a colour byte nowhere else, so a non-zero
+    /// colour anywhere is proof this pass ran.
+    #[test]
+    fn for_the_worthy_paints_the_world_and_an_ordinary_seed_does_not() {
+        let painted = |world: &World| {
+            let mut n = 0usize;
+            for x in (0..world.width()).step_by(2) {
+                for y in (0..world.height()).step_by(2) {
+                    let t = world.tile(x, y);
+                    if t.color != 0 || t.wall_color != 0 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+
+        let (worthy, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "worthy", "fortheworthy");
+        assert!(built.secret_seeds.get_good, "the seed was not detected");
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 91);
+
+        assert!(
+            painted(&worthy) > 100,
+            "for the worthy painted only {} tiles",
+            painted(&worthy)
+        );
+        assert_eq!(
+            painted(&ordinary),
+            0,
+            "an ordinary world must carry no paint at all"
+        );
     }
 
     /// Spawn is somewhere a player can stand: air above, ground below, no water.

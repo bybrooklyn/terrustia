@@ -218,7 +218,11 @@ pub fn scatter(
     if max < min || min < 1 {
         return 0;
     }
-    let wanted = rand.next_range(min, max + 1);
+    let mut wanted = rand.next_range(min, max + 1);
+    // For the Worthy and No Traps World both ask for half again as many (`WorldGen.cs:21241`).
+    if secret.get_good || secret.no_traps {
+        wanted = (f64::from(wanted) * 1.5) as i32;
+    }
     let mut budget = 3000;
     let mut placed = 0usize;
     let beach = 380;
