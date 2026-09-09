@@ -515,7 +515,7 @@ async fn main() -> ExitCode {
     let mut report = Report::default();
     let ok = match phase.as_str() {
         "build" => build(&mut client, &mut report, &state).await,
-        "verify" => verify(&mut client, &mut report, &state).await,
+        "verify" => verify(&mut client, &mut report, &state, addr).await,
         other => {
             eprintln!("unknown phase {other}: expected 'build' or 'verify'");
             return ExitCode::FAILURE;
@@ -1083,7 +1083,12 @@ async fn build(client: &mut Client, report: &mut Report, state: &str) -> bool {
 }
 
 /// Everything that has to still be true after the world has been round through the disk.
-async fn verify(client: &mut Client, report: &mut Report, state: &str) -> bool {
+async fn verify(
+    client: &mut Client,
+    report: &mut Report,
+    state: &str,
+    addr: std::net::SocketAddr,
+) -> bool {
     let Some(site) = read_site(state) else {
         eprintln!("no build site in {state}: the build phase never got far enough to leave one");
         return false;
@@ -1218,7 +1223,7 @@ async fn verify(client: &mut Client, report: &mut Report, state: &str) -> bool {
         ),
     );
 
-    unlock_a_dungeon_door(client, report).await;
+    unlock_a_dungeon_door(client, report, addr).await;
     true
 }
 
@@ -1231,7 +1236,11 @@ async fn verify(client: &mut Client, report: &mut Report, state: &str) -> bool {
 /// have found nothing and agreed. The whole path (`LockAction::UnlockDoor` on the wire,
 /// `WorldGen.UnlockDoor`'s +54 shift on the server) has been implemented the entire time and was
 /// simply never driven.
-async fn unlock_a_dungeon_door(client: &mut Client, report: &mut Report) {
+async fn unlock_a_dungeon_door(
+    client: &mut Client,
+    report: &mut Report,
+    addr: std::net::SocketAddr,
+) {
     let budget = Duration::from_secs(60);
     let started = Instant::now();
 
@@ -1308,14 +1317,43 @@ async fn unlock_a_dungeon_door(client: &mut Client, report: &mut Report) {
 
     let before = client.world().tile(x, y).map(|t| t.frame_y);
     let _ = client.unlock_door(x as i16, y as i16).await;
-    for _ in 0..200 {
+
+    // Check with a *second* client, not this one. The server broadcasts this packet to other
+    // players and not the sender, because a real client reframes its own copy locally
+    // (`Player.cs:33064-33070` consumes the key and sends only the packet). The sender therefore
+    // never hears back, and re-reading its own cache only ever returns what it already had - which
+    // is what this goal reported as a failure twice before the cause was found. A fresh join sees
+    // the server's own tiles, which is the thing worth asserting anyway.
+    for _ in 0..40 {
         match client.next_event().await {
             Ok(_) => {}
             Err(ClientError::Timeout { .. }) => break,
             Err(_) => break,
         }
     }
-    let after = client.world().tile(x, y).map(|t| t.frame_y);
+    let after = match Client::join(addr, "playbot-keycheck").await {
+        Ok(mut witness) => {
+            for _ in 0..400 {
+                match witness.next_event().await {
+                    Ok(_) => {}
+                    Err(ClientError::Timeout { .. }) => break,
+                    Err(_) => break,
+                }
+            }
+            let _ = witness
+                .request_section((x / 200) as u16, (y / 150) as u16)
+                .await;
+            for _ in 0..400 {
+                match witness.next_event().await {
+                    Ok(_) => {}
+                    Err(ClientError::Timeout { .. }) => break,
+                    Err(_) => break,
+                }
+            }
+            witness.world().tile(x, y).map(|t| t.frame_y)
+        }
+        Err(_) => None,
+    };
 
     // Vanilla shifts the door's three rows by +54 when it opens the lock.
     let moved = matches!((before, after), (Some(b), Some(a)) if a == b + 54);
