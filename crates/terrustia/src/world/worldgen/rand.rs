@@ -143,6 +143,14 @@ impl UnifiedRandom {
         self.sample()
     }
 
+    /// `UnifiedRandom.NextFloat()`: the same draw as [`Self::next_double`], narrowed to `f32`.
+    ///
+    /// The narrowing is not cosmetic. `ShapeRoot` accumulates its angle from these, and doing the
+    /// arithmetic at `f64` would drift away from vanilla's branch shapes over a 40-to-60 step root.
+    pub fn next_float(&mut self) -> f32 {
+        self.sample() as f32
+    }
+
     pub fn next_bool(&mut self) -> bool {
         self.next_max(2) == 0
     }

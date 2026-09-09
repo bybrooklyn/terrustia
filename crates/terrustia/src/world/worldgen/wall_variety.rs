@@ -206,7 +206,20 @@ pub fn variety(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) -> 
         let wall = if is_jungle {
             walls::JUNGLE_UNSAFE[rand.next_max(4) as usize]
         } else if tile.block == tiles::STONE && above.wall == 0 {
-            if y < layout.rock {
+            if layout.remix {
+                // `WorldGen.cs:16833`, the remix half of the same ternary: the mapping inverts, so
+                // dirt walls line the *deep* caves and rock walls the shallow ones. The lava branch
+                // is reachable only below the lava line, and `||` short-circuits before the coin
+                // flip above it, so a shallow cave costs one draw fewer than the ordinary path -
+                // kept, because every later draw in the world comes from the same stream.
+                if y > layout.rock {
+                    walls::DIRT_UNSAFE[rand.next_max(4) as usize]
+                } else if y <= layout.underworld || rand.next_max(2) != 0 {
+                    walls::ROCKS_UNSAFE[rand.next_max(4) as usize]
+                } else {
+                    walls::LAVA_UNSAFE[rand.next_max(4) as usize]
+                }
+            } else if y < layout.rock {
                 walls::DIRT_UNSAFE[rand.next_max(4) as usize]
             } else if y >= layout.underworld {
                 walls::LAVA_UNSAFE[rand.next_max(4) as usize]
@@ -361,12 +374,18 @@ pub fn enclosed_spaces(world: &mut World, layout: &Layout, rand: &mut UnifiedRan
     for _ in 0..attempts {
         let mut tries = 0;
         let mut x = rand.next_range(200, layout.width - 200);
-        let mut y = rand.next_range((layout.surface + layout.rock) / 2, layout.height - 220);
+        // `WorldGen.cs:12637`: Remix sites the glowing-mushroom patches above the rock line.
+        let (patch_top, patch_bottom) = if layout.remix {
+            layout.deep_band()
+        } else {
+            ((layout.surface + layout.rock) / 2, layout.height - 220)
+        };
+        let mut y = rand.next_range(patch_top, patch_bottom);
         let mut found = cave_flood::count(world, x, y, 1500, true, false);
         while found.tiles < 10 && tries < 500 {
             tries += 1;
             x = rand.next_range(200, layout.width - 200);
-            y = rand.next_range((layout.surface + layout.rock) / 2, layout.height - 220);
+            y = rand.next_range(patch_top, patch_bottom);
             found = cave_flood::count(world, x, y, 1500, true, false);
         }
         if tries < 500 {

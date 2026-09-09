@@ -1496,13 +1496,32 @@ roster asked at neutral luck alone would keep reporting it unreachable for ever.
 
 ## Phase 3: after v0.0.1, in order
 
-1. **v0.0.2, the worldgen release**: the seven remaining secret seeds' generation content (Not the
-   Bees, Drunk World, Remix, Celebrationmk10, "get fixed boi", Don't Starve, Skyblock; Don't
+1. **v0.0.2, the worldgen release**: **eight of the nine secret seeds landed 2026-09-08** (Not the
+   Bees, Drunk World, Celebrationmk10, "get fixed boi", Don't Starve, Skyblock, For the Worthy,
+   plus No Traps which was already wired). Remix is the one left, and it is the largest: 211 call
+   sites, all of them depth inversions, which makes it a generator-wide change rather than a pass.
+   An attempt that mirrored the world left-to-right instead was written and deleted; see
+   `secret_seed.rs`. Each landed seed is transcribed with the other seeds' branches taken as false,
+   so seed *combinations* are the other open piece. (Historical note: Don't
    Starve alone touches 53+ scattered branch points across nearly the whole of `WorldGen.cs`, and
-   the others are comparable or larger) and the 7 of 15 remaining micro-biomes (each needs a
-   genuinely separate subsystem: a trappable-chest mechanism, a second tree-growth engine, a
-   wandering-tunnel shape, and so on). The six deferred drop-table gaps ride along: five need
-   Remix's own generation content, the sixth is the documented npc-44 nested-fallback shape.
+   the others are comparable or larger). **The micro-biomes are done: all 15 classes are ported
+   as of 2026-09-08.** The six deferred
+   drop-table gaps ride along: five need Remix's own generation content, the sixth is the
+   documented npc-44 nested-fallback shape.
+
+   **The micro-biome half got cheaper on 2026-09-08, and the reason is worth keeping.** This entry
+   used to say each remaining class "needs a genuinely separate subsystem: a trappable-chest
+   mechanism, a second tree-growth engine, a wandering-tunnel shape, and so on". That is true of
+   what each one does on top, but it missed what they have in common: five of the seven were
+   blocked on the *same* thing, vanilla's `Shapes`/`Modifiers`/`Actions` pipeline, which
+   `micro_biomes.rs` had already identified as the real dependency and which this project twice
+   decided it did not need. `worldgen/genpipe.rs` is that pipeline, in the subset those classes
+   call, and `enchanted_sword.rs` is the first class built on it. The remaining six are now each
+   their own work rather than each their own framework:
+
+   | class | what it still needs on top of `genpipe` |
+   |---|---|
+   | `DesertBiome` (72) | the whole `Terraria.GameContent.Biomes.Desert` sub-namespace it dispatches to |
 2. **Regions and spawn protection**: the first built-in addition.
 3. **The plugin API**: Rust first (permissions land in v0.0.1, so the model exists; regions and the
    admin interfaces settle into real use cases first), then C# once the host API has proven

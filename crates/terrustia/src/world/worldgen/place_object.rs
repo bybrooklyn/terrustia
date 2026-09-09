@@ -96,6 +96,20 @@ pub fn place_object(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_locked_dungeon_door_can_be_placed_on_brick() {
+        let mut world = World::empty(200, 200, "door");
+        for x in 90..110 {
+            world.set_tile(x, 103, Tile::block(41));
+        }
+        let ok = place_object(&mut world, 100, 100, 10, 11, -1);
+        let t = world.tile(100, 100);
+        assert!(ok, "the door was refused; tile is {t:?}");
+        assert_eq!(t.block, 10);
+        assert_eq!(t.frame_y, 594, "style 11 should frame at 594");
+        assert!(t.frame_x < 54, "and IsLockedDoor also wants frameX < 54");
+    }
     use super::*;
 
     /// A flat, wide floor with nothing on it — every object in this module fits on it somewhere.

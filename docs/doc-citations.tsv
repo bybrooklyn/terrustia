@@ -14,7 +14,6 @@ README.md	repo	crates/terrustia/src/world/wld.rs	1028-1033	94ea10517d40
 README.md	repo	crates/terrustia/src/world/wld_save.rs	124-152	5d656218a812
 README.md	repo	crates/terrustia/src/world/wld_save.rs	538-550	c29b8bb061bb
 README.md	repo	crates/terrustia/src/world/wld_save.rs	576-584	b4309063fd19
-README.md	repo	crates/terrustia/src/world/worldgen/secret_seed.rs	191-202	6fe74925d7c6
 README.md	vanilla	WorldGen.cs	18963-19030	b2390d6ac6ca
 TODO.md	repo	crates/terrustia/src/game/ai/boss/fishron.rs	390	66d7035bd9d4
 TODO.md	repo	crates/terrustia/src/game/ai/mod.rs	1084-1094	7bce0e19614e
@@ -100,7 +99,7 @@ docs/packet-coverage.md	vanilla	NetMessage.cs	990	014e7cb18229
 docs/packet-coverage.md	vanilla	PortalHelper.cs	105-214	d8f87ecf13dd
 docs/release-blockers.md	repo	crates/terrustia-proto/src/items.rs	122	251fabcc5404
 docs/release-blockers.md	repo	crates/terrustia-proto/src/npc.rs	79	22e9a368604a
-docs/release-blockers.md	repo	crates/terrustia-proto/src/packets.rs	1412	251fabcc5404
+docs/release-blockers.md	repo	crates/terrustia-proto/src/packets.rs	1412	343ffa229aa3
 docs/release-blockers.md	repo	crates/terrustia-proto/src/projectile.rs	68	251fabcc5404
 docs/release-blockers.md	repo	crates/terrustia-proto/src/reader.rs	19	2ea791138f3c
 docs/release-blockers.md	repo	crates/terrustia/src/game/ai/boss/moon_lord.rs	299	307e1befb95c

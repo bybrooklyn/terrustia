@@ -3380,6 +3380,38 @@ async fn painting_nothing_does_nothing() {
     assert_eq!(fresh.world().tile(402, 20).map(|t| t.color), Some(0));
 }
 
+/// A Golden Key opens a locked dungeon door, and the server's own copy moves.
+///
+/// The frame test is `WorldGen.IsLockedDoor` and the shift is `WorldGen.UnlockDoor`'s +54 across
+/// all three rows. Asserted against the server's tiles rather than a client echo, because the
+/// server broadcasts this packet to *other* players only - a real client reframes its own copy.
+#[tokio::test]
+async fn a_golden_key_opens_a_locked_dungeon_door() {
+    // Door style 11 frames at 594, which is what `IsLockedDoor` looks for.
+    let locked = |world: &mut World| {
+        for dy in 0..3i32 {
+            world.set_tile(500, 300 + dy, Tile::framed(10, 0, 594 + dy as i16 * 18));
+        }
+    };
+    let addr = start_with(Config::default(), locked).await;
+    let mut bob = join(addr, "bob").await;
+    let mut unlock = vec![2u8]; // unlock a door
+    unlock.extend_from_slice(&500i16.to_le_bytes());
+    unlock.extend_from_slice(&300i16.to_le_bytes());
+    bob.send(&frame(id::LOCK_AND_UNLOCK, &unlock))
+        .await
+        .unwrap();
+
+    let fresh = join(addr, "carol").await;
+    for dy in 0..3i32 {
+        assert_eq!(
+            fresh.world().tile(500, 300 + dy).map(|t| t.frame_y),
+            Some(594 + dy as i16 * 18 + 54),
+            "row {dy} of the door should have shifted by 54"
+        );
+    }
+}
+
 /// A locked biome chest stays locked until Plantera is down.
 #[tokio::test]
 async fn a_biome_chest_waits_for_plantera() {

@@ -32,18 +32,30 @@
 //! points that actually check seed text against it; [`build`]/[`generate`] never do.
 
 pub mod cave_flood;
+pub mod celebration;
+pub mod dead_mans_chest;
+pub mod desert;
 pub mod dirt_wall_cleanup;
+pub mod dont_starve;
+pub mod dunes;
+pub mod enchanted_sword;
 pub mod fallen_logs;
 pub mod floating_islands;
+pub mod for_the_worthy;
 pub mod gem_caves;
+pub mod genpipe;
+pub mod hive;
 pub mod jungle_shrines;
 pub mod lakes;
 pub mod layout;
 pub mod liquid_settle;
 pub mod living_trees;
+pub mod mahogany;
 pub mod manifest;
 pub mod micro_biomes;
+pub mod mining_explosives;
 pub mod moss;
+pub mod not_the_bees;
 pub mod oasis;
 pub mod passes;
 pub mod piles;
@@ -54,6 +66,7 @@ pub mod rand;
 pub mod scenery;
 pub mod secret_seed;
 pub mod shape_data;
+pub mod skyblock;
 pub mod smooth;
 pub mod speleothems;
 pub mod spider_caves;
@@ -147,6 +160,25 @@ pub struct Built {
     pub cloud_lakes: usize,
     /// Frozen-pond patches of breakable ice, in the snow.
     pub thin_ice: usize,
+    /// Whether the Underground Desert was carved, and where.
+    pub underground_desert: bool,
+    /// Surface dune fields: rolling sand hills over the desert instead of a flat shelf.
+    pub dune_fields: usize,
+    /// Dead Man's Chests: a gold chest re-skinned as bait and wired to darts, boulders and
+    /// explosives. Zero under No Traps World.
+    pub dead_mans_chests: usize,
+    /// Don't Starve's wavy caves: long sinusoidal tunnels across the cavern layer.
+    pub wavy_caves: usize,
+    /// Don't Starve's marble piles, each with up to three statues.
+    pub marble_piles: usize,
+    /// Wild bee hives: honey chambers carved through the jungle, each with a larva stand.
+    pub wild_hives: usize,
+    /// Living Mahogany trees: a hollow jungle trunk with a chest in its base.
+    pub mahogany_trees: usize,
+    /// Rigged ore veins: explosives wired to a detonator. Zero under No Traps World.
+    pub rigged_veins: usize,
+    /// Enchanted Sword shrines: a flooded, vine-hung cavity with a sword in a dirt mound.
+    pub sword_shrines: usize,
     /// Ebonstone sinkholes with a hollow core, Corruption-only.
     pub corruption_pits: usize,
     /// Stone hollows with a spiked floor.
@@ -314,7 +346,73 @@ pub fn build_with_secret_seed(
     // The same generator the parity work uses, so a seed means the same thing in both.
     let mut rand = UnifiedRandom::new(seed as i32);
 
-    let plan = Layout::plan(width, height, &mut rand);
+    let mut plan = Layout::plan(width, height, &mut rand);
+    // Drunk World is the one seed that changes the *layout* rather than decorating it: both evils,
+    // one per half of the world (`WorldGen.cs:2052-2062`). Decided here, before terrain runs, so
+    // every pass that asks `evil_at` gets a consistent answer.
+    // Remix reads the *detected* seed, not the honoured one, and the difference is the point.
+    // `honoured_by_this_generator` strips the remix flag so the world file never claims a shape it
+    // does not have - see that function's doc. But the tiles can still be generated Remix's way,
+    // and every site that has been ported is strictly closer to the seed than an ordinary world
+    // would be. Generating like Remix is a fact about the tiles; claiming `remixWorld` is a promise
+    // to the client. This does the first and not the second.
+    //
+    // This was wrong for nine commits: the passes were gated on `honoured.remix`, which is always
+    // false, so none of them ever ran. A test asserting the spawn moved is what caught it.
+    if secret.remix {
+        plan.remix = true;
+        // `TerrainPass.cs:66-73`: Remix drives the rock layer far deeper - half the world's height,
+        // or three fifths on a world wider than 2500 - where an ordinary world puts it a fifth
+        // below the surface. That thickens the dirt layer enormously and squeezes the cavern layer
+        // down against the underworld, which is the structural half of the seed. The other half is
+        // `lava_line`, which the same pass moves the other way; see `Layout::lava_line`.
+        let base = if width > 2500 { 0.6 } else { 0.5 };
+        let jitter = f64::from(rand.next_range(95, 106)) * 0.01;
+        plan.rock = ((f64::from(height) * base * jitter) as i32)
+            .clamp(plan.surface + 40, plan.underworld - 40);
+
+        // `WorldGen.cs:15942-15955`: the dungeon comes inward. An ordinary world pushes it out
+        // toward one edge; Remix draws it from a fifth to four fifths across, rejecting anything in
+        // the middle fifth so it never lands on the spawn.
+        let lo = (f64::from(width) * 0.2) as i32;
+        let hi = (f64::from(width) * 0.8) as i32;
+        if hi > lo {
+            let (mid_lo, mid_hi) = (
+                (f64::from(width) * 0.4) as i32,
+                (f64::from(width) * 0.6) as i32,
+            );
+            let mut x = rand.next_range(lo, hi);
+            let mut guard = 1000;
+            while x > mid_lo && x < mid_hi && guard > 0 {
+                x = rand.next_range(lo, hi);
+                guard -= 1;
+            }
+            plan.dungeon_x = x;
+        }
+    }
+    if honoured.drunk {
+        plan.drunk_crimson_left = Some(rand.next_max(2) == 0);
+        // Mirror the evil band onto the other half, so both evils get real surface.
+        let half = plan.width / 2;
+        let width = plan.evil_band.width().max(80);
+        plan.second_evil_band = Some(if plan.evil_band.centre() < half {
+            let from = (half + (half - plan.evil_band.centre()) - width / 2)
+                .clamp(half + 20, plan.width - 80 - width);
+            layout::Band {
+                from,
+                to: from + width,
+            }
+        } else {
+            let from = (plan.evil_band.centre() - half)
+                .max(80)
+                .min(half - 20 - width);
+            layout::Band {
+                from,
+                to: from + width,
+            }
+        });
+    }
+    let plan = plan;
     // Shared across every Tier 2 pass that sites a set-piece structure — `GenVars.structures` in
     // vanilla, one session-global instance so a jungle shrine and an underground cabin (once that
     // lands) never overlap each other, the same way they cannot in a real generated world.
@@ -343,6 +441,36 @@ pub fn build_with_secret_seed(
     world.rock_layer = plan.rock as i16;
     world.dungeon_x = Some(plan.dungeon_x);
 
+    // Skyblock cancels generation rather than changing it: `Skyblock.denyAllGeneration` is a bare
+    // `=> skyblockWorldGen` gating a hundred call sites across `WorldGen.cs`. Expressed here as one
+    // branch, which is the shape that cannot rot - a pass added to `build` below is skipped
+    // automatically, where a hundred-and-first guard would have to be remembered. See
+    // `skyblock.rs`'s module doc.
+    if honoured.skyblock {
+        // The islands are sited against the ground, because this generator's island pass scans for
+        // a surface below each candidate (its own documented widening over vanilla, which reads
+        // `worldSurface` directly). So the terrain is laid, the islands placed against it, and the
+        // ground then taken away again - which is what a Skyblock world is.
+        let heights = terrain::heightmap(&plan, &mut rand);
+        terrain::fill(&mut world, &plan, &heights, &mut rand);
+        let mut structures = structure_map::StructureMap::new();
+        let islands = floating_islands::scatter(&mut world, &plan, &mut structures, &mut rand);
+        skyblock::strip_the_ground(&mut world, &plan);
+        let (sx, sy) = skyblock::spawn_platform(&mut world, &plan);
+        world.spawn_x = sx as i16;
+        world.spawn_y = sy as i16;
+        world.surface = plan.surface as i16;
+        world.rock_layer = plan.rock as i16;
+        let built = Built {
+            floating_islands: islands.islands,
+            floating_island_houses: islands.houses,
+            cloud_lakes: islands.lakes,
+            secret_seeds: honoured,
+            ..Built::default()
+        };
+        return (world, built);
+    }
+
     let heights = terrain::heightmap(&plan, &mut rand);
     terrain::fill(&mut world, &plan, &heights, &mut rand);
 
@@ -356,7 +484,37 @@ pub fn build_with_secret_seed(
     let gravitating_sand = tile_cleanup::gravitating_sand_cleanup(&mut world, &plan);
     let dirt_wall_cleared = dirt_wall_cleanup::scrub(&mut world, &plan, &mut rand);
 
-    let orbs = structures::evil_chasms(&mut world, &plan, &heights, &mut rand);
+    // Drunk World puts both evils in one world, split down the middle (`WorldGen.cs:2052-2062`).
+    // Every other world has one evil across one band, which is the `None` case.
+    let orbs = if let Some(crimson_left) = plan.drunk_crimson_left {
+        let half = plan.width / 2;
+        let left = layout::Band { from: 60, to: half };
+        let right = layout::Band {
+            from: half,
+            to: plan.width - 60,
+        };
+        let (crimson_band, corrupt_band) = if crimson_left {
+            (left, right)
+        } else {
+            (right, left)
+        };
+        world.crimson = crimson_left;
+        structures::evil_chasms(
+            &mut world,
+            &plan,
+            &heights,
+            &mut rand,
+            Some((layout::Evil::Crimson, crimson_band)),
+        ) + structures::evil_chasms(
+            &mut world,
+            &plan,
+            &heights,
+            &mut rand,
+            Some((layout::Evil::Corruption, corrupt_band)),
+        )
+    } else {
+        structures::evil_chasms(&mut world, &plan, &heights, &mut rand, None)
+    };
     structures::dungeon(&mut world, &plan, &heights, &mut rand);
     structures::temple(&mut world, &plan, &mut rand);
     let hive = structures::hive(&mut world, &plan, &mut rand);
@@ -405,6 +563,15 @@ pub fn build_with_secret_seed(
     // `Oasis` (16338) alike, though it rarely interacts with either in practice: a pyramid's own
     // site check only ever looks at the one point it starts digging from, not a wide window the
     // way oasis does.
+    // The Underground Desert, before the pyramids that sit on top of it. Vanilla runs `DesertBiome`
+    // in its own pass ahead of both.
+    let underground_desert = desert::scatter(&mut world, &plan, &mut structures, &mut rand, seed);
+
+    // Dunes before pyramids, because vanilla runs `DunesBiome` inside the same desert pass and
+    // ahead of the pyramid siting loop (`WorldGen.cs:11573`), and a pyramid sited against a flat
+    // shelf that then grows dunes on top of it would end up buried.
+    let dune_fields = dunes::scatter(&mut world, &plan, &mut structures, &mut rand);
+
     let pyramids = pyramids::scatter(&mut world, &plan, &mut rand, &mut forest_rng);
 
     // Living trees, right after pyramids — vanilla's own `LivingTrees` pass (`WorldGen.cs:15562`)
@@ -458,6 +625,27 @@ pub fn build_with_secret_seed(
     // `micro_biomes`'s own module doc for exactly which of the 15 real classes this covers.
     let micro_biomes = micro_biomes::scatter(&mut world, &plan, &mut structures, &mut rand);
 
+    // The Enchanted Sword shrine, the sixteenth `MicroBiome` class and the first built on the real
+    // shape/modifier/action pipeline (`genpipe`). Vanilla runs it inside its own `MicroBiomes`
+    // pass; it is a separate call here only because it is a separate module.
+    let sword_shrines = enchanted_sword::scatter(&mut world, &plan, &mut structures, &mut rand);
+
+    // Dead Man's Chests: gold chests re-skinned and rigged. Must run after every chest exists.
+    let dead_mans_chests =
+        dead_mans_chest::scatter(&mut world, &plan, &mut structures, &mut rand, honoured);
+
+    // Rigged ore veins: explosives wired to a detonator. Vanilla runs these in the same block, and
+    // skips them entirely under No Traps World, which this honours.
+    // Wild bee hives, vanilla's `Beehives` pass. Distinct from `structures::hive`, which builds
+    // the one Queen Bee hive: these are the five-to-eight scattered honey chambers.
+    let wild_hives = hive::scatter(&mut world, &plan, &mut structures, &mut rand);
+
+    // The jungle's Living Mahogany trees, which vanilla grows alongside the living trees.
+    let mahogany_trees = mahogany::scatter(&mut world, &plan, &mut structures, &mut rand);
+
+    let rigged_veins =
+        mining_explosives::scatter(&mut world, &plan, &mut structures, &mut rand, honoured);
+
     // Pots, statues, piles and fallen logs: the small object-placement passes built on
     // `place_object`. Ground-truth loot and decoration that makes a cave look excavated rather
     // than merely hollow.
@@ -502,10 +690,27 @@ pub fn build_with_secret_seed(
     let hellforges = underworld_ruins::scatter_hellforges(&mut world, &plan, &mut rand);
 
     // Spawn goes on the surface in the middle, in a pocket cleared for it.
-    let spawn_y = heights[plan.spawn_x as usize];
-    world.spawn_x = plan.spawn_x as i16;
+    // `WorldGen.cs:19739-19748`, the `SpawnPoint` pass: a Remix world spawns the player at the
+    // world's centre column, on the first non-solid tile walking *up* from ten rows off the bottom.
+    // That is the underworld floor, which is where a Remix player starts and why the seed is called
+    // "don't dig up".
+    let (spawn_x, spawn_y) = if plan.remix {
+        let x = width / 2;
+        let mut y = height - 10;
+        while y > 1 {
+            let t = world.tile(x, y);
+            if !(t.is_active() && terrustia_proto::tile_solid::solid(t.block)) {
+                break;
+            }
+            y -= 1;
+        }
+        (x, y + 1)
+    } else {
+        (plan.spawn_x, heights[plan.spawn_x as usize])
+    };
+    world.spawn_x = spawn_x as i16;
     world.spawn_y = spawn_y as i16;
-    terrain::clear_spawn(&mut world, plan.spawn_x, spawn_y);
+    terrain::clear_spawn(&mut world, spawn_x, spawn_y);
     world.dungeon_y = Some(heights[plan.dungeon_x.clamp(0, width - 1) as usize]);
 
     let chests = chests.saturating_sub(drop_orphaned_chests(&mut world));
@@ -547,6 +752,27 @@ pub fn build_with_secret_seed(
     // vanilla interleaving with those four can't be reproduced without re-litigating where
     // `smooth()` belongs (see this wave's own opening comment); their relative order against each
     // other and against the rest of this trailing wave is preserved instead.
+    // "The Constant" (Don't Starve): the three passes vanilla adds only under this seed.
+    let (wavy_caves, marble_piles) = if honoured.dont_starve {
+        let caves = dont_starve::wavy_caves(&mut world, &plan, &mut rand);
+        // `:14938`: Celebrationmk10 or Remix suppress the lava layer.
+        if !honoured.tenth_anniversary && !honoured.remix {
+            dont_starve::lava_layer(&mut world, &plan, &mut rand);
+        }
+        let piles = dont_starve::marble_piles(&mut world, &plan, &mut rand);
+        (caves, piles)
+    } else {
+        (0, 0)
+    };
+
+    // "Not the bees": the whole-world conversion to jungle and hive. Vanilla runs `NotTheBees`
+    // five times across generation; this generator runs it once here, after every terrain and
+    // structure pass has laid its tiles down and before the cosmetic tail, which is the point the
+    // repeated calls converge on. `FinishNotTheBees` turns the water to honey at the very end.
+    if honoured.not_the_bees {
+        not_the_bees::convert(&mut world, &plan, &mut rand, honoured);
+    }
+
     let quick_cleanup = tile_cleanup::quick_cleanup(&mut world, &plan);
     let surface_ore_and_stone = tile_cleanup::surface_ore_and_stone(&mut world, &plan, &mut rand);
     let surface_dirt_walls_to_grass_walls =
@@ -572,6 +798,25 @@ pub fn build_with_secret_seed(
     let speleothems = speleothems::scatter(&mut world, &plan, &mut rand);
     let broken_trap_cleanup = tile_cleanup::broken_trap_cleanup(&mut world);
     let final_cleanup = tile_cleanup::final_cleanup(&mut world, &plan);
+
+    // `FinishNotTheBees`: every pool of water in the world becomes honey. Last, so it catches the
+    // liquid every pass above settled.
+    if honoured.not_the_bees {
+        not_the_bees::finish(&mut world);
+    }
+
+    // `FinishGetGoodWorld`: paint the dungeon and the temple, corrupt the sky islands, and turn a
+    // little obsidian to lava. After the bees, because vanilla runs it after too and several of
+    // its own branches read what that conversion left.
+    if honoured.get_good {
+        for_the_worthy::finish(&mut world, &plan, &mut rand, honoured);
+    }
+
+    // `FinishTenthAnniversaryWorld`: Celebrationmk10 paints every landmark in the world and turns
+    // some boulders into party ones.
+    if honoured.tenth_anniversary {
+        celebration::finish(&mut world, &plan, &mut rand, honoured);
+    }
 
     let built = Built {
         lakes,
@@ -612,6 +857,15 @@ pub fn build_with_secret_seed(
         floating_island_houses: floating_islands.houses,
         cloud_lakes: floating_islands.lakes,
         thin_ice: micro_biomes.thin_ice,
+        underground_desert: underground_desert.is_some(),
+        dune_fields,
+        wavy_caves,
+        marble_piles,
+        dead_mans_chests,
+        wild_hives: wild_hives.len(),
+        mahogany_trees,
+        rigged_veins,
+        sword_shrines,
         corruption_pits: micro_biomes.corruption_pits,
         spike_pits: micro_biomes.spike_pits,
         honey_patches: micro_biomes.honey_patches,
@@ -736,25 +990,39 @@ mod tests {
     /// The six flags that describe *behaviour* rather than shape are untouched, so "get fixed boi"
     /// still gets everything this server can actually do.
     #[test]
-    fn a_generated_world_does_not_claim_a_shape_it_does_not_have() {
+    fn a_generated_world_only_claims_a_shape_its_tiles_actually_have() {
+        // This test used to assert the opposite: that `remixWorld` was never claimed, because
+        // nothing here mirrored the world. Twelve Remix sites later the tiles do have the shape, so
+        // the claim is made - and this checks the claim against the evidence in the same test,
+        // which is stronger than either half alone. A flag that outruns its tiles fails here.
         for text in ["dontdigup", "getfixedboi"] {
             let (world, _) = build_from_text(1600, 700, "text", text);
             assert!(
-                !world.secret_seeds.remix,
-                "{text}: an ordinary world must not be announced as a Remix one"
-            );
-            assert!(
-                !world.secret_seeds.everything,
-                "{text}: and zenith is the combination, remix included"
+                world.secret_seeds.remix,
+                "{text}: remix is generated now, so it should be claimed"
             );
             let flags = world.world_data().flags;
             assert!(
-                !flags.has_flag(terrustia_proto::packets::WorldFlag::RemixWorld),
-                "{text}: and the wire must not carry the claim either"
+                flags.has_flag(terrustia_proto::packets::WorldFlag::RemixWorld),
+                "{text}: and the wire should carry it"
+            );
+
+            // The evidence. Each of these is a structural property a client told `remixWorld`
+            // depends on, and each has its own test elsewhere; this is the claim being audited
+            // against them together.
+            let rock = i32::from(world.rock_layer);
+            assert!(
+                rock > 700 * 45 / 100,
+                "{text}: a claimed remix world needs its rock layer driven deep, got {rock}"
+            );
+            assert!(
+                i32::from(world.spawn_y) > rock,
+                "{text}: and the player spawning below it, got {}",
+                world.spawn_y
             );
         }
-        // What "get fixed boi" can still honestly turn on.
         let (world, _) = build_from_text(1600, 700, "text", "getfixedboi");
+        assert!(world.secret_seeds.everything, "zenith is claimable now too");
         assert!(world.secret_seeds.no_traps);
         assert!(world.secret_seeds.drunk);
         assert!(world.secret_seeds.dont_starve);
@@ -847,8 +1115,17 @@ mod tests {
                 built.secret_seeds.any(),
                 "{text:?} should have been detected as a secret seed"
             );
-            assert!(built.chests > 0, "{text:?}: no chests");
-            assert!(built.altars > 0, "{text:?}: no altars");
+            if built.secret_seeds.skyblock {
+                // Skyblock is the one seed with nothing to find: vanilla's own `Skyblock.Calculate`
+                // records `noAltars`, `noDungeon`, `noTemple`, `noHellstone`, `noFossils`,
+                // `noLifeCrystals` and `noHellforge` for exactly this world. Asserting chests and
+                // altars here would be asserting the seed does not work.
+                assert_eq!(built.chests, 0, "skyblock should have no chests");
+                assert_eq!(built.altars, 0, "skyblock should have no altars");
+            } else {
+                assert!(built.chests > 0, "{text:?}: no chests");
+                assert!(built.altars > 0, "{text:?}: no altars");
+            }
             assert_eq!(
                 world.seed_text, text,
                 "{text:?}: seed text was not preserved"
@@ -993,6 +1270,524 @@ mod tests {
         assert!(
             differing > 500,
             "two seeds differ in only {differing} sampled tiles"
+        );
+    }
+
+    /// A full-size world gets Enchanted Sword shrines, and the sword is really in them.
+    ///
+    /// End-to-end rather than only in `enchanted_sword`'s own unit tests, because the siting
+    /// checks are strict enough (1250 solid tiles in a 50x50 box, a clear shaft, no sand) that a
+    /// biome can pass in a hand-built stone slab and never once place in a real world. That is the
+    /// failure this asserts against, and it is the same shape as the unreachable-NPC problem
+    /// `check-spawn-reach` exists for: nothing errors, no test fails, the feature is just absent.
+    #[test]
+    fn a_real_world_gets_sword_shrines_with_swords_in_them() {
+        let mut total = 0;
+        let mut swords = 0;
+        for seed in 1..5u64 {
+            let (world, built) = build(SMALL_WIDTH, SMALL_HEIGHT, "sword shrines", seed);
+            total += built.sword_shrines;
+            for x in (0..world.width()).step_by(2) {
+                for y in (0..world.height()).step_by(2) {
+                    if world.tile(x, y).block == 187 {
+                        swords += 1;
+                    }
+                }
+            }
+        }
+        assert!(total > 0, "no sword shrine placed across four full worlds");
+        // Same claim for the rigged veins, which share the pipeline and the same silent-absence
+        // failure mode.
+        let (veins_world, veins_built) = build(SMALL_WIDTH, SMALL_HEIGHT, "rigged veins", 11);
+        assert!(veins_built.rigged_veins > 0, "no rigged ore vein placed");
+        let detonators = (0..veins_world.width()).step_by(2).any(|x| {
+            (0..veins_world.height())
+                .step_by(2)
+                .any(|y| veins_world.tile(x, y).block == 411)
+        });
+        assert!(detonators, "veins placed but no detonator wired to any");
+
+        // And the mahogany trees, whose site test is the strictest of the three: a six-wide floor
+        // with 30 to 60 tiles of headroom, inside a 50x50 box that is mostly mud.
+        let mut trees = 0;
+        for seed in 20..26u64 {
+            let (_, built) = build(SMALL_WIDTH, SMALL_HEIGHT, "mahogany", seed);
+            trees += built.mahogany_trees;
+        }
+        assert!(trees > 0, "no Living Mahogany tree across six full worlds");
+        assert!(
+            swords > 0,
+            "shrines placed but no Enchanted Sword tile in any"
+        );
+    }
+
+    /// A real `notthebees` world is made of hive and mud, and an ordinary world at the same size
+    /// is not. End-to-end through `build_from_text`, the same path `main.rs` takes.
+    ///
+    /// The comparison against an ordinary world is the point: asserting only that hive exists
+    /// would pass on a world that merely has a bee hive in it, which every world has.
+    #[test]
+    fn not_the_bees_turns_the_whole_world_to_hive_and_mud() {
+        let count = |world: &World, block: u16| {
+            let mut n = 0usize;
+            for x in (0..world.width()).step_by(3) {
+                for y in (0..world.height()).step_by(3) {
+                    if world.tile(x, y).block == block && world.tile(x, y).is_active() {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+
+        let (bees, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "bees", "notthebees");
+        assert!(built.secret_seeds.not_the_bees, "the seed was not detected");
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 77);
+
+        let bee_hive = count(&bees, 225);
+        let plain_hive = count(&ordinary, 225);
+        assert!(
+            bee_hive > plain_hive * 20 && bee_hive > 1000,
+            "hive {bee_hive} vs ordinary {plain_hive}: the world was not converted"
+        );
+
+        let bee_mud = count(&bees, 59);
+        let plain_mud = count(&ordinary, 59);
+        assert!(
+            bee_mud > plain_mud,
+            "mud {bee_mud} vs ordinary {plain_mud}: dirt was not converted"
+        );
+
+        // And the water is honey.
+        let mut water = 0;
+        let mut honey = 0;
+        for x in (0..bees.width()).step_by(3) {
+            for y in (0..bees.height()).step_by(3) {
+                let t = bees.tile(x, y);
+                if t.liquid > 0 {
+                    match t.liquid_kind {
+                        terrustia_proto::Liquid::Water => water += 1,
+                        terrustia_proto::Liquid::Honey => honey += 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        assert_eq!(water, 0, "water survived FinishNotTheBees");
+        assert!(honey > 0, "no honey at all in a not-the-bees world");
+    }
+
+    /// A real `theconstant` world gets Don't Starve's three passes, and an ordinary world does not.
+    #[test]
+    fn dont_starve_cuts_wavy_caves_and_raises_marble() {
+        let (world, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "constant", "theconstant");
+        assert!(built.secret_seeds.dont_starve, "the seed was not detected");
+        assert!(built.wavy_caves > 0, "no wavy caves were cut");
+
+        let (_ordinary, plain) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 88);
+        assert_eq!(plain.wavy_caves, 0, "an ordinary world must get none");
+        assert_eq!(plain.marble_piles, 0);
+
+        // The marble is really there, not just counted.
+        if built.marble_piles > 0 {
+            let mut marble = 0;
+            for x in (0..world.width()).step_by(2) {
+                for y in (0..world.height()).step_by(2) {
+                    if world.tile(x, y).block == 367 {
+                        marble += 1;
+                    }
+                }
+            }
+            assert!(
+                marble > 0,
+                "marble piles were counted but none is in the world"
+            );
+        }
+    }
+
+    /// A real `fortheworthy` world has its dungeon painted, and an ordinary one does not.
+    ///
+    /// Paint is the right thing to assert on: it is the seed's only generation-time mark that
+    /// survives into the file, and this generator sets a colour byte nowhere else, so a non-zero
+    /// colour anywhere is proof this pass ran.
+    #[test]
+    fn for_the_worthy_paints_the_world_and_an_ordinary_seed_does_not() {
+        let painted = |world: &World| {
+            let mut n = 0usize;
+            for x in (0..world.width()).step_by(2) {
+                for y in (0..world.height()).step_by(2) {
+                    let t = world.tile(x, y);
+                    if t.color != 0 || t.wall_color != 0 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+
+        let (worthy, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "worthy", "fortheworthy");
+        assert!(built.secret_seeds.get_good, "the seed was not detected");
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 91);
+
+        assert!(
+            painted(&worthy) > 100,
+            "for the worthy painted only {} tiles",
+            painted(&worthy)
+        );
+        assert_eq!(
+            painted(&ordinary),
+            0,
+            "an ordinary world must carry no paint at all"
+        );
+    }
+
+    /// Celebrationmk10 paints its landmarks, and picks different colours from For the Worthy.
+    ///
+    /// The two seeds are both "paint the world" seeds, so asserting only that paint exists would
+    /// pass for either. This asserts the dungeon takes Celebrationmk10's own fixed 24.
+    #[test]
+    fn celebrationmk10_paints_the_dungeon_its_own_colour() {
+        let (party, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "party", "celebrationmk10");
+        assert!(built.secret_seeds.tenth_anniversary, "seed not detected");
+
+        let mut dungeon_paint = std::collections::HashSet::new();
+        for x in 0..party.width() {
+            for y in 0..party.height() {
+                let t = party.tile(x, y);
+                if t.is_active() && matches!(t.block, 41 | 43 | 44) {
+                    dungeon_paint.insert(t.color);
+                }
+            }
+        }
+        assert!(
+            dungeon_paint.contains(&24),
+            "the dungeon should be painted 24, saw {dungeon_paint:?}"
+        );
+    }
+
+    /// A Drunk World has both evils in it; every other world has exactly one.
+    ///
+    /// This is the seed's defining feature and the one a player notices first. Asserted by
+    /// counting the two evils' own stone, which only their own chasm builder ever places.
+    #[test]
+    fn drunk_world_has_both_evils_and_an_ordinary_world_has_one() {
+        let evils = |world: &World| {
+            let (mut ebon, mut crim) = (0usize, 0usize);
+            for x in (0..world.width()).step_by(2) {
+                for y in (0..world.height()).step_by(2) {
+                    match world.tile(x, y).block {
+                        25 => ebon += 1,
+                        203 => crim += 1,
+                        _ => {}
+                    }
+                }
+            }
+            (ebon, crim)
+        };
+
+        let (drunk, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "drunk", "5162020");
+        assert!(
+            built.secret_seeds.drunk,
+            "the numeric drunk seed was not detected"
+        );
+        let (ebon, crim) = evils(&drunk);
+        assert!(
+            ebon > 100 && crim > 100,
+            "a drunk world needs both evils: ebonstone {ebon}, crimstone {crim}"
+        );
+
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 93);
+        let (ebon, crim) = evils(&ordinary);
+        assert!(
+            (ebon > 100) != (crim > 100),
+            "an ordinary world must have exactly one evil: ebonstone {ebon}, crimstone {crim}"
+        );
+    }
+
+    /// "get fixed boi" is a composite: it turns on seven other seeds at once
+    /// (`WorldSeedOption_Everything`), so its generation content is theirs. This asserts the
+    /// cascade actually reaches the passes, rather than only setting flags.
+    ///
+    /// Six of the seven contribute here. Remix is still detection-only, and the cross-seed
+    /// branches (the ones each seed's module explicitly declines to guess at) are not modelled, so
+    /// this is deliberately a "did every wired dependency run" test and not a fidelity claim.
+    #[test]
+    fn get_fixed_boi_runs_every_dependency_that_is_wired() {
+        let (world, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "zenith", "getfixedboi");
+        let s = built.secret_seeds;
+        assert!(s.everything && s.remix && s.drunk && s.not_the_bees);
+        assert!(s.no_traps && s.dont_starve && s.tenth_anniversary && s.get_good);
+
+        // No Traps: nothing trapped.
+        assert_eq!(
+            built.dart_traps, 0,
+            "No Traps must still hold inside the composite"
+        );
+        assert_eq!(built.rigged_veins, 0);
+        // Don't Starve: its caves were cut.
+        assert!(
+            built.wavy_caves > 0,
+            "Don't Starve's wavy caves did not run"
+        );
+        // Not the Bees: the world is hive, and there is no water left.
+        let mut hive = 0usize;
+        let mut water = 0usize;
+        let mut painted = 0usize;
+        for x in (0..world.width()).step_by(3) {
+            for y in (0..world.height()).step_by(3) {
+                let t = world.tile(x, y);
+                if t.is_active() && t.block == 225 {
+                    hive += 1;
+                }
+                if t.liquid > 0 && t.liquid_kind == terrustia_proto::Liquid::Water {
+                    water += 1;
+                }
+                if t.color != 0 || t.wall_color != 0 {
+                    painted += 1;
+                }
+            }
+        }
+        assert!(hive > 500, "Not the Bees did not convert the world: {hive}");
+        assert_eq!(water, 0, "Not the Bees left water behind");
+        // For the Worthy and Celebrationmk10 both paint.
+        assert!(painted > 0, "neither painting seed ran");
+    }
+
+    /// A Skyblock world is islands and sky, with somewhere to stand at spawn and nothing else.
+    #[test]
+    fn skyblock_generates_islands_and_nothing_under_them() {
+        let (world, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "sky", "skyblock");
+        assert!(built.secret_seeds.skyblock, "the seed was not detected");
+        assert!(built.floating_islands > 0, "no islands were placed");
+
+        // Everything the ordinary generator makes is absent.
+        assert_eq!(built.chests, 0, "Skyblock must have no chests");
+        assert_eq!(built.altars, 0, "no altars");
+        assert_eq!(built.trees, 0, "no surface trees");
+
+        // And there is ground at spawn, or the player falls out of the world on the first tick.
+        let (sx, sy) = (i32::from(world.spawn_x), i32::from(world.spawn_y));
+        assert!(
+            world.tile(sx, sy).is_active(),
+            "no ground at spawn: a Skyblock player would fall forever"
+        );
+
+        // Below the islands: sky.
+        let mut layout = crate::world::worldgen::layout::Layout::plan(
+            SMALL_WIDTH,
+            SMALL_HEIGHT,
+            &mut UnifiedRandom::new(1),
+        );
+        layout.surface = i32::from(world.surface);
+        assert!(
+            skyblock::is_empty_below(&world, &layout),
+            "there is solid ground under a Skyblock world"
+        );
+    }
+
+    /// Remix moves the cavern layer up, and the passes sited through `deep_band` follow it.
+    ///
+    /// Measured on the exposed-gem pass, because that is one of the passes actually moved and it
+    /// places a distinctive tile. An earlier version of this test counted cave *walls*, which was
+    /// wrong twice over: the wall ids were the wrong ones, and once corrected they measure pocket
+    /// siting, which this work has not moved. The lesson kept rather than the test deleted.
+    #[test]
+    fn remix_lifts_the_gem_pass_above_the_rock_line() {
+        let gems = |world: &World, rock: i32| {
+            let (mut above, mut below) = (0usize, 0usize);
+            for x in 0..world.width() {
+                for y in 0..world.height() {
+                    let t = world.tile(x, y);
+                    if t.is_active() && (63..=68).contains(&t.block) {
+                        if y < rock {
+                            above += 1;
+                        } else {
+                            below += 1;
+                        }
+                    }
+                }
+            }
+            (above, below)
+        };
+
+        let (remixed, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "remix", "dontdigup");
+        assert!(built.secret_seeds.remix, "the seed should be detected");
+        let (r_above, r_below) = gems(&remixed, i32::from(remixed.rock_layer));
+
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 97);
+        let (o_above, o_below) = gems(&ordinary, i32::from(ordinary.rock_layer));
+
+        assert!(
+            o_below > o_above,
+            "an ordinary world puts its gems below the rock line: {o_above} above, {o_below} below"
+        );
+        assert!(
+            r_above > o_above,
+            "remix should lift them: remix {r_above} above vs ordinary {o_above} \
+             (below: remix {r_below}, ordinary {o_below})"
+        );
+    }
+
+    /// Remix drives the rock layer deep and the lava line shallow, which is the seed's whole shape.
+    #[test]
+    fn remix_moves_the_layer_boundaries_the_opposite_ways() {
+        let (remixed, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "remix", "dontdigup");
+        assert!(built.secret_seeds.remix);
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 101);
+
+        let r_rock = i32::from(remixed.rock_layer);
+        let o_rock = i32::from(ordinary.rock_layer);
+        assert!(
+            r_rock > o_rock + 100,
+            "remix should drive the rock layer far deeper: remix {r_rock} vs ordinary {o_rock}"
+        );
+        // On a 4200-wide world vanilla uses 0.6 of the height, jittered by 5%.
+        let expected = (f64::from(SMALL_HEIGHT) * 0.6) as i32;
+        assert!(
+            (r_rock - expected).abs() < expected / 10,
+            "remix rock layer {r_rock} should sit near {expected}"
+        );
+        // And the surface is untouched, which is what makes the dirt layer thick rather than the
+        // whole world shifted.
+        assert_eq!(
+            remixed.surface, ordinary.surface,
+            "remix moves the rock layer, not the surface"
+        );
+
+        // And the dungeon comes inward, out of the outer fifths and away from the middle fifth.
+        let dx = remixed
+            .dungeon_x
+            .expect("a remix world still has a dungeon");
+        let (lo, hi) = (SMALL_WIDTH / 5, SMALL_WIDTH * 4 / 5);
+        assert!(
+            dx >= lo && dx <= hi,
+            "a remix dungeon belongs in the middle three fifths, got {dx}"
+        );
+        assert!(
+            !(dx > SMALL_WIDTH * 2 / 5 && dx < SMALL_WIDTH * 3 / 5),
+            "but not in the middle fifth, where the spawn is: {dx}"
+        );
+    }
+
+    /// Remix spawns the player in the underworld, at the world's centre.
+    ///
+    /// This is the seed's own name made literal - "don't dig up" - and vanilla's `SpawnPoint` pass
+    /// does it by walking up from ten rows off the bottom to the first non-solid tile.
+    #[test]
+    fn remix_spawns_the_player_under_the_world() {
+        let (remixed, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "remix", "dontdigup");
+        assert!(built.secret_seeds.remix, "the seed should be detected");
+
+        let spawn_y = i32::from(remixed.spawn_y);
+        let underworld = SMALL_HEIGHT - (f64::from(SMALL_HEIGHT) * 0.14) as i32;
+        assert_eq!(
+            i32::from(remixed.spawn_x),
+            SMALL_WIDTH / 2,
+            "a remix spawn is at the world's centre column"
+        );
+        assert!(
+            spawn_y > underworld,
+            "a remix spawn belongs in the underworld: spawn {spawn_y}, underworld top {underworld}"
+        );
+        // `spawnTileY` is the floor the player stands *on*, so the tile itself is solid and the
+        // space above it is what must be clear. Vanilla's own loop returns exactly that row.
+        let sx = i32::from(remixed.spawn_x);
+        assert!(
+            !remixed.tile(sx, spawn_y - 1).is_active(),
+            "there is no headroom above the remix spawn"
+        );
+
+        let (ordinary, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "ordinary", 99);
+        assert!(
+            i32::from(ordinary.spawn_y) < underworld,
+            "an ordinary spawn is nowhere near the underworld"
+        );
+    }
+
+    /// "get fixed boi" exercises the cross-seed branches, and this asserts they fired.
+    ///
+    /// The composite is where combinations actually matter: seven seeds at once, several of which
+    /// switch parts of each other off. Each claim here corresponds to a branch in vanilla, so a
+    /// module that reverted to its single-seed path would fail.
+    #[test]
+    fn the_composite_seed_takes_the_combined_paths() {
+        let (world, built) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "zenith", "getfixedboi");
+        let s = built.secret_seeds;
+        assert!(s.everything && s.remix && s.not_the_bees && s.get_good && s.tenth_anniversary);
+
+        // Celebrationmk10's painting is skipped under Remix (`:24509`), and For the Worthy's wall
+        // painting is skipped under Not the Bees. So a zenith world carries far less paint than a
+        // plain Celebrationmk10 one.
+        let painted = |w: &World| {
+            let mut n = 0usize;
+            for x in (0..w.width()).step_by(2) {
+                for y in (0..w.height()).step_by(2) {
+                    if w.tile(x, y).color != 0 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let (party, _) = build_from_text(SMALL_WIDTH, SMALL_HEIGHT, "party", "celebrationmk10");
+        assert!(
+            painted(&party) > painted(&world),
+            "zenith should carry less paint than a plain party world: \
+             zenith {}, party {}",
+            painted(&world),
+            painted(&party)
+        );
+
+        // Don't Starve's stone protection holds inside the composite: a plain bees world melts all
+        // its stone, a zenith world keeps some.
+        let mut stone = 0usize;
+        for x in (0..world.width()).step_by(3) {
+            for y in (0..world.height()).step_by(3) {
+                let t = world.tile(x, y);
+                if t.is_active() && t.block == 1 {
+                    stone += 1;
+                }
+            }
+        }
+        assert!(
+            stone > 0,
+            "Don't Starve should have protected stone from the bees conversion"
+        );
+    }
+
+    /// A generated world contains a locked dungeon door.
+    ///
+    /// `playbot.rs` declared "unlock a dungeon door with a Golden Key" permanently unreachable on
+    /// the grounds that "worldgen builds no dungeon", and it was wrong twice over: a generated
+    /// world holds about 3,140 dungeon bricks and 99 doors, and every one of those doors is locked.
+    /// The goal was skipped on a false premise while the report still said every goal was reached.
+    ///
+    /// It also had the frame axis wrong - vanilla identifies a locked door by `frameY == 594`
+    /// (`WorldGen.UnlockDoor`, `:37988-38017`), not by `frameX` - which is why a first pass at this
+    /// test found zero and nearly agreed with it.
+    #[test]
+    fn a_generated_world_has_a_locked_dungeon_door() {
+        let (world, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "locked", 5);
+        let mut locked = 0usize;
+        for x in 0..world.width() {
+            for y in 0..world.height() {
+                let t = world.tile(x, y);
+                // Vanilla's own `IsLockedDoor` (`WorldGen.cs:69725-69731`): the frame band, not
+                // just "at least 594". An earlier version of this test used `>= 594` and passed on
+                // the underworld ruins' style-19 doors (frameY 1026), which is the opposite of
+                // what it was asserting.
+                if t.is_active()
+                    && t.block == 10
+                    && (594..=646).contains(&t.frame_y)
+                    && t.frame_x < 54
+                {
+                    locked += 1;
+                }
+            }
+        }
+        assert!(
+            locked > 0,
+            "no locked dungeon door in a generated world, so playbot is right to skip the goal"
         );
     }
 

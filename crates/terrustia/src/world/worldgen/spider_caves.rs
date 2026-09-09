@@ -74,12 +74,14 @@ pub fn scatter(world: &mut World, layout: &Layout, rng: &mut SmallRng) -> usize 
         let mut tries = 0;
         let max_tries = layout.width / 2;
         let mut x = rng.random_range(200..layout.width - 200);
-        let mut y = rng.random_range(layout.rock + 30..world.height() - 230);
+        // Remix moves the cavern layer above the rock line; see `Layout::deep_band`.
+        let (deep_top, deep_bottom) = layout.deep_band();
+        let mut y = rng.random_range(deep_top..deep_bottom);
         let mut found = cave_flood::count(world, x, y, 3500, true, false);
         while (found.tiles >= 3500 || found.tiles < 500 || found.shroom > 1) && tries < max_tries {
             tries += 1;
             x = rng.random_range(200..layout.width - 200);
-            y = rng.random_range(layout.rock + 30..world.height() - 230);
+            y = rng.random_range(deep_top..deep_bottom);
             found = cave_flood::count(world, x, y, 3500, true, false);
         }
         if tries < max_tries {

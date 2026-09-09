@@ -155,7 +155,16 @@ pub fn scatter(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) -> 
     for _ in 0..attempts {
         let mut tries = 0;
         let mut x = rand.next_range(200, layout.width - 200);
-        let mut y = rand.next_range(layout.rock + 30, layout.height - 230);
+        // `WorldGen.cs:17639`: Remix sites moss caves above the rock line instead of below it.
+        let (cave_top, cave_bottom) = if layout.remix {
+            (
+                layout.surface + 50,
+                (layout.rock - 50).max(layout.surface + 60),
+            )
+        } else {
+            (layout.rock + 30, layout.height - 230)
+        };
+        let mut y = rand.next_range(cave_top, cave_bottom);
         let mut found = cave_flood::count(world, x, y, 2500, false, false);
         while (found.tiles >= 2500
             || found.tiles < 10
@@ -167,7 +176,7 @@ pub fn scatter(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) -> 
         {
             tries += 1;
             x = rand.next_range(200, layout.width - 200);
-            y = rand.next_range(layout.rock + 30, layout.height - 230);
+            y = rand.next_range(cave_top, cave_bottom);
             found = cave_flood::count(world, x, y, 2500, false, false);
         }
         if tries < 1000 {
@@ -181,7 +190,13 @@ pub fn scatter(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) -> 
     let unconditional = layout.width;
     for _ in 0..unconditional {
         let x = rand.next_range(50, layout.width - 50);
-        let y = rand.next_range((layout.surface + layout.rock) / 2, layout.underworld);
+        // `WorldGen.cs:17728`: Remix widens this to the whole world below the surface, where the
+        // ordinary world takes the cavern half only.
+        let y = if layout.remix {
+            rand.next_range(layout.surface, layout.height - 300)
+        } else {
+            rand.next_range((layout.surface + layout.rock) / 2, layout.underworld)
+        };
         let t = world.tile(x, y);
         if t.is_active() && t.block == tiles::STONE {
             let (moss_tile, _) = moss_for_x(x, layout.width, moss_type);
@@ -200,7 +215,13 @@ pub fn scatter(world: &mut World, layout: &Layout, rand: &mut UnifiedRandom) -> 
     while remaining > 0 && guard > 0 {
         guard -= 1;
         let x = rand.next_range(50, layout.width - 50);
-        let y = rand.next_range((layout.surface + layout.rock) / 2, layout.underworld);
+        // `WorldGen.cs:17755`: Remix draws this band from the lava line up to just past the rock
+        // layer, where the ordinary world draws it from the water line down to the underworld.
+        let y = if layout.remix {
+            rand.next_range(layout.lava_line(), layout.rock + 50)
+        } else {
+            rand.next_range((layout.surface + layout.rock) / 2, layout.underworld)
+        };
         let t = world.tile(x, y);
         let exposed = !world.tile(x - 1, y).is_active()
             || !world.tile(x + 1, y).is_active()

@@ -283,7 +283,12 @@ pub fn exposed_gems_in_ice_biome(
     let mut placed = 0usize;
     let attempts = ((f64::from(layout.width)) * 0.25) as i32;
     for _ in 0..attempts {
-        let y = rand.next_range((layout.surface + layout.rock) / 2, layout.underworld);
+        // `WorldGen.cs:20867`: Remix widens this band to the whole world below the surface.
+        let y = if layout.remix {
+            rand.next_range(layout.surface, world.height() - 300)
+        } else {
+            rand.next_range((layout.surface + layout.rock) / 2, layout.underworld)
+        };
         let x = rand.next_range(
             layout.snow.from.max(2),
             layout.snow.to.min(layout.width - 2).max(3),
@@ -323,7 +328,13 @@ pub fn exposed_gems_underground(
     let mut placed = 0usize;
     for _ in 0..layout.width {
         let x = rand.next_range(20, layout.width - 20);
-        let y = rand.next_range(layout.rock, world.height() - 300);
+        // The underground gem pass follows the same inversion: Remix lifts it above the rock line.
+        let y = if layout.remix {
+            let (top, bottom) = layout.deep_band();
+            rand.next_range(top, bottom)
+        } else {
+            rand.next_range(layout.rock, world.height() - 300)
+        };
         let t = world.tile(x, y);
         if !t.is_active() && t.liquid == 0 && t.wall != tiles::walls::LIHZAHRD_BRICK {
             let frame = roll_gem_frame(rand);

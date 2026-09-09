@@ -70,6 +70,68 @@ pub struct Layout {
     pub evil_band: Band,
     /// Where the jungle temple's entrance is, deep under the jungle.
     pub temple: (i32, i32),
+    /// Drunk World only: which half of the world holds the Crimson, the other holding the
+    /// Corruption (`WorldGen.cs:2052-2062`, `GenVars.crimsonLeft`). `None` in every other world,
+    /// which has one evil across one band.
+    pub drunk_crimson_left: Option<bool>,
+    /// Drunk World only: the second evil's band, mirroring `evil_band` onto the other half. `None`
+    /// in every other world.
+    pub second_evil_band: Option<Band>,
+    /// Remix (`dontdigup`): the world is read from the bottom up, and every pass that places
+    /// cavern-layer content asks [`Layout::deep_band`] for where "deep" is instead of assuming it
+    /// is below the rock layer.
+    pub remix: bool,
+}
+
+impl Layout {
+    /// The rows a pass should treat as the cavern layer: where ore veins, gem caves, chasm floors
+    /// and buried structures go.
+    ///
+    /// Ordinarily that is below the rock layer, which is what every pass here already assumed.
+    /// Remix moves it *above*: vanilla's own branches read
+    /// `remix ? Next(worldSurface + 50, rockLayer - 50) : Next(rockLayer + 50, maxTilesY - 300)`
+    /// and repeat that shape at `WorldGen.cs:12637`, `:12842`, `:12864`, `:12927`, `:12949` and
+    /// `:17639`. That is the whole seed at this level: the deep content comes up, because in a
+    /// Remix world the player starts underneath everything and digs up.
+    pub fn deep_band(&self) -> (i32, i32) {
+        if self.remix {
+            (self.surface + 50, (self.rock - 50).max(self.surface + 60))
+        } else {
+            (self.rock + 50, (self.height - 300).max(self.rock + 60))
+        }
+    }
+
+    /// `GenVars.lavaLine`: the row below which the cavern layer's pools are lava rather than water.
+    ///
+    /// `TerrainPass.cs:214-219` derives it as roughly the midpoint of rock layer and world bottom -
+    /// **except under Remix, where it is redefined outright** as `(worldSurface * 4 + rockLayer)/5`,
+    /// a fifth of the way from the surface down to the rock layer. That is very shallow, and it is
+    /// not a detail: several passes take `lavaLine` as a range bound, and one of them
+    /// (`WorldGen.cs:17755`) reads `Next(lavaLine, rockLayer + 50)`, which is only a forward range
+    /// at all because Remix moved the line above the rock layer. Getting this wrong produced a
+    /// backwards range and a panic, which is how it was found.
+    pub fn lava_line(&self) -> i32 {
+        if self.remix {
+            (self.surface * 4 + self.rock) / 5
+        } else {
+            ((self.rock + self.height) / 2 + 65).min(self.underworld)
+        }
+    }
+
+    /// Which evil is at this column. One answer for an ordinary world; two for Drunk World.
+    pub fn evil_at(&self, x: i32) -> Evil {
+        match self.drunk_crimson_left {
+            None => self.evil,
+            Some(crimson_left) => {
+                let left = x < self.width / 2;
+                if left == crimson_left {
+                    Evil::Crimson
+                } else {
+                    Evil::Corruption
+                }
+            }
+        }
+    }
 }
 
 /// How wide an ocean is on a full-sized world, in tiles.
@@ -217,6 +279,9 @@ impl Layout {
             desert,
             evil_band,
             temple,
+            drunk_crimson_left: None,
+            second_evil_band: None,
+            remix: false,
         }
     }
 
@@ -287,7 +352,8 @@ impl Layout {
             Some(Surface::Snow)
         } else if self.desert.contains(x) {
             Some(Surface::Desert)
-        } else if self.evil_band.contains(x) {
+        } else if self.evil_band.contains(x) || self.second_evil_band.is_some_and(|b| b.contains(x))
+        {
             Some(Surface::Evil)
         } else {
             None
@@ -307,6 +373,28 @@ pub enum Surface {
 
 #[cfg(test)]
 mod tests {
+
+    /// `deep_band` is where cavern content goes, and Remix moves it above the rock line.
+    #[test]
+    fn remix_moves_the_cavern_layer_above_the_rock_line() {
+        let mut ordinary = Layout::plan(4200, 1200, &mut UnifiedRandom::new(3));
+        let (top, bottom) = ordinary.deep_band();
+        assert!(
+            top > ordinary.rock,
+            "ordinary cavern content goes below the rock layer"
+        );
+        assert!(bottom > top);
+
+        ordinary.remix = true;
+        let (rtop, rbottom) = ordinary.deep_band();
+        assert!(
+            rbottom < ordinary.rock,
+            "remix cavern content goes above the rock layer: {rtop}..{rbottom} vs rock {}",
+            ordinary.rock
+        );
+        assert!(rtop > ordinary.surface, "but below the surface");
+        assert!(rbottom > rtop, "and the band must not be inverted or empty");
+    }
     use super::*;
 
     fn layout(seed: i32) -> Layout {

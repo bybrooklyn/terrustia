@@ -93,21 +93,13 @@ const DOOR_OPEN: u16 = 11;
 /// examples of exactly that.
 struct Milestones;
 impl Milestones {
-    const ABSENT: &'static [(&'static str, &'static str)] = &[
-        (
-            "craft a torch (Gel) and a bone recipe",
-            "there is no crafting packet in the protocol at all: vanilla crafts entirely \
+    const ABSENT: &'static [(&'static str, &'static str)] = &[(
+        "craft a torch (Gel) and a bone recipe",
+        "there is no crafting packet in the protocol at all: vanilla crafts entirely \
              client-side and only syncs the resulting inventory slot. The reachable half, \
              'is Gel/Bone obtainable', is asserted below; the crafting step itself has no \
              server behaviour to check.",
-        ),
-        (
-            "unlock a dungeon door with a Golden Key",
-            "worldgen builds no dungeon (`world/worldgen/` has no dungeon pass), so a fresh \
-             world contains no locked door (block 10 framed 594..=646) for the unlock path to \
-             act on, and no packet can create one.",
-        ),
-    ];
+    )];
 }
 
 // --- the report -------------------------------------------------------------------------------
@@ -523,7 +515,7 @@ async fn main() -> ExitCode {
     let mut report = Report::default();
     let ok = match phase.as_str() {
         "build" => build(&mut client, &mut report, &state).await,
-        "verify" => verify(&mut client, &mut report, &state).await,
+        "verify" => verify(&mut client, &mut report, &state, addr).await,
         other => {
             eprintln!("unknown phase {other}: expected 'build' or 'verify'");
             return ExitCode::FAILURE;
@@ -1091,7 +1083,12 @@ async fn build(client: &mut Client, report: &mut Report, state: &str) -> bool {
 }
 
 /// Everything that has to still be true after the world has been round through the disk.
-async fn verify(client: &mut Client, report: &mut Report, state: &str) -> bool {
+async fn verify(
+    client: &mut Client,
+    report: &mut Report,
+    state: &str,
+    addr: std::net::SocketAddr,
+) -> bool {
     let Some(site) = read_site(state) else {
         eprintln!("no build site in {state}: the build phase never got far enough to leave one");
         return false;
@@ -1225,5 +1222,153 @@ async fn verify(client: &mut Client, report: &mut Report, state: &str) -> bool {
             block_at(client, site.chest.0, site.chest.1)
         ),
     );
+
+    unlock_a_dungeon_door(client, report, addr).await;
     true
+}
+
+/// Find a locked dungeon door, unlock it with a Golden Key, and check the frames really moved.
+///
+/// This goal used to sit in `ABSENT` with the note "worldgen builds no dungeon", which was wrong
+/// twice: a generated world holds thousands of dungeon bricks and about a hundred doors, and every
+/// one of those doors is locked. The note also had the frame axis wrong - vanilla identifies a
+/// locked door by `frameY == 594`, not `frameX` - so anyone re-checking it by the stated rule would
+/// have found nothing and agreed. The whole path (`LockAction::UnlockDoor` on the wire,
+/// `WorldGen.UnlockDoor`'s +54 shift on the server) has been implemented the entire time and was
+/// simply never driven.
+async fn unlock_a_dungeon_door(
+    client: &mut Client,
+    report: &mut Report,
+    addr: std::net::SocketAddr,
+) {
+    let budget = Duration::from_secs(60);
+    let started = Instant::now();
+
+    // The dungeon is nowhere near spawn, and a client only knows the sections it has been sent, so
+    // this asks for them. The first version of this goal scanned only what had already arrived and
+    // reported "no locked door" in zero seconds, which is a different way of not testing the thing.
+    let (w, h) = (client.world().width, client.world().height);
+    let (sections_x, sections_y) = (w / 200 + 1, h / 150 + 1);
+    let mut found: Option<(i32, i32)> = None;
+    'sweep: for sx in 0..sections_x {
+        for sy in 0..sections_y {
+            if started.elapsed() > budget {
+                break 'sweep;
+            }
+            if !client.world().has_section(sx, sy)
+                && client.request_section(sx as u16, sy as u16).await.is_err()
+            {
+                break 'sweep;
+            }
+            // Let the section land.
+            for _ in 0..40 {
+                match client.next_event().await {
+                    Ok(_) => {}
+                    Err(ClientError::Timeout { .. }) => break,
+                    Err(_) => break 'sweep,
+                }
+            }
+            if let Some((x, y, _)) = client
+                .world()
+                .known_tiles()
+                .find(|(_, _, t)| t.is_active() && t.block == DOOR_SHUT && t.frame_y == 594)
+            {
+                found = Some((x, y));
+                break 'sweep;
+            }
+        }
+    }
+
+    let Some((x, y)) = found else {
+        report.record(
+            "unlock a dungeon door with a Golden Key",
+            budget,
+            started,
+            false,
+            {
+                // Report what was actually seen. A bare "not found" is what let this goal look
+                // finished three times running.
+                let mut doors = 0usize;
+                let mut frames: Vec<i16> = Vec::new();
+                let mut bricks = 0usize;
+                for (_, _, t) in client.world().known_tiles() {
+                    if !t.is_active() {
+                        continue;
+                    }
+                    if t.block == DOOR_SHUT {
+                        doors += 1;
+                        if frames.len() < 8 {
+                            frames.push(t.frame_y);
+                        }
+                    }
+                    if matches!(t.block, 41 | 43 | 44) {
+                        bricks += 1;
+                    }
+                }
+                format!(
+                    "no locked door: {} sections known, {bricks} dungeon brick(s), {doors} \
+                     door tile(s), first frameY values {frames:?} (a locked door's top row is 594)",
+                    client.world().loaded_sections()
+                )
+            },
+        );
+        return;
+    };
+
+    let before = client.world().tile(x, y).map(|t| t.frame_y);
+    let _ = client.unlock_door(x as i16, y as i16).await;
+
+    // Check with a *second* client, not this one. The server broadcasts this packet to other
+    // players and not the sender, because a real client reframes its own copy locally
+    // (`Player.cs:33064-33070` consumes the key and sends only the packet). The sender therefore
+    // never hears back, and re-reading its own cache only ever returns what it already had - which
+    // is what this goal reported as a failure twice before the cause was found. A fresh join sees
+    // the server's own tiles, which is the thing worth asserting anyway.
+    for _ in 0..40 {
+        match client.next_event().await {
+            Ok(_) => {}
+            Err(ClientError::Timeout { .. }) => break,
+            Err(_) => break,
+        }
+    }
+    let after = match Client::join(addr, "playbot-keycheck").await {
+        Ok(mut witness) => {
+            for _ in 0..400 {
+                match witness.next_event().await {
+                    Ok(_) => {}
+                    Err(ClientError::Timeout { .. }) => break,
+                    Err(_) => break,
+                }
+            }
+            let _ = witness
+                .request_section((x / 200) as u16, (y / 150) as u16)
+                .await;
+            for _ in 0..400 {
+                match witness.next_event().await {
+                    Ok(_) => {}
+                    Err(ClientError::Timeout { .. }) => break,
+                    Err(_) => break,
+                }
+            }
+            witness.world().tile(x, y).map(|t| t.frame_y)
+        }
+        Err(_) => None,
+    };
+
+    // Vanilla shifts the door's three rows by +54 when it opens the lock.
+    let moved = matches!((before, after), (Some(b), Some(a)) if a == b + 54);
+    report.record(
+        "unlock a dungeon door with a Golden Key",
+        budget,
+        started,
+        moved,
+        if moved {
+            format!("the door at ({x}, {y}) went from frameY {before:?} to {after:?}, a +54 shift")
+        } else {
+            format!(
+                "the door at ({x}, {y}) was framed {before:?} and is now {after:?}; \
+                 `WorldGen.UnlockDoor` shifts it by +54"
+            )
+        },
+    );
 }
