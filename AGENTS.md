@@ -181,7 +181,10 @@ packet sequence against a real `TerrariaServer`, `roundtrip_wld` checks `.wld` r
 byte level, `stress`/`crowd` hold a full world while the server reports per-phase tick costs,
 `bestiary` walks all 691 NPC types over the wire, and `fuzz` throws malformed packets at a running
 server. The web panel is verified in a real browser with
-Playwright. When you fix a bug, add a test that fails against the bug first, then passes.
+Playwright (`just check-panel`): the spec starts the shipped release binary with the panel
+embedded and drives it in Chromium, so a break in the embedding, the routes, the auth gate or the
+JSON shape fails there rather than in a review. That sentence was in this file long before any of
+it existed - no dependency, no config, no spec - which is why the recipe is named here. When you fix a bug, add a test that fails against the bug first, then passes.
 
 ## Where to look
 

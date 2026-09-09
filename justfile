@@ -116,6 +116,18 @@ check-rust:
 # node with nothing pointing at the install.
 check-web: web-build
 
+# The web panel in a real browser, against the real server.
+#
+# Not part of `just check`: it needs a release binary with the panel embedded and a downloaded
+# Chromium, neither of which a plain lint pass should assume. It is the check `TODO.md`'s own
+# final-verification list means by "the admin overhaul verified against a real client and
+# Playwright" - a sentence `AGENTS.md` asserted as fact for a long time while no Playwright
+# dependency, config, spec or script existed anywhere in the repository.
+check-panel:
+    cargo build --release -p terrustia --bin terrustia --features embed-web
+    cd {{WEB}} && bunx playwright install --with-deps chromium
+    cd {{WEB}} && bunx playwright test
+
 # Format all Rust code
 fmt:
     cargo fmt --all

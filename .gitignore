@@ -52,3 +52,7 @@ flamegraph.svg
 # .claude/agents/ and are real project tooling, tracked despite the rest of .claude/ being ignored.
 /.claude/*
 !/.claude/agents/
+
+# Playwright output: traces and screenshots from a failed panel run.
+crates/terrustia/web-panel/test-results/
+crates/terrustia/web-panel/playwright-report/
