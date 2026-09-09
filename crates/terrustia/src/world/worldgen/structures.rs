@@ -751,6 +751,34 @@ pub fn dungeon(world: &mut World, layout: &Layout, heights: &[i32], rand: &mut U
             }
         }
     }
+
+    // The locked door at the head of the shaft.
+    //
+    // This was missing entirely, and it is not decoration: it is the lock a Golden Key opens, the
+    // one piece of the dungeon a player has to *do* something about. `playbot` had the goal for it
+    // filed as permanently unreachable on the grounds that "worldgen builds no dungeon", which was
+    // wrong - there is a dungeon - but its conclusion happened to be right, because the dungeon had
+    // no door. The 69 door tiles a client could see in a generated world all belonged to
+    // `underworld_ruins`.
+    //
+    // Vanilla's locked dungeon door frames start at `frameY = 594`, which `frame_of` reaches at
+    // style 11 (54 x 11 = 594) - not the `case 9:` label in vanilla's own switch, which adds 594
+    // rather than indexing by it (`WorldGen.cs:39094-39096`). `IsLockedDoor` (`:69725-69731`) tests
+    // `frameY in 594..=646 && frameX < 54`. `WorldGen.UnlockDoor` (`:37988-38017`) shifts all three
+    // rows by +54 when the key is used, which `dispatch.rs`'s `LockAction::UnlockDoor` already
+    // implements - it simply had nothing to act on.
+    const LOCKED_DOOR_STYLE: i32 = 11;
+    let door_y = entrance_y + 4;
+    if world.in_bounds(x, door_y) && world.in_bounds(x, door_y + 2) {
+        // Clear the three rows the door occupies and give it a floor to stand on.
+        for dy in 0..3 {
+            world.set_tile(x, door_y + dy, Tile::AIR);
+        }
+        if !world.tile(x, door_y + 3).is_active() {
+            world.set_tile(x, door_y + 3, Tile::block(brick));
+        }
+        place_object(world, x, door_y, 10, LOCKED_DOOR_STYLE, -1);
+    }
 }
 
 /// The jungle temple: lihzahrd brick, and nothing gets in until Plantera falls.

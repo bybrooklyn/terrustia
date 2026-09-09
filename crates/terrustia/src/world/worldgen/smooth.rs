@@ -197,6 +197,16 @@ pub(super) fn kill_tile(world: &mut World, layout: &Layout, x: i32, y: i32) -> b
     if !t.is_active() || t.wall == UNBREAKABLE_BLOCK_WALL {
         return false;
     }
+    // A frame-important tile is one cell of a multi-tile object, and clearing one cell leaves the
+    // rest of it standing as a corrupt object rather than removing it. `can_pound_tile` above
+    // already refuses the same ids one by one (10 doors, 48 spikes, 137 traps, and the rest);
+    // this is the same rule stated once.
+    //
+    // Found by the dungeon's locked door disappearing between generation and the end of `build`:
+    // it was placed correctly, survived every structure pass, and was cleared here.
+    if frame_important(t.block) {
+        return false;
+    }
     if protects_tile_below(world, x, y) {
         return false;
     }

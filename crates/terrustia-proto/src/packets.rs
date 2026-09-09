@@ -236,6 +236,18 @@ impl TimeSet {
 ///
 /// Relayed to every other client so they place it themselves; the server has already written the
 /// tiles into its own world by the time this goes out.
+/// Packet 52: ask the server to lock or unlock a chest or a door at a tile.
+///
+/// The action ids are the packet's own, from [`crate::locks::LockAction`]: 1 unlock a chest,
+/// 2 unlock a door, 3 lock a chest.
+pub fn lock_and_unlock(action: u8, x: i32, y: i32) -> Result<Vec<u8>> {
+    let mut w = PacketWriter::new(crate::id::LOCK_AND_UNLOCK);
+    w.u8(action);
+    w.i16(x as i16);
+    w.i16(y as i16);
+    w.finish()
+}
+
 pub fn place_object(x: i32, y: i32, block: u16, style: i32, random: i32) -> Result<Vec<u8>> {
     let mut w = PacketWriter::new(crate::id::PLACE_OBJECT);
     w.i16(x as i16);

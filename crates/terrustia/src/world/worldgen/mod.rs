@@ -1755,6 +1755,42 @@ mod tests {
         );
     }
 
+    /// A generated world contains a locked dungeon door.
+    ///
+    /// `playbot.rs` declared "unlock a dungeon door with a Golden Key" permanently unreachable on
+    /// the grounds that "worldgen builds no dungeon", and it was wrong twice over: a generated
+    /// world holds about 3,140 dungeon bricks and 99 doors, and every one of those doors is locked.
+    /// The goal was skipped on a false premise while the report still said every goal was reached.
+    ///
+    /// It also had the frame axis wrong - vanilla identifies a locked door by `frameY == 594`
+    /// (`WorldGen.UnlockDoor`, `:37988-38017`), not by `frameX` - which is why a first pass at this
+    /// test found zero and nearly agreed with it.
+    #[test]
+    fn a_generated_world_has_a_locked_dungeon_door() {
+        let (world, _) = build(SMALL_WIDTH, SMALL_HEIGHT, "locked", 5);
+        let mut locked = 0usize;
+        for x in 0..world.width() {
+            for y in 0..world.height() {
+                let t = world.tile(x, y);
+                // Vanilla's own `IsLockedDoor` (`WorldGen.cs:69725-69731`): the frame band, not
+                // just "at least 594". An earlier version of this test used `>= 594` and passed on
+                // the underworld ruins' style-19 doors (frameY 1026), which is the opposite of
+                // what it was asserting.
+                if t.is_active()
+                    && t.block == 10
+                    && (594..=646).contains(&t.frame_y)
+                    && t.frame_x < 54
+                {
+                    locked += 1;
+                }
+            }
+        }
+        assert!(
+            locked > 0,
+            "no locked dungeon door in a generated world, so playbot is right to skip the goal"
+        );
+    }
+
     /// Spawn is somewhere a player can stand: air above, ground below, no water.
     #[test]
     fn spawn_is_somewhere_survivable() {

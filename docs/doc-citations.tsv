@@ -99,7 +99,7 @@ docs/packet-coverage.md	vanilla	NetMessage.cs	990	014e7cb18229
 docs/packet-coverage.md	vanilla	PortalHelper.cs	105-214	d8f87ecf13dd
 docs/release-blockers.md	repo	crates/terrustia-proto/src/items.rs	122	251fabcc5404
 docs/release-blockers.md	repo	crates/terrustia-proto/src/npc.rs	79	22e9a368604a
-docs/release-blockers.md	repo	crates/terrustia-proto/src/packets.rs	1412	251fabcc5404
+docs/release-blockers.md	repo	crates/terrustia-proto/src/packets.rs	1412	343ffa229aa3
 docs/release-blockers.md	repo	crates/terrustia-proto/src/projectile.rs	68	251fabcc5404
 docs/release-blockers.md	repo	crates/terrustia-proto/src/reader.rs	19	2ea791138f3c
 docs/release-blockers.md	repo	crates/terrustia/src/game/ai/boss/moon_lord.rs	299	307e1befb95c

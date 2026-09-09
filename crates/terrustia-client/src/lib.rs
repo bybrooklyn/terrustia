@@ -566,6 +566,15 @@ impl Client {
         self.send(&frame).await
     }
 
+    /// Unlock a locked dungeon door with a Golden Key, the way a real client does.
+    ///
+    /// The server walks up to the door's top row (`frameY == 594`) and shifts all three rows by
+    /// +54, which is `WorldGen.UnlockDoor` (`WorldGen.cs:37988-38017`).
+    pub async fn unlock_door(&mut self, x: i16, y: i16) -> Result<()> {
+        let frame = terrustia_proto::packets::lock_and_unlock(2, i32::from(x), i32::from(y))?;
+        self.send(&frame).await
+    }
+
     /// Use a summoning item: a boss by type, or an event by one of the negative codes.
     pub async fn summon(&mut self, what: i16) -> Result<()> {
         let mut w = terrustia_proto::PacketWriter::new(id::SPAWN_BOSS_USE_LICENSE_START_EVENT);
