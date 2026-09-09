@@ -222,6 +222,20 @@ sleep 2
 exec 8>&-
 kill "$VMPID" 2>/dev/null; kill "$VSRV" 2>/dev/null; wait "$VSRV" 2>/dev/null; VSRV=""
 
+# Wait for the real server process to be *gone*, not merely signalled.
+#
+# `wait "$VSRV"` only reaps the wrapper job; `$VMPID` is the actual TerrariaServer underneath it,
+# and on the way out it writes and fsyncs its own copy of the world - several megabytes. Starting
+# terrustia into that means timing its startup against a disk that is still busy, and that is not a
+# small effect: a quiet-machine run measured terrustia at 3.46 s where the same binary loads the
+# same class of world in 0.46 s once the disk is idle. The number was nearly published.
+for _ in $(seq 1 300); do
+  kill -0 "$VMPID" 2>/dev/null || break
+  sleep 0.1
+done
+# And give the filesystem a moment to finish the writes the process left behind.
+sleep 1
+
 # ---------------------------------------------------------------- terrustia, idle, same world
 
 cat > "$WORK/ours.toml" <<END
